@@ -36,8 +36,8 @@ export default function Login() {
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Don't have an account?{' '}
-            <Link href="/signup">
-              <a className="font-medium text-indigo-600 hover:text-indigo-500">Sign up today</a>
+            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Sign up today
             </Link>
           </p>
 
@@ -52,10 +52,8 @@ export default function Login() {
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
                   <div className="text-sm">
-                    <Link href="/reset-password">
-                      <a className="font-medium text-indigo-600 hover:text-indigo-500">
-                        Forgot your password?
-                      </a>
+                    <Link href="/reset-password" className="font-medium text-indigo-600 hover:text-indigo-500">
+                      Forgot your password?
                     </Link>
                   </div>
                 </div>

@@ -22,6 +22,8 @@ import Calendar from "@/pages/app/Calendar";
 import Files from "@/pages/app/Files";
 import Settings from "@/pages/app/Settings";
 import Admin from "@/pages/app/Admin";
+import TrainingPlansAdmin from "@/pages/app/TrainingPlansAdmin";
+import TrainingPlanClient from "@/pages/app/TrainingPlanClient";
 import Help from "@/pages/Help";
 
 function Router() {
@@ -37,7 +39,7 @@ function Router() {
       <Route path="/onboarding" component={Onboarding} />
       
       {/* App Shell routing */}
-      <Route path="/app/:path*">
+      <Route path="/app/*">
         {() => (
           <AppLayout>
             <Switch>
@@ -47,7 +49,9 @@ function Router() {
               <Route path="/app/calendar" component={Calendar} />
               <Route path="/app/files" component={Files} />
               <Route path="/app/settings" component={Settings} />
+              <Route path="/app/admin/training" component={TrainingPlansAdmin} />
               <Route path="/app/admin" component={Admin} />
+              <Route path="/app/my-training" component={TrainingPlanClient} />
               <Route component={NotFound} />
             </Switch>
           </AppLayout>

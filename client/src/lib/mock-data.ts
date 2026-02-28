@@ -46,6 +46,26 @@ export const filesData = [
 
 export const usersData = [
   { id: 'u1', name: 'Alex Developer', email: 'alex@example.com', role: 'Admin', status: 'Active' },
-  { id: 'u2', name: 'Sam Smith', email: 'sam@acme.com', role: 'Member', status: 'Active' },
-  { id: 'u3', name: 'Taylor Jones', email: 'taylor@acme.com', role: 'Member', status: 'Invited' },
+  { id: 'u2', name: 'Sam Smith', email: 'sam@acme.com', role: 'Client', status: 'Active' },
+  { id: 'u3', name: 'Taylor Jones', email: 'taylor@acme.com', role: 'Client', status: 'Invited' },
+];
+
+export const trainingPlansData = [
+  { id: 'tp1', clientId: 'u2', goal: 'Strength & Hypertrophy', startDate: '2026-03-01', durationWeeks: 4, status: 'Active' },
+  { id: 'tp2', clientId: 'u3', goal: 'Endurance', startDate: '2026-02-15', durationWeeks: 8, status: 'Active' }
+];
+
+export const trainingSessionsData = [
+  { id: 'ts1', planId: 'tp1', week: 1, day: 'Monday', name: 'Upper Body Power', completed: true },
+  { id: 'ts2', planId: 'tp1', week: 1, day: 'Wednesday', name: 'Lower Body Power', completed: false },
+  { id: 'ts3', planId: 'tp1', week: 1, day: 'Friday', name: 'Full Body Hypertrophy', completed: false },
+  { id: 'ts4', planId: 'tp2', week: 1, day: 'Tuesday', name: 'Long Run', completed: true },
+  { id: 'ts5', planId: 'tp2', week: 1, day: 'Thursday', name: 'Intervals', completed: false }
+];
+
+export const exercisesData = [
+  { id: 'ex1', sessionId: 'ts1', name: 'Bench Press', sets: 4, reps: '5', load: '185 lbs', rpe: '8' },
+  { id: 'ex2', sessionId: 'ts1', name: 'Barbell Row', sets: 4, reps: '6-8', load: '135 lbs', rpe: '7' },
+  { id: 'ex3', sessionId: 'ts2', name: 'Squat', sets: 4, reps: '5', load: '225 lbs', rpe: '8' },
+  { id: 'ex4', sessionId: 'ts2', name: 'Deadlift', sets: 3, reps: '5', load: '275 lbs', rpe: '8.5' },
 ];

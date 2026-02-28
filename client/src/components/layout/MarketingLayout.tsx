@@ -8,16 +8,14 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b bg-white/50 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/">
-            <a className="flex items-center gap-2 font-display font-bold text-xl text-primary">
-              <Box className="h-6 w-6" />
-              <span>Nexus</span>
-            </a>
+          <Link href="/" className="flex items-center gap-2 font-display font-bold text-xl text-primary">
+            <Box className="h-6 w-6" />
+            <span>Nexus</span>
           </Link>
           <nav className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground">
-            <Link href="/#features"><a className="hover:text-foreground transition-colors">Features</a></Link>
-            <Link href="/#pricing"><a className="hover:text-foreground transition-colors">Pricing</a></Link>
-            <Link href="/help"><a className="hover:text-foreground transition-colors">Help</a></Link>
+            <Link href="/#features" className="hover:text-foreground transition-colors">Features</Link>
+            <Link href="/#pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+            <Link href="/help" className="hover:text-foreground transition-colors">Help</Link>
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/login">

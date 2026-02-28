@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   Bell,
   Search,
-  LogOut
+  LogOut,
+  Dumbbell
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -25,21 +26,35 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 
-const navItems = [
-  { href: "/app/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/app/projects", label: "Projects", icon: CheckSquare },
-  { href: "/app/messages", label: "Messages", icon: MessageSquare },
-  { href: "/app/calendar", label: "Calendar", icon: CalendarIcon },
-  { href: "/app/files", label: "Files", icon: Folder },
-];
+const getNavItems = (role: string) => {
+  const items = [
+    { href: "/app/dashboard", label: "Home", icon: LayoutDashboard },
+    { href: "/app/projects", label: "Projects", icon: CheckSquare },
+    { href: "/app/messages", label: "Messages", icon: MessageSquare },
+    { href: "/app/calendar", label: "Calendar", icon: CalendarIcon },
+    { href: "/app/files", label: "Files", icon: Folder },
+  ];
+  if (role === 'Client' || role === 'Admin') {
+    // Visible to Admin too for testing purposes
+    items.push({ href: "/app/my-training", label: "My Training Plan", icon: Dumbbell });
+  }
+  return items;
+};
 
-const bottomNavItems = [
-  { href: "/app/admin", label: "Admin Panel", icon: ShieldCheck, adminOnly: true },
-  { href: "/app/settings", label: "Settings", icon: Settings },
-];
+const getBottomNavItems = (role: string) => {
+  const items = [];
+  if (role === 'Admin') {
+    items.push({ href: "/app/admin/training", label: "Training Plans", icon: Dumbbell });
+    items.push({ href: "/app/admin", label: "Admin Panel", icon: ShieldCheck });
+  }
+  items.push({ href: "/app/settings", label: "Settings", icon: Settings });
+  return items;
+};
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const navItems = getNavItems(currentUser.role);
+  const bottomNavItems = getBottomNavItems(currentUser.role);
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -59,15 +74,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">Main Menu</div>
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href}>
-              <a className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+            <Link 
+              key={item.href} 
+              href={item.href}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                 location === item.href 
                   ? "bg-slate-800 text-white" 
                   : "hover:bg-slate-800/50 hover:text-white"
-              }`}>
-                <item.icon className="h-4 w-4" />
-                <span className="text-sm font-medium">{item.label}</span>
-              </a>
+              }`}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="text-sm font-medium">{item.label}</span>
             </Link>
           ))}
 
@@ -76,17 +93,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </div>
           
           {bottomNavItems.map((item) => {
-            if (item.adminOnly && currentUser.role !== 'Admin') return null;
             return (
-              <Link key={item.href} href={item.href}>
-                <a className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+              <Link 
+                key={item.href} 
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
                   location === item.href 
                     ? "bg-slate-800 text-white" 
                     : "hover:bg-slate-800/50 hover:text-white"
-                }`}>
-                  <item.icon className="h-4 w-4" />
-                  <span className="text-sm font-medium">{item.label}</span>
-                </a>
+                }`}
+              >
+                <item.icon className="h-4 w-4" />
+                <span className="text-sm font-medium">{item.label}</span>
               </Link>
             )
           })}
