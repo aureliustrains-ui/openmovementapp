@@ -6,8 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, CheckCircle2, Circle, PlayCircle, Loader2, ExternalLink, ChevronDown, ChevronUp, Video, Target } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, CheckCircle2, Circle, PlayCircle, Loader2, ExternalLink, ChevronDown, ChevronUp, Video } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 
@@ -161,26 +160,20 @@ export default function ClientSessionView() {
                     </div>
                   </div>
 
-                  {ex.load && (
-                    <div className="ml-11">
-                      <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 font-medium border border-indigo-100">Target: {ex.load}</Badge>
-                    </div>
-                  )}
-
-                  {ex.goal && (
-                    <div className="ml-11 p-3 bg-amber-50 rounded-xl border border-amber-100">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Target className="h-3.5 w-3.5 text-amber-600" />
-                        <span className="text-[10px] uppercase tracking-wider text-amber-600 font-semibold">Goal</span>
-                      </div>
-                      <p className="text-sm text-slate-800 leading-relaxed">{ex.goal}</p>
-                    </div>
-                  )}
-
-                  {ex.additionalInstructions && (
-                    <div className="ml-11 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                      <div className="text-[10px] uppercase tracking-wider text-blue-600 font-semibold mb-1">Additional Instructions</div>
-                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{ex.additionalInstructions}</p>
+                  {(ex.goal || ex.additionalInstructions) && (
+                    <div className="ml-11 grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {ex.goal && (
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Goal</div>
+                          <div className="text-sm font-medium text-slate-900 leading-relaxed">{ex.goal}</div>
+                        </div>
+                      )}
+                      {ex.additionalInstructions && (
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Additional Instructions</div>
+                          <div className="text-sm font-medium text-slate-900 leading-relaxed whitespace-pre-wrap">{ex.additionalInstructions}</div>
+                        </div>
+                      )}
                     </div>
                   )}
 
