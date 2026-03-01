@@ -17,12 +17,12 @@ A training plan management platform with role-based access for coaches (Admin) a
 - `client/src/lib/auth.ts` — Auth store with `login`, `logout`, `impersonate`, `stopImpersonating`
 
 ## Key Features
-- **Phase Builder** (`admin/PhaseBuilder.tsx`): Full local-state editor for Phase → Sessions → Sections → Exercises hierarchy. Tracks dirty state (including schedule changes), warns on unsaved changes, deletes orphaned sessions on save. **Weekly Schedule Grid Editor**: Day 1-7 rows × AM/PM columns, week selector tabs, assign sessions to time slots, copy week to all weeks. Schedule entries have `{day, week, slot, sessionId}` format. Save Draft atomically persists phase + sessions + schedule, syncs local state with canonical DB IDs (no re-init race condition). Publish Phase button with confirmation dialog. Movement Check Gate selector.
-- **Client Management** (`admin/ClientProfile.tsx`): Programming tab shows Current Phase (Active/Waiting), Drafts In Progress section (with edit links and session counts), and Phase History. Weekly schedule grid preview for active phase. Create Phase button always visible. Chat, Movement Checks, and Logs tabs.
-- **Client My Phase** (`client/MyPhase.tsx`): Active phase view with week selector. Schedule grid (read-only, AM/PM columns) when schedule has slot data. Session chips are clickable (navigate to session detail). Falls back to card layout for legacy schedule format. Movement Check flow for pending phases.
+- **Phase Builder** (`admin/PhaseBuilder.tsx`): Full local-state editor for Phase → Sessions → Sections → Exercises hierarchy. Tracks dirty state (including schedule changes), warns on unsaved changes, deletes orphaned sessions on save. **Weekly Schedule Grid Editor**: Day 1-7 rows × AM/PM columns, week selector tabs, assign sessions to time slots, copy week to all weeks. Schedule entries have `{day, week, slot, sessionId}` format. Save Draft atomically persists phase + sessions + schedule, syncs local state with canonical DB IDs (no re-init race condition). Publish Phase button with confirmation dialog. Movement Check Gate selector. **Delete Phase** with cascade (sessions + workout logs) and "Type DELETE" confirmation modal. **Exercise Demo URL** field per exercise for video links.
+- **Client Management** (`admin/ClientProfile.tsx`): Programming tab shows Current Phase (Active/Waiting), Drafts In Progress section (with edit/delete buttons and session counts), and Phase History (with delete buttons). Weekly schedule grid preview for active phase. Create Phase button always visible. Delete Phase with "Type DELETE" confirmation modal and cascade cleanup. Chat, Movement Checks, and Logs tabs.
+- **Client My Phase** (`client/MyPhase.tsx`): Active phase view with week selector. **Schedule grid at top of page** (read-only, AM/PM columns) when schedule has slot data. Session chips are clickable (navigate to session detail). Completed sessions shown with green styling and checkmark. Falls back to card layout for legacy schedule format. Movement Check flow for pending phases.
+- **Client Session View** (`client/SessionView.tsx`): Redesigned exercise cards — large exercise name header, 3-column Sets/Reps/Tempo display grid, coaching notes block, expandable "Log sets" section (collapsed by default with toggle), large textarea for client notes. **Exercise Demo Videos**: "Demo" button opens YouTube embed in dialog or external link for other URLs. Completion toggle per exercise. Finish Session button.
 - **Templates CRUD** (`admin/Templates.tsx`): Full CRUD for exercise templates with create/edit/duplicate/delete, search filtering, and confirmation dialogs.
 - **Movement Checks** (`client/MyPhase.tsx` + `admin/ClientProfile.tsx`): Client submits video URL with notes, admin can approve or request resubmission with feedback. Auto-activates phase when all checks approved. Publishing with gate=yes auto-generates movement check items from exercise names.
-- **Client Session View** (`client/SessionView.tsx`): Per-exercise set/rep/weight logging with completion tracking.
 - **Chat** (`client/Chat.tsx` + `admin/ClientProfile.tsx` Chat tab): Bidirectional real-time messaging with polling.
 - **QA Checklist** (`admin/QAChecklist.tsx`): Data counts, quick navigation, impersonation shortcuts, visual checklist, automated Save/Publish test.
 - **Coming Soon Dialog** (`components/ComingSoonDialog.tsx`): Reusable dialog for unimplemented features.
@@ -30,7 +30,7 @@ A training plan management platform with role-based access for coaches (Admin) a
 ## Data Model
 - `phases.movementChecks` (JSONB): `[{name, exerciseId, status, videoUrl, filename, submittedAt, clientNote, feedback}]`
 - `phases.schedule` (JSONB): `[{day: "Monday", week: 1, slot: "AM"|"PM", sessionId: "..."}]` — day is weekday name, week is 1-indexed, slot is AM/PM time-of-day
-- `sessions.sections` (JSONB): `[{id, name, exercises: [{id, name, sets, reps, load, rpe, tempo, rest, notes}]}]`
+- `sessions.sections` (JSONB): `[{id, name, exercises: [{id, name, sets, reps, load, rpe, tempo, rest, notes, demoUrl}]}]`
 
 ## Routes
 - Admin: `/app/admin/clients`, `/app/admin/clients/:id`, `/app/admin/clients/:clientId/builder/:phaseId`, `/app/admin/templates`, `/app/admin/analytics`, `/app/admin/qa`
@@ -39,7 +39,7 @@ A training plan management platform with role-based access for coaches (Admin) a
 
 ## API Endpoints
 - `GET/POST /api/users`
-- `GET/POST/PATCH /api/phases`, `GET /api/phases/:id`
+- `GET/POST/PATCH/DELETE /api/phases`, `GET /api/phases/:id`
 - `GET/POST/PATCH /api/sessions`, `GET /api/sessions/:id`, `DELETE /api/sessions/:id`
 - `GET/POST/PATCH/DELETE /api/exercise-templates`
 - `GET/POST /api/messages`, `GET/POST /api/workout-logs`
@@ -61,3 +61,10 @@ A training plan management platform with role-based access for coaches (Admin) a
 5. Save schedule to phase record
 6. Update local state in-place with canonical IDs (NO `setInitializedForPhase(null)` — avoids race condition with TanStack Query cache invalidation)
 7. Show "Saved at [time]" badge, clear dirty flag
+
+## Delete Phase Flow
+1. "Type DELETE" confirmation modal in PhaseBuilder header and ClientProfile
+2. API: `DELETE /api/phases/:id`
+3. Cascade: deletes all sessions with matching phaseId, all workout logs with matching phaseId, then the phase record
+4. Invalidates phases, sessions, and workoutLogs query caches
+5. Redirects to client profile after deletion from PhaseBuilder

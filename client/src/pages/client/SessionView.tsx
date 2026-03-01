@@ -5,16 +5,12 @@ import { sessionsQuery, phasesQuery, useUpdateSession } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, Circle, MessageSquare, PlayCircle, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, CheckCircle2, Circle, PlayCircle, Loader2, ExternalLink, ChevronDown, ChevronUp, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function ClientSessionView() {
-  const [comingSoon, setComingSoon] = useState<{ open: boolean; title: string; description: string }>({
-    open: false,
-    title: "",
-    description: "",
-  });
   const [, params] = useRoute("/app/client/session/:sessionId");
   const [, setLocation] = useLocation();
   const sessionId = params?.sessionId;
@@ -27,6 +23,9 @@ export default function ClientSessionView() {
   const phase = allPhases.find((p: any) => p.id === session?.phaseId);
 
   const [completedExercises, setCompletedExercises] = useState<Record<string, boolean>>({});
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
+  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
+  const [videoDialogUrl, setVideoDialogUrl] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -59,6 +58,29 @@ export default function ClientSessionView() {
     setLocation("/app/client/my-phase");
   };
 
+  const isValidUrl = (url: string) => {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getYouTubeEmbedUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.includes("youtube.com")) {
+        const v = parsed.searchParams.get("v");
+        if (v) return `https://www.youtube.com/embed/${v}`;
+      }
+      if (parsed.hostname.includes("youtu.be")) {
+        return `https://www.youtube.com/embed${parsed.pathname}`;
+      }
+    } catch {}
+    return null;
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-24 animate-in fade-in">
       <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center justify-between">
@@ -85,77 +107,104 @@ export default function ClientSessionView() {
             
             {section.exercises.map((ex: any) => (
               <Card key={ex.id} className={`border-2 transition-colors overflow-hidden rounded-2xl ${completedExercises[ex.id] ? 'border-green-500 bg-green-50/30' : 'border-slate-200 bg-white shadow-sm'}`} data-testid={`card-exercise-${ex.id}`}>
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex items-start gap-4">
-                      <button onClick={() => toggleExercise(ex.id)} className="mt-0.5 shrink-0 transition-colors" data-testid={`button-toggle-${ex.id}`}>
+                <div className="p-5 space-y-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      <button onClick={() => toggleExercise(ex.id)} className="mt-1 shrink-0 transition-colors" data-testid={`button-toggle-${ex.id}`}>
                         {completedExercises[ex.id] ? 
                           <CheckCircle2 className="h-7 w-7 text-green-500" /> : 
                           <Circle className="h-7 w-7 text-slate-300 hover:text-indigo-500" />
                         }
                       </button>
-                      <div>
-                        <h3 className="text-xl font-bold text-slate-900">{ex.name}</h3>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          <Badge variant="secondary" className="bg-slate-100 text-slate-700 font-medium">{ex.sets} Sets × {ex.reps} Reps</Badge>
-                          <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 font-medium">Target: {ex.load}</Badge>
-                          {ex.rpe && <Badge variant="secondary" className="bg-slate-100 text-slate-700 font-medium">RPE {ex.rpe}</Badge>}
-                        </div>
+                      <div className="min-w-0">
+                        <h3 className="text-xl font-bold text-slate-900 leading-tight">{ex.name}</h3>
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-slate-400 hover:text-indigo-600 shrink-0 bg-slate-50 rounded-full"
-                      onClick={() => setComingSoon({
-                        open: true,
-                        title: "Video Coming Soon",
-                        description: "Exercise demo videos coming soon."
-                      })}
-                    >
-                      <PlayCircle className="h-6 w-6" />
-                    </Button>
+                    {ex.demoUrl && isValidUrl(ex.demoUrl) ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 shrink-0"
+                        onClick={() => setVideoDialogUrl(ex.demoUrl)}
+                        data-testid={`button-play-demo-${ex.id}`}
+                      >
+                        <PlayCircle className="h-4 w-4 mr-1.5" /> Demo
+                      </Button>
+                    ) : (
+                      <div className="text-xs text-slate-300 flex items-center gap-1 shrink-0">
+                        <Video className="h-4 w-4" />
+                      </div>
+                    )}
                   </div>
 
-                  {ex.notes && (
-                    <div className="ml-11 mb-4 p-3 bg-slate-50 rounded-xl text-sm text-slate-600 border border-slate-100 italic">
-                      " {ex.notes} "
+                  <div className="ml-11 grid grid-cols-3 gap-3">
+                    <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Sets</div>
+                      <div className="text-lg font-bold text-slate-900">{ex.sets}</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Reps</div>
+                      <div className="text-lg font-bold text-slate-900">{ex.reps}</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1">Tempo</div>
+                      <div className="text-lg font-bold text-slate-900">{ex.tempo || "—"}</div>
+                    </div>
+                  </div>
+
+                  {(ex.load || ex.rpe) && (
+                    <div className="ml-11 flex flex-wrap gap-2">
+                      {ex.load && <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 font-medium border border-indigo-100">Target: {ex.load}</Badge>}
+                      {ex.rpe && <Badge variant="secondary" className="bg-slate-100 text-slate-700 font-medium">RPE {ex.rpe}</Badge>}
+                      {ex.rest && <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-medium">Rest: {ex.rest}</Badge>}
                     </div>
                   )}
 
-                  <div className="ml-11 space-y-3 pt-4 border-t border-slate-100">
-                    <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
-                       <div className="col-span-2 text-center">Set</div>
-                       <div className="col-span-5 text-center">Weight (lbs)</div>
-                       <div className="col-span-5 text-center">Reps</div>
+                  {ex.notes && (
+                    <div className="ml-11 p-3 bg-slate-50 rounded-xl text-sm text-slate-600 border border-slate-100 italic leading-relaxed">
+                      {ex.notes}
                     </div>
-                    
-                    {Array.from({ length: Number(ex.sets) || 3 }).map((_, i) => (
-                      <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-2 text-center font-medium text-slate-500">{i + 1}</div>
-                        <div className="col-span-5">
-                          <Input type="number" placeholder="--" className="h-10 text-center bg-slate-50 border-slate-200" data-testid={`input-weight-${ex.id}-${i}`} />
+                  )}
+
+                  <div className="ml-11 space-y-3">
+                    <Textarea
+                      placeholder="Add your notes for this exercise..."
+                      value={exerciseNotes[ex.id] || ""}
+                      onChange={(e) => setExerciseNotes(prev => ({ ...prev, [ex.id]: e.target.value }))}
+                      className="min-h-[80px] bg-slate-50 border-slate-200 text-sm resize-none rounded-xl"
+                      data-testid={`textarea-notes-${ex.id}`}
+                    />
+
+                    <button
+                      className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                      onClick={() => setExpandedLogs(prev => ({ ...prev, [ex.id]: !prev[ex.id] }))}
+                      data-testid={`button-toggle-logs-${ex.id}`}
+                    >
+                      {expandedLogs[ex.id] ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      {expandedLogs[ex.id] ? "Hide log entries" : "Log sets"}
+                    </button>
+
+                    {expandedLogs[ex.id] && (
+                      <div className="space-y-2 pt-2 border-t border-slate-100">
+                        <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
+                          <div className="col-span-2 text-center">Set</div>
+                          <div className="col-span-5 text-center">Weight (lbs)</div>
+                          <div className="col-span-5 text-center">Reps</div>
                         </div>
-                        <div className="col-span-5">
-                          <Input type="number" placeholder={String(ex.reps).split('-')[0] || "0"} className="h-10 text-center bg-slate-50 border-slate-200" data-testid={`input-reps-${ex.id}-${i}`} />
-                        </div>
+                        
+                        {Array.from({ length: Number(ex.sets) || 3 }).map((_, i) => (
+                          <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                            <div className="col-span-2 text-center font-medium text-slate-500 text-sm">{i + 1}</div>
+                            <div className="col-span-5">
+                              <Input type="number" placeholder="--" className="h-10 text-center bg-white border-slate-200 rounded-lg" data-testid={`input-weight-${ex.id}-${i}`} />
+                            </div>
+                            <div className="col-span-5">
+                              <Input type="number" placeholder={String(ex.reps).split('-')[0] || "0"} className="h-10 text-center bg-white border-slate-200 rounded-lg" data-testid={`input-reps-${ex.id}-${i}`} />
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                    
-                    <div className="pt-2">
-                       <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-slate-500 text-xs hover:text-indigo-600"
-                        onClick={() => setComingSoon({
-                          open: true,
-                          title: "Add Note Coming Soon",
-                          description: "The ability to add session notes and upload videos is coming soon."
-                        })}
-                      >
-                         <MessageSquare className="h-3 w-3 mr-2" /> Add Note / Upload Video
-                       </Button>
-                    </div>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -164,12 +213,35 @@ export default function ClientSessionView() {
         ))}
       </div>
 
-      <ComingSoonDialog 
-        open={comingSoon.open} 
-        onOpenChange={(open) => setComingSoon(prev => ({ ...prev, open }))}
-        title={comingSoon.title}
-        description={comingSoon.description}
-      />
+      <Dialog open={videoDialogUrl !== null} onOpenChange={(open) => { if (!open) setVideoDialogUrl(null); }}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle>Exercise Demo</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            {videoDialogUrl && getYouTubeEmbedUrl(videoDialogUrl) ? (
+              <div className="aspect-video rounded-xl overflow-hidden bg-black">
+                <iframe
+                  src={getYouTubeEmbedUrl(videoDialogUrl)!}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : videoDialogUrl ? (
+              <div className="text-center py-8">
+                <Video className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-600 mb-4">Demo video available</p>
+                <a href={videoDialogUrl} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" className="border-indigo-200 text-indigo-700">
+                    <ExternalLink className="h-4 w-4 mr-2" /> Open Video
+                  </Button>
+                </a>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

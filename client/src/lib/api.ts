@@ -89,6 +89,18 @@ export function useUpdatePhase() {
   });
 }
 
+export function useDeletePhase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/phases/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["phases"] });
+      qc.invalidateQueries({ queryKey: ["sessions"] });
+      qc.invalidateQueries({ queryKey: ["workoutLogs"] });
+    },
+  });
+}
+
 export function useCreateSession() {
   const qc = useQueryClient();
   return useMutation({

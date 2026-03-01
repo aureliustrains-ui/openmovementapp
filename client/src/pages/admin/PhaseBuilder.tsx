@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession } from "@/lib/api";
+import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy } from "lucide-react";
+import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy, Video } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -29,6 +29,7 @@ type Exercise = {
   tempo: string;
   rest: string;
   notes: string;
+  demoUrl?: string;
 };
 
 type Section = {
@@ -54,7 +55,7 @@ type ScheduleEntry = {
 };
 
 function makeExercise(name = "New Exercise"): Exercise {
-  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", rpe: "8", tempo: "3010", rest: "90s", notes: "" };
+  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", rpe: "8", tempo: "3010", rest: "90s", notes: "", demoUrl: "" };
 }
 
 function makeSection(name = "New Section"): Section {
@@ -93,6 +94,7 @@ export default function AdminPhaseBuilder() {
   const createSession = useCreateSession();
   const updateSession = useUpdateSession();
   const deleteSession = useDeleteSession();
+  const deletePhase = useDeletePhase();
 
   const existingPhase = allPhases.find((p: any) => p.id === params?.phaseId);
 
@@ -106,7 +108,10 @@ export default function AdminPhaseBuilder() {
   const [saving, setSaving] = useState(false);
   const [movementCheckGate, setMovementCheckGate] = useState("yes");
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
 
@@ -508,6 +513,24 @@ export default function AdminPhaseBuilder() {
     }
   };
 
+  const handleDeletePhase = async () => {
+    if (deleteConfirmText !== "DELETE") return;
+    const phaseId = params?.phaseId;
+    if (!phaseId || phaseId === 'new') return;
+
+    setDeleting(true);
+    try {
+      await deletePhase.mutateAsync(phaseId);
+      toast({ title: "Phase Deleted", description: "Phase and all associated data have been permanently removed." });
+      setDeleteDialogOpen(false);
+      setLocation(`/app/admin/clients/${params?.clientId}`);
+    } catch (err) {
+      toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredTemplates = templates.filter((t: any) =>
     t.name.toLowerCase().includes(exerciseSearch.toLowerCase())
   );
@@ -548,6 +571,17 @@ export default function AdminPhaseBuilder() {
           )}
         </div>
         <div className="flex gap-3">
+          {!isNew && (
+            <Button
+              variant="outline"
+              className="rounded-full px-4 text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+              disabled={saving || publishing || deleting}
+              data-testid="button-delete-phase"
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete
+            </Button>
+          )}
           <Button
             variant="outline"
             className="rounded-full px-6"
@@ -694,7 +728,7 @@ export default function AdminPhaseBuilder() {
                       ))}
                     </div>
 
-                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50">
+                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 space-y-3">
                       <Input
                         value={ex.notes}
                         onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "notes", e.target.value)}
@@ -702,6 +736,16 @@ export default function AdminPhaseBuilder() {
                         className="h-8 text-sm bg-white border-slate-200 text-slate-600"
                         data-testid={`input-notes-${sessionIdx}-${sectionIdx}-${exIdx}`}
                       />
+                      <div className="flex items-center gap-2">
+                        <Video className="h-4 w-4 text-slate-400 shrink-0" />
+                        <Input
+                          value={ex.demoUrl || ""}
+                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "demoUrl", e.target.value)}
+                          placeholder="Demo video URL (YouTube, Vimeo, etc.)"
+                          className="h-8 text-sm bg-white border-slate-200 text-slate-600"
+                          data-testid={`input-demo-url-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -848,6 +892,41 @@ export default function AdminPhaseBuilder() {
               </button>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">Delete Phase</DialogTitle>
+            <DialogDescription>
+              This will permanently delete <span className="font-semibold text-slate-900">"{phaseName}"</span> and all associated sessions, schedule, and workout logs. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Label className="text-sm text-slate-600">Type <span className="font-mono font-bold text-red-600">DELETE</span> to confirm</Label>
+            <Input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="border-red-200 focus-visible:ring-red-500"
+              data-testid="input-delete-confirm"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeletePhase}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleting || deleteConfirmText !== "DELETE"}
+              data-testid="button-confirm-delete"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Permanently
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

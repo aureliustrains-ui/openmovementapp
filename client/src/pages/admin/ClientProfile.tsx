@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, messagesQuery, useSendMessage } from "@/lib/api";
+import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, useDeletePhase, messagesQuery, useSendMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -30,6 +30,7 @@ export default function AdminClientProfile() {
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { impersonate } = useAuth();
   const updatePhase = useUpdatePhase();
+  const deletePhase = useDeletePhase();
 
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
@@ -40,6 +41,10 @@ export default function AdminClientProfile() {
   const [activeTab, setActiveTab] = useState("programming");
   const [chatMessage, setChatMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -155,10 +160,25 @@ export default function AdminClientProfile() {
     }
   };
 
-  const getSchedulePreview = (phase: any) => {
-    const schedule = (phase.schedule as any[]) || [];
-    const week1 = schedule.filter((s: any) => s.week === 1);
-    return week1;
+  const handleOpenDeletePhase = (phase: any) => {
+    setDeleteTargetPhase(phase);
+    setDeleteConfirmText("");
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeletePhase = async () => {
+    if (deleteConfirmText !== "DELETE" || !deleteTargetPhase) return;
+    setDeleting(true);
+    try {
+      await deletePhase.mutateAsync(deleteTargetPhase.id);
+      toast({ title: "Phase Deleted", description: `"${deleteTargetPhase.name}" and all associated data removed.` });
+      setDeleteDialogOpen(false);
+      setDeleteTargetPhase(null);
+    } catch (err) {
+      toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const getSessionCount = (phaseId: string) => {
@@ -250,6 +270,14 @@ export default function AdminClientProfile() {
                       <Link href={`/app/admin/clients/${clientId}/builder/${activePhase.id}`}>
                         <Button variant="outline" className="bg-white" data-testid="button-edit-phase"><Pencil className="mr-2 h-4 w-4" /> Edit</Button>
                       </Link>
+                      <Button
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => handleOpenDeletePhase(activePhase)}
+                        data-testid="button-delete-active-phase"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                   
@@ -258,7 +286,8 @@ export default function AdminClientProfile() {
                       <CalendarDays className="h-4 w-4" /> Weekly Schedule
                     </h4>
                     {(() => {
-                      const week1 = getSchedulePreview(activePhase);
+                      const schedule = (activePhase.schedule as any[]) || [];
+                      const week1 = schedule.filter((s: any) => s.week === 1);
                       if (week1.length === 0) {
                         return <p className="text-sm text-slate-400 italic">No schedule assigned yet.</p>;
                       }
@@ -318,6 +347,15 @@ export default function AdminClientProfile() {
                               <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
                             </Button>
                           </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() => handleOpenDeletePhase(phase)}
+                            data-testid={`button-delete-draft-${phase.id}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -342,13 +380,24 @@ export default function AdminClientProfile() {
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Phase History</h3>
                 <div className="space-y-3">
                   {pastPhases.map((phase: any) => (
-                    <Card key={phase.id} className="border-slate-200 shadow-none hover:bg-slate-50 transition-colors cursor-pointer">
+                    <Card key={phase.id} className="border-slate-200 shadow-none hover:bg-slate-50 transition-colors">
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
                           <div className="font-medium text-slate-900">{phase.name}</div>
                           <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks &bull; Completed</div>
                         </div>
-                        <ArrowRight className="h-5 w-5 text-slate-400" />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleOpenDeletePhase(phase)}
+                            data-testid={`button-delete-past-${phase.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <ArrowRight className="h-5 w-5 text-slate-400" />
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
@@ -552,6 +601,41 @@ export default function AdminClientProfile() {
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Send Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">Delete Phase</DialogTitle>
+            <DialogDescription>
+              This will permanently delete <span className="font-semibold text-slate-900">"{deleteTargetPhase?.name}"</span> and all associated sessions, schedule, and workout logs. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Label className="text-sm text-slate-600">Type <span className="font-mono font-bold text-red-600">DELETE</span> to confirm</Label>
+            <Input
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="border-red-200 focus-visible:ring-red-500"
+              data-testid="input-delete-confirm"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeletePhase}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleting || deleteConfirmText !== "DELETE"}
+              data-testid="button-confirm-delete-phase"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete Permanently
             </Button>
           </DialogFooter>
         </DialogContent>

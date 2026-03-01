@@ -284,7 +284,7 @@ export default function ClientMyPhase() {
                   const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
 
                   return (
-                    <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-50'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                    <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-40'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                       <div className="p-3 text-sm font-medium text-slate-600 border-r border-slate-100 flex items-center gap-2">
                         <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
                         {day.slice(0, 3)}

@@ -48,6 +48,12 @@ export async function registerRoutes(
     res.json(phase);
   });
 
+  app.delete("/api/phases/:id", async (req, res) => {
+    const deleted = await storage.deletePhase(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Phase not found" });
+    res.json({ success: true });
+  });
+
   app.get("/api/sessions", async (req, res) => {
     const phaseId = req.query.phaseId as string | undefined;
     const result = phaseId

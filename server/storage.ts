@@ -21,18 +21,19 @@ export interface IStorage {
   getPhase(id: string): Promise<Phase | undefined>;
   createPhase(phase: InsertPhase): Promise<Phase>;
   updatePhase(id: string, data: Partial<InsertPhase>): Promise<Phase | undefined>;
+  deletePhase(id: string): Promise<boolean>;
 
   getSessions(): Promise<Session[]>;
   getSessionsByPhase(phaseId: string): Promise<Session[]>;
   getSession(id: string): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, data: Partial<InsertSession>): Promise<Session | undefined>;
+  deleteSession(id: string): Promise<boolean>;
 
   getExerciseTemplates(): Promise<ExerciseTemplate[]>;
   createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate>;
   updateExerciseTemplate(id: string, data: Partial<InsertExerciseTemplate>): Promise<ExerciseTemplate | undefined>;
   deleteExerciseTemplate(id: string): Promise<boolean>;
-  deleteSession(id: string): Promise<boolean>;
 
   getWorkoutLogs(): Promise<WorkoutLog[]>;
   getLogsByClient(clientId: string): Promise<WorkoutLog[]>;
@@ -84,6 +85,13 @@ export class DatabaseStorage implements IStorage {
   async updatePhase(id: string, data: Partial<InsertPhase>): Promise<Phase | undefined> {
     const [updated] = await db.update(phases).set(data).where(eq(phases.id, id)).returning();
     return updated;
+  }
+
+  async deletePhase(id: string): Promise<boolean> {
+    await db.delete(sessions).where(eq(sessions.phaseId, id));
+    await db.delete(workoutLogs).where(eq(workoutLogs.phaseId, id));
+    const result = await db.delete(phases).where(eq(phases.id, id)).returning();
+    return result.length > 0;
   }
 
   async getSessions(): Promise<Session[]> {
