@@ -1,11 +1,11 @@
 // Mock data for the structured Training Plan domain
 
 export const currentUser = {
-  id: 'admin_1',
-  name: 'Head Coach',
-  email: 'coach@example.com',
-  role: 'Admin', // Change to 'Client' to view client side
-  avatar: 'https://i.pravatar.cc/150?u=coach',
+  id: 'client_1',
+  name: 'Sarah Connor',
+  email: 'sarah@example.com',
+  role: 'Client',
+  avatar: 'https://i.pravatar.cc/150?u=sarah',
 };
 
 // Users
