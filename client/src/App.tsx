@@ -19,6 +19,7 @@ import AdminClientProfile from "@/pages/admin/ClientProfile";
 import AdminPhaseBuilder from "@/pages/admin/PhaseBuilder";
 import AdminTemplates from "@/pages/admin/Templates";
 import AdminAnalytics from "@/pages/admin/Analytics";
+import AdminQAChecklist from "@/pages/admin/QAChecklist";
 
 // Client
 import ClientMyPhase from "@/pages/client/MyPhase";
@@ -84,6 +85,9 @@ function Router() {
                 </Route>
                 <Route path="/app/admin/analytics">
                   {() => <ProtectedRoute component={AdminAnalytics} allowedRole="Admin" />}
+                </Route>
+                <Route path="/app/admin/qa">
+                  {() => <ProtectedRoute component={AdminQAChecklist} allowedRole="Admin" />}
                 </Route>
                 
                 {/* Client Routes */}

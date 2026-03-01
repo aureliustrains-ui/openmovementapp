@@ -242,32 +242,50 @@ export default function ClientMyPhase() {
       <div>
         <h2 className="text-2xl font-display font-bold text-slate-900 mb-6">This Week's Schedule</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(activePhase.schedule as any[]).filter((s: any) => s.week === 1).map((sched: any, i: number) => {
-            const session = allSessions.find((s: any) => s.id === sched.sessionId);
-            const isCompleted = (session?.completedInstances as any[])?.includes('w1_' + session?.id); 
-            
-            return (
-              <Link key={i} href={`/app/client/session/${session?.id}`}>
-                <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${i}`}>
-                  <CardContent className="p-0 h-full">
-                    <div className="flex items-stretch h-full">
-                      <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
-                      <div className="p-6 flex-1 flex justify-between items-center">
-                        <div>
-                          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{sched.day}</div>
-                          <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
-                          <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks • {session?.description}</p>
-                        </div>
-                        <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
-                           {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+          {(() => {
+            const schedule = (activePhase.schedule as any[]) || [];
+            const week1Schedule = schedule.filter((s: any) => s.week === 1);
+
+            const phaseSessions = allSessions.filter((s: any) => s.phaseId === activePhase.id);
+
+            const displayItems = week1Schedule.length > 0
+              ? week1Schedule.map((sched: any, i: number) => {
+                  const session = allSessions.find((s: any) => s.id === sched.sessionId);
+                  return { session, day: sched.day, key: i };
+                })
+              : phaseSessions.map((session: any, i: number) => ({
+                  session,
+                  day: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][i % 7],
+                  key: i,
+                }));
+
+            return displayItems.map(({ session, day, key }: any) => {
+              if (!session) return null;
+              const isCompleted = (session?.completedInstances as any[])?.includes('w1_' + session?.id);
+              
+              return (
+                <Link key={key} href={`/app/client/session/${session?.id}`}>
+                  <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
+                    <CardContent className="p-0 h-full">
+                      <div className="flex items-stretch h-full">
+                        <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
+                        <div className="p-6 flex-1 flex justify-between items-center">
+                          <div>
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
+                            <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
+                            <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks • {session?.description}</p>
+                          </div>
+                          <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
+                             {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            });
+          })()}
         </div>
       </div>
     </div>

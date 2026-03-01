@@ -6,11 +6,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function Settings() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
+  const [comingSoonTitle, setComingSoonTitle] = useState("Coming Soon");
   
   if (!user) return null;
+
+  const handleComingSoon = (title: string) => {
+    setComingSoonTitle(title);
+    setIsComingSoonOpen(true);
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -32,7 +43,7 @@ export default function Settings() {
             <Card className="border-none shadow-sm mb-6 bg-indigo-50 border-indigo-100">
               <CardContent className="p-4 flex items-start gap-4">
                 <div className="bg-indigo-100 p-2 rounded-full text-indigo-600 mt-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                 </div>
                 <div>
                   <h4 className="font-semibold text-indigo-900 mb-1">External Auth (Memberstack later)</h4>
@@ -54,20 +65,20 @@ export default function Settings() {
                     <AvatarImage src={user.avatar} />
                     <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                   </Avatar>
-                  <Button variant="outline">Change Avatar</Button>
+                  <Button variant="outline" onClick={() => handleComingSoon("Change Avatar Coming Soon")}>Change Avatar</Button>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={user.name} />
+                    <Input id="name" defaultValue={user.name || ""} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
                     <Input id="email" defaultValue={user.email} disabled />
                   </div>
                 </div>
-                <Button>Save Changes</Button>
+                <Button onClick={() => toast({ title: "Settings saved", description: "Your profile changes have been saved." })}>Save Changes</Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -92,7 +103,7 @@ export default function Settings() {
                     <Input id="ws-url" defaultValue="acme" className="rounded-l-none" />
                   </div>
                 </div>
-                <Button>Save Workspace</Button>
+                <Button onClick={() => toast({ title: "Workspace saved", description: "Workspace settings have been updated." })}>Save Workspace</Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -136,7 +147,7 @@ export default function Settings() {
                     <div className="font-medium text-slate-900">Next billing date</div>
                     <div className="text-sm text-slate-500">April 1, 2026</div>
                   </div>
-                  <Button variant="outline">Manage Subscription</Button>
+                  <Button variant="outline" onClick={() => handleComingSoon("Subscription Management Coming Soon")}>Manage Subscription</Button>
                 </div>
                 <div>
                   <h4 className="font-medium text-slate-900 mb-4">Payment Method</h4>
@@ -146,7 +157,7 @@ export default function Settings() {
                       <div className="font-medium">Visa ending in 4242</div>
                       <div className="text-xs text-slate-500">Expires 12/28</div>
                     </div>
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleComingSoon("Edit Payment Coming Soon")}>Edit</Button>
                   </div>
                 </div>
               </CardContent>
@@ -154,6 +165,12 @@ export default function Settings() {
           </TabsContent>
         </div>
       </Tabs>
+
+      <ComingSoonDialog 
+        open={isComingSoonOpen} 
+        onOpenChange={setIsComingSoonOpen}
+        title={comingSoonTitle}
+      />
     </div>
   );
 }

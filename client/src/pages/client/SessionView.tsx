@@ -7,8 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, CheckCircle2, Circle, MessageSquare, PlayCircle, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 
 export default function ClientSessionView() {
+  const [comingSoon, setComingSoon] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
   const [, params] = useRoute("/app/client/session/:sessionId");
   const [, setLocation] = useLocation();
   const sessionId = params?.sessionId;
@@ -97,7 +103,16 @@ export default function ClientSessionView() {
                         </div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-600 shrink-0 bg-slate-50 rounded-full">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-slate-400 hover:text-indigo-600 shrink-0 bg-slate-50 rounded-full"
+                      onClick={() => setComingSoon({
+                        open: true,
+                        title: "Video Coming Soon",
+                        description: "Exercise demo videos coming soon."
+                      })}
+                    >
                       <PlayCircle className="h-6 w-6" />
                     </Button>
                   </div>
@@ -128,7 +143,16 @@ export default function ClientSessionView() {
                     ))}
                     
                     <div className="pt-2">
-                       <Button variant="ghost" size="sm" className="text-slate-500 text-xs hover:text-indigo-600">
+                       <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-slate-500 text-xs hover:text-indigo-600"
+                        onClick={() => setComingSoon({
+                          open: true,
+                          title: "Add Note Coming Soon",
+                          description: "The ability to add session notes and upload videos is coming soon."
+                        })}
+                      >
                          <MessageSquare className="h-3 w-3 mr-2" /> Add Note / Upload Video
                        </Button>
                     </div>
@@ -139,6 +163,13 @@ export default function ClientSessionView() {
           </div>
         ))}
       </div>
+
+      <ComingSoonDialog 
+        open={comingSoon.open} 
+        onOpenChange={(open) => setComingSoon(prev => ({ ...prev, open }))}
+        title={comingSoon.title}
+        description={comingSoon.description}
+      />
     </div>
   );
 }

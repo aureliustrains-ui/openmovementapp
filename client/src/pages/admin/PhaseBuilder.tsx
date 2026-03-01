@@ -6,15 +6,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle } from "lucide-react";
+import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
 function generateId() {
   return crypto.randomUUID();
 }
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 type Exercise = {
   id: string;
@@ -55,6 +57,31 @@ function makeSession(name = "New Session"): LocalSession {
   return { id: generateId(), name, description: "", sections: [makeSection("A. Main")], isNew: true };
 }
 
+function buildSchedule(sessionIds: string[], dayAssignments: Record<number, string>, weeks: number) {
+  const schedule: { day: string; week: number; sessionId: string }[] = [];
+  for (let w = 1; w <= weeks; w++) {
+    sessionIds.forEach((sid, idx) => {
+      const day = dayAssignments[idx] || WEEKDAYS[idx % 7];
+      schedule.push({ day, week: w, sessionId: sid });
+    });
+  }
+  return schedule;
+}
+
+function collectExerciseNames(sessions: LocalSession[]): string[] {
+  const names: string[] = [];
+  for (const s of sessions) {
+    for (const sec of s.sections) {
+      for (const ex of sec.exercises) {
+        if (ex.name && !names.includes(ex.name)) {
+          names.push(ex.name);
+        }
+      }
+    }
+  }
+  return names;
+}
+
 export default function AdminPhaseBuilder() {
   const [, params] = useRoute("/app/admin/clients/:clientId/builder/:phaseId");
   const [, setLocation] = useLocation();
@@ -78,6 +105,10 @@ export default function AdminPhaseBuilder() {
   const [localSessions, setLocalSessions] = useState<LocalSession[]>([]);
   const [initializedForPhase, setInitializedForPhase] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [movementCheckGate, setMovementCheckGate] = useState("yes");
+  const [dayAssignments, setDayAssignments] = useState<Record<number, string>>({});
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const isDirty = useMemo(() => {
     if (!existingPhase && isNew) {
@@ -128,7 +159,9 @@ export default function AdminPhaseBuilder() {
       setPhaseName("New Phase");
       setGoal("");
       setDurationWeeks("4");
+      setMovementCheckGate("yes");
       setLocalSessions([makeSession("Session 1")]);
+      setDayAssignments({ 0: "Monday" });
       setInitializedForPhase(currentPhaseId);
       return;
     }
@@ -138,6 +171,9 @@ export default function AdminPhaseBuilder() {
       setGoal(existingPhase.goal || "");
       setDurationWeeks(String(existingPhase.durationWeeks));
 
+      const hasMovementChecks = (existingPhase.movementChecks as any[])?.length > 0;
+      setMovementCheckGate(hasMovementChecks || existingPhase.status === 'Waiting for Movement Check' ? "yes" : "no");
+
       if (phaseSessions.length > 0) {
         setLocalSessions(phaseSessions.map((s: any) => ({
           id: s.id,
@@ -146,8 +182,17 @@ export default function AdminPhaseBuilder() {
           description: s.description || "",
           sections: (s.sections as Section[]) || [],
         })));
+
+        const existingSchedule = (existingPhase.schedule as any[]) || [];
+        const assignments: Record<number, string> = {};
+        phaseSessions.forEach((s: any, idx: number) => {
+          const schedEntry = existingSchedule.find((sc: any) => sc.sessionId === s.id);
+          assignments[idx] = schedEntry?.day || WEEKDAYS[idx % 7];
+        });
+        setDayAssignments(assignments);
       } else {
         setLocalSessions([makeSession("Session 1")]);
+        setDayAssignments({ 0: "Monday" });
       }
       setInitializedForPhase(currentPhaseId);
     }
@@ -158,11 +203,24 @@ export default function AdminPhaseBuilder() {
   }, []);
 
   const addSession = () => {
-    setLocalSessions(prev => [...prev, makeSession(`Session ${prev.length + 1}`)]);
+    setLocalSessions(prev => {
+      const newIdx = prev.length;
+      setDayAssignments(a => ({ ...a, [newIdx]: WEEKDAYS[newIdx % 7] }));
+      return [...prev, makeSession(`Session ${newIdx + 1}`)];
+    });
   };
 
   const removeSession = (idx: number) => {
     setLocalSessions(prev => prev.filter((_, i) => i !== idx));
+    setDayAssignments(prev => {
+      const next: Record<number, string> = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = parseInt(k);
+        if (ki < idx) next[ki] = v;
+        else if (ki > idx) next[ki - 1] = v;
+      });
+      return next;
+    });
   };
 
   const addSection = (sessionIdx: number) => {
@@ -219,94 +277,110 @@ export default function AdminPhaseBuilder() {
     }));
   };
 
-  const handleSave = async () => {
-    if (saving || !phaseName.trim()) return;
-    setSaving(true);
+  const savePhase = async (): Promise<string | null> => {
+    const clientId = params?.clientId;
+    let targetPhaseId = params?.phaseId || null;
+    let sessionsCount = 0;
 
-    try {
-      const clientId = params?.clientId;
-      let targetPhaseId = params?.phaseId;
-      let sessionsCount = 0;
+    if (isNew && clientId) {
+      const phase = await createPhase.mutateAsync({
+        clientId,
+        name: phaseName,
+        goal,
+        durationWeeks: parseInt(durationWeeks),
+        startDate: new Date().toISOString().split('T')[0],
+        status: 'Draft',
+        movementChecks: [],
+        schedule: [],
+      });
+      targetPhaseId = phase.id;
 
-      if (isNew && clientId) {
-        const phase = await createPhase.mutateAsync({
-          clientId,
-          name: phaseName,
-          goal,
-          durationWeeks: parseInt(durationWeeks),
-          startDate: new Date().toISOString().split('T')[0],
-          status: 'Draft',
-          movementChecks: [],
-          schedule: [],
+      for (const ls of localSessions) {
+        await createSession.mutateAsync({
+          phaseId: phase.id,
+          name: ls.name,
+          description: ls.description,
+          sections: ls.sections,
+          completedInstances: [],
         });
-        targetPhaseId = phase.id;
+        sessionsCount++;
+      }
 
-        for (const ls of localSessions) {
+      const updatedSessions = await (await fetch(`/api/sessions?phaseId=${phase.id}`)).json();
+      const sessionIds = updatedSessions.map((s: any) => s.id);
+      const schedule = buildSchedule(sessionIds, dayAssignments, parseInt(durationWeeks));
+
+      await updatePhase.mutateAsync({
+        id: phase.id,
+        schedule,
+      });
+
+      return phase.id;
+    } else if (params?.phaseId) {
+      const phaseId = params.phaseId;
+
+      const localDbIds = localSessions.map(ls => ls.dbId).filter(Boolean);
+      const sessionsToDelete = phaseSessions.filter((ps: any) => !localDbIds.includes(ps.id));
+      for (const s of sessionsToDelete) {
+        await deleteSession.mutateAsync(s.id);
+      }
+
+      await updatePhase.mutateAsync({
+        id: phaseId,
+        name: phaseName,
+        goal,
+        durationWeeks: parseInt(durationWeeks),
+      });
+
+      for (const ls of localSessions) {
+        if (ls.dbId) {
+          await updateSession.mutateAsync({
+            id: ls.dbId,
+            name: ls.name,
+            description: ls.description,
+            sections: ls.sections,
+          });
+        } else {
           await createSession.mutateAsync({
-            phaseId: phase.id,
+            phaseId,
             name: ls.name,
             description: ls.description,
             sections: ls.sections,
             completedInstances: [],
           });
-          sessionsCount++;
         }
+        sessionsCount++;
+      }
 
-        toast({ title: "Phase Created", description: `Phase and ${sessionsCount} session(s) saved.` });
+      const updatedSessions = await (await fetch(`/api/sessions?phaseId=${phaseId}`)).json();
+      const sessionIds = updatedSessions.map((s: any) => s.id);
+      const schedule = buildSchedule(sessionIds, dayAssignments, parseInt(durationWeeks));
+
+      await updatePhase.mutateAsync({
+        id: phaseId,
+        schedule,
+      });
+
+      return phaseId;
+    }
+
+    return null;
+  };
+
+  const handleSave = async () => {
+    if (saving || !phaseName.trim()) return;
+    setSaving(true);
+
+    try {
+      const savedPhaseId = await savePhase();
+
+      if (savedPhaseId && isNew) {
+        toast({ title: "Phase Created", description: `Phase and sessions saved as Draft.` });
         setInitializedForPhase(null);
-        setLocation(`/app/admin/clients/${clientId}/builder/${phase.id}`);
-      } else if (params?.phaseId) {
-        const phaseId = params.phaseId;
-
-        // Delete removed sessions
-        const localDbIds = localSessions.map(ls => ls.dbId).filter(Boolean);
-        const sessionsToDelete = phaseSessions.filter((ps: any) => !localDbIds.includes(ps.id));
-        for (const s of sessionsToDelete) {
-          await deleteSession.mutateAsync(s.id);
-        }
-
-        await updatePhase.mutateAsync({
-          id: phaseId,
-          name: phaseName,
-          goal,
-          durationWeeks: parseInt(durationWeeks),
-        });
-
-        for (const ls of localSessions) {
-          if (ls.dbId) {
-            await updateSession.mutateAsync({
-              id: ls.dbId,
-              name: ls.name,
-              description: ls.description,
-              sections: ls.sections,
-            });
-          } else {
-            await createSession.mutateAsync({
-              phaseId,
-              name: ls.name,
-              description: ls.description,
-              sections: ls.sections,
-              completedInstances: [],
-            });
-          }
-          sessionsCount++;
-        }
-
-        // Update schedule mapping (simple 1-1 mapping for now as per requirements)
-        const updatedSessions = await (await fetch(`/api/sessions?phaseId=${phaseId}`)).json();
-        const schedule = updatedSessions.map((s: any, idx: number) => ({
-          day: idx + 1,
-          sessionId: s.id
-        }));
-        
-        await updatePhase.mutateAsync({
-          id: phaseId,
-          schedule
-        });
-
-        toast({ title: "Phase Saved", description: `Phase and ${sessionsCount} session(s) updated.` });
+        setLocation(`/app/admin/clients/${params?.clientId}/builder/${savedPhaseId}`);
+      } else {
+        toast({ title: "Phase Saved", description: `Phase and sessions updated.` });
         setInitializedForPhase(null);
-        // Don't redirect if updating, just refresh state via initializedForPhase(null)
       }
     } catch (err) {
       toast({ title: "Save Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
@@ -315,9 +389,74 @@ export default function AdminPhaseBuilder() {
     }
   };
 
+  const handlePublish = async () => {
+    setPublishing(true);
+
+    try {
+      let phaseId = params?.phaseId;
+
+      if (isNew || isDirty) {
+        phaseId = await savePhase() || undefined;
+        if (isNew && phaseId) {
+          setLocation(`/app/admin/clients/${params?.clientId}/builder/${phaseId}`);
+        }
+      }
+
+      if (!phaseId) {
+        toast({ title: "Publish Failed", description: "Could not save the phase.", variant: "destructive" });
+        return;
+      }
+
+      if (movementCheckGate === "yes") {
+        const exerciseNames = collectExerciseNames(localSessions);
+        const movementChecks = exerciseNames.slice(0, 5).map(name => ({
+          exerciseId: generateId(),
+          name,
+          status: "Not Submitted",
+          videoUrl: "",
+          feedback: "",
+          clientNote: "",
+          submittedAt: "",
+        }));
+
+        await updatePhase.mutateAsync({
+          id: phaseId,
+          status: "Waiting for Movement Check",
+          movementChecks,
+        });
+
+        toast({
+          title: "Phase Published",
+          description: `Phase is now waiting for movement check approval. ${movementChecks.length} exercise(s) require video review.`,
+        });
+      } else {
+        await updatePhase.mutateAsync({
+          id: phaseId,
+          status: "Active",
+          movementChecks: [],
+        });
+
+        toast({
+          title: "Phase Published",
+          description: "Phase is now active and visible to the client.",
+        });
+      }
+
+      setInitializedForPhase(null);
+      setPublishDialogOpen(false);
+    } catch (err) {
+      toast({ title: "Publish Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const filteredTemplates = templates.filter((t: any) =>
     t.name.toLowerCase().includes(exerciseSearch.toLowerCase())
   );
+
+  const phaseStatus = existingPhase?.status || 'Draft';
+  const isPublished = phaseStatus === 'Active' || phaseStatus === 'Waiting for Movement Check';
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in">
@@ -333,16 +472,31 @@ export default function AdminPhaseBuilder() {
               Unsaved changes
             </Badge>
           )}
+          {isPublished && (
+            <Badge className={phaseStatus === 'Active' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'}>
+              {phaseStatus}
+            </Badge>
+          )}
         </div>
         <div className="flex gap-3">
-          <Button 
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6" 
-            onClick={handleSave} 
-            disabled={saving || !phaseName.trim()} 
+          <Button
+            variant="outline"
+            className="rounded-full px-6"
+            onClick={handleSave}
+            disabled={saving || !phaseName.trim()}
             data-testid="button-save-phase"
           >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {saving ? "Saving..." : "Save Phase"}
+            {saving ? "Saving..." : "Save Draft"}
+          </Button>
+          <Button
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6"
+            onClick={() => setPublishDialogOpen(true)}
+            disabled={saving || publishing || !phaseName.trim() || localSessions.every(s => s.sections.every(sec => sec.exercises.length === 0))}
+            data-testid="button-publish-phase"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            {isPublished ? "Re-publish" : "Publish Phase"}
           </Button>
         </div>
       </div>
@@ -373,8 +527,8 @@ export default function AdminPhaseBuilder() {
           </div>
           <div className="space-y-2">
             <Label className="text-slate-600">Movement Check Gate</Label>
-            <Select defaultValue="yes">
-              <SelectTrigger className="bg-slate-50 border-amber-200 text-amber-900"><SelectValue /></SelectTrigger>
+            <Select value={movementCheckGate} onValueChange={setMovementCheckGate}>
+              <SelectTrigger className={`bg-slate-50 ${movementCheckGate === 'yes' ? 'border-amber-200 text-amber-900' : ''}`} data-testid="select-movement-gate"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="yes">Require video approval before start</SelectItem>
                 <SelectItem value="no">Bypass (Go online immediately)</SelectItem>
@@ -520,6 +674,77 @@ export default function AdminPhaseBuilder() {
           <Plus className="mr-2 h-5 w-5" /> Add Session
         </Button>
       </div>
+
+      {localSessions.length > 0 && (
+        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden">
+          <div className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
+            <CalendarDays className="h-5 w-5 text-indigo-400" />
+            <h3 className="font-display font-bold text-lg">Weekly Schedule</h3>
+          </div>
+          <CardContent className="p-6 space-y-3">
+            <p className="text-sm text-slate-500 mb-4">Assign each session to a day of the week. This schedule repeats for all {durationWeeks} weeks.</p>
+            {localSessions.map((session, idx) => (
+              <div key={session.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100" data-testid={`schedule-row-${idx}`}>
+                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 border-none shrink-0 text-xs">Session {idx + 1}</Badge>
+                <span className="font-medium text-slate-900 flex-1 min-w-0 truncate">{session.name}</span>
+                <Select value={dayAssignments[idx] || WEEKDAYS[idx % 7]} onValueChange={(val) => setDayAssignments(prev => ({ ...prev, [idx]: val }))}>
+                  <SelectTrigger className="w-[140px] bg-white" data-testid={`select-day-${idx}`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {WEEKDAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{isPublished ? "Re-publish Phase" : "Publish Phase"}</DialogTitle>
+            <DialogDescription>
+              {movementCheckGate === "yes"
+                ? "This phase will be published with movement check gating. The client will need to submit and have their form videos approved before they can start training."
+                : "This phase will go live immediately. The client will be able to see and start logging sessions right away."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+              <span className="text-sm font-medium text-slate-700">Phase Name</span>
+              <span className="text-sm font-semibold text-slate-900">{phaseName}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+              <span className="text-sm font-medium text-slate-700">Sessions</span>
+              <span className="text-sm font-semibold text-slate-900">{localSessions.length}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+              <span className="text-sm font-medium text-slate-700">Duration</span>
+              <span className="text-sm font-semibold text-slate-900">{durationWeeks} weeks</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+              <span className="text-sm font-medium text-slate-700">Movement Checks</span>
+              <Badge className={movementCheckGate === "yes" ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-green-100 text-green-700 border-green-200"}>
+                {movementCheckGate === "yes" ? "Required" : "Bypassed"}
+              </Badge>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPublishDialogOpen(false)} disabled={publishing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePublish}
+              className="bg-indigo-600 hover:bg-indigo-700"
+              disabled={publishing}
+              data-testid="button-confirm-publish"
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              {publishing ? "Publishing..." : "Confirm & Publish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addExerciseTarget !== null} onOpenChange={(open) => { if (!open) setAddExerciseTarget(null); }}>
         <DialogContent className="max-w-lg">

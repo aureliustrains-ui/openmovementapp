@@ -47,6 +47,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertExerciseTemplateSchema, type ExerciseTemplate } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 
 export default function AdminTemplates() {
   const { toast } = useToast();
@@ -57,8 +58,15 @@ export default function AdminTemplates() {
 
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
+  const [comingSoonTitle, setComingSoonTitle] = useState("");
   const [editingTemplate, setEditingTemplate] = useState<ExerciseTemplate | null>(null);
   const [deletingTemplate, setDeletingTemplate] = useState<ExerciseTemplate | null>(null);
+
+  const handleComingSoon = (title: string) => {
+    setComingSoonTitle(title);
+    setIsComingSoonOpen(true);
+  };
 
   const form = useForm({
     resolver: zodResolver(insertExerciseTemplateSchema),
@@ -280,7 +288,7 @@ export default function AdminTemplates() {
                 <Folder className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">Session Templates</h3>
                 <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">Create full workout templates you can drag and drop into any phase.</p>
-                <Button variant="outline" className="rounded-full"><Plus className="mr-2 h-4 w-4" /> Create Session Template</Button>
+                <Button variant="outline" className="rounded-full" onClick={() => handleComingSoon("Session Templates Coming Soon")}><Plus className="mr-2 h-4 w-4" /> Create Session Template</Button>
               </div>
           </TabsContent>
 
@@ -289,6 +297,7 @@ export default function AdminTemplates() {
                 <LayoutTemplate className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">Phase Templates</h3>
                 <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">Build complete multi-week programs.</p>
+                <Button variant="outline" className="rounded-full" onClick={() => handleComingSoon("Phase Templates Coming Soon")}><Plus className="mr-2 h-4 w-4" /> Create Phase Template</Button>
               </div>
           </TabsContent>
           
@@ -297,10 +306,17 @@ export default function AdminTemplates() {
                 <List className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">Section Templates</h3>
                 <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">Reusable blocks like "Warm-ups" or "Core Finishers".</p>
+                <Button variant="outline" className="rounded-full" onClick={() => handleComingSoon("Section Templates Coming Soon")}><Plus className="mr-2 h-4 w-4" /> Create Section Template</Button>
               </div>
           </TabsContent>
         </div>
       </Tabs>
+
+      <ComingSoonDialog 
+        open={isComingSoonOpen} 
+        onOpenChange={setIsComingSoonOpen}
+        title={comingSoonTitle}
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>

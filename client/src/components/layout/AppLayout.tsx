@@ -10,7 +10,8 @@ import {
   MessageCircle, 
   Info,
   LogOut,
-  Repeat
+  Repeat,
+  ClipboardCheck
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const getAdminNavItems = () => [
   { href: "/app/admin/clients", label: "Clients", icon: Users },
   { href: "/app/admin/templates", label: "Templates", icon: Library },
   { href: "/app/admin/analytics", label: "Analytics", icon: BarChart },
+  { href: "/app/admin/qa", label: "QA", icon: ClipboardCheck },
   { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
@@ -102,8 +104,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full border border-slate-200">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="bg-indigo-50 text-indigo-700 font-semibold">{user.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={user.avatar || undefined} alt={user.name || undefined} />
+                  <AvatarFallback className="bg-indigo-50 text-indigo-700 font-semibold">{user.name?.charAt(0)}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>

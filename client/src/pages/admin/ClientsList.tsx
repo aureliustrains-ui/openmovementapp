@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, UserPlus, ChevronRight, Activity, AlertCircle, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 
 export default function AdminClientsList() {
   const [search, setSearch] = useState("");
+  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
   const { data: allUsers = [], isLoading: loadingUsers } = useQuery(usersQuery);
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
 
@@ -41,10 +43,21 @@ export default function AdminClientsList() {
           <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-clients-title">Client Management</h1>
           <p className="text-slate-500 mt-1">Overview of all active roster clients.</p>
         </div>
-        <Button className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" data-testid="button-add-client">
+        <Button 
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" 
+          data-testid="button-add-client"
+          onClick={() => setIsComingSoonOpen(true)}
+        >
           <UserPlus className="mr-2 h-4 w-4" /> Add Client
         </Button>
       </div>
+
+      <ComingSoonDialog 
+        open={isComingSoonOpen} 
+        onOpenChange={setIsComingSoonOpen} 
+        title="Add Client Coming Soon"
+        description="The ability to invite and add new clients to your roster is coming in the next update."
+      />
 
       <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm max-w-md">
         <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />

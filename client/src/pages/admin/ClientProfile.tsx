@@ -1,19 +1,21 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase } from "@/lib/api";
+import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, messagesQuery, useSendMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 
 export default function AdminClientProfile() {
   const [, params] = useRoute("/app/admin/clients/:id");
@@ -28,11 +30,28 @@ export default function AdminClientProfile() {
   const updatePhase = useUpdatePhase();
 
   const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  const [activeTab, setActiveTab] = useState("programming");
+  const [chatMessage, setChatMessage] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
+    ...messagesQuery(clientId || ""),
+    enabled: !!clientId,
+    refetchInterval: 5000,
+  });
+  const sendMessage = useSendMessage();
+
+  useEffect(() => {
+    if (activeTab === "chat") {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, activeTab]);
+
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
   const activePhase = clientPhases.find((p: any) => p.status === 'Active' || p.status === 'Waiting for Movement Check');
@@ -43,6 +62,20 @@ export default function AdminClientProfile() {
       <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
     </div>
   );
+
+  const handleSendChatMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMessage.trim() || !clientId) return;
+
+    sendMessage.mutate({
+      clientId: clientId,
+      sender: "Head Coach",
+      text: chatMessage,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isClient: false,
+    });
+    setChatMessage("");
+  };
 
   const handleApproveMovementCheck = async (phaseId: string, exerciseId: string) => {
     const phase = allPhases.find((p: any) => p.id === phaseId);
@@ -154,15 +187,23 @@ export default function AdminClientProfile() {
           >
             <Repeat className="mr-2 h-4 w-4" /> Impersonate
           </Button>
-          <Button variant="outline" className="bg-white" data-testid="button-message-client"><MessageCircle className="mr-2 h-4 w-4" /> Message</Button>
-          <Button variant="outline" className="bg-white"><Settings className="mr-2 h-4 w-4" /> Edit Profile</Button>
+          <Button variant="outline" className="bg-white" data-testid="button-message-client" onClick={() => setActiveTab("chat")}><MessageCircle className="mr-2 h-4 w-4" /> Message</Button>
+          <Button variant="outline" className="bg-white" data-testid="button-edit-profile" onClick={() => setIsComingSoonOpen(true)}><Settings className="mr-2 h-4 w-4" /> Edit Profile</Button>
         </div>
       </div>
 
-      <Tabs defaultValue="programming" className="w-full">
+      <ComingSoonDialog 
+        open={isComingSoonOpen} 
+        onOpenChange={setIsComingSoonOpen}
+        title="Edit Profile Coming Soon"
+        description="The ability to manage client profile details directly is coming soon."
+      />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start overflow-x-auto h-12">
           <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Programming</TabsTrigger>
           <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">Movement Checks</TabsTrigger>
+          <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">Chat</TabsTrigger>
           <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-logs">Logs & History</TabsTrigger>
         </TabsList>
         
@@ -332,6 +373,68 @@ export default function AdminClientProfile() {
                   </div>
                 )}
               </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="chat" className="m-0 outline-none">
+            <Card className="flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-2xl h-[600px]">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {isChatLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                    <MessageCircle className="h-12 w-12 text-slate-200 mb-4" />
+                    <p>No messages yet. Start a conversation.</p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg: any) => (
+                    <div key={msg.id} className={`flex gap-4 ${!msg.isClient ? 'flex-row-reverse' : ''}`}>
+                      <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                        <AvatarFallback className={!msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
+                          {msg.sender.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className={`flex flex-col ${!msg.isClient ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className="font-semibold text-slate-900 text-sm">{msg.sender}</span>
+                          <span className="text-xs text-slate-500">{msg.time}</span>
+                        </div>
+                        <div className={`text-sm leading-relaxed p-4 rounded-2xl max-w-md ${
+                          !msg.isClient
+                            ? 'bg-indigo-600 text-white rounded-tr-sm'
+                            : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tl-sm'
+                        }`}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+                <form className="relative flex items-center" onSubmit={handleSendChatMessage}>
+                  <Input
+                    placeholder="Message client..."
+                    className="w-full pr-12 py-6 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    data-testid="input-chat-message"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="absolute right-2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                    data-testid="button-send-message"
+                    disabled={!chatMessage.trim()}
+                  >
+                    <Send className="h-4 w-4 text-white" />
+                  </Button>
+                </form>
+              </div>
             </Card>
           </TabsContent>
           
