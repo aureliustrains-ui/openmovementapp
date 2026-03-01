@@ -125,6 +125,8 @@ export default function AdminPhaseBuilder() {
   };
 
   const isDirty = useMemo(() => {
+    if (fetchingSessions && lastSavedAt) return false;
+
     if (!existingPhase && isNew) {
       return phaseName !== "New Phase" || goal !== "" || durationWeeks !== "4" || localSessions.length > 1 || localSessions[0]?.sections.length > 1 || localSessions[0]?.sections[0]?.exercises.length > 0 || localSchedule.length > 0;
     }
@@ -134,6 +136,8 @@ export default function AdminPhaseBuilder() {
     const goalChanged = goal !== (existingPhase.goal || "");
     const durationChanged = durationWeeks !== String(existingPhase.durationWeeks);
     if (nameChanged || goalChanged || durationChanged) return true;
+
+    if (fetchingSessions) return false;
 
     if (localSessions.length !== phaseSessions.length) return true;
     for (let i = 0; i < localSessions.length; i++) {
@@ -150,7 +154,7 @@ export default function AdminPhaseBuilder() {
     if (JSON.stringify(sortSched(localSchedule)) !== JSON.stringify(sortSched(dbSched))) return true;
 
     return false;
-  }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew]);
+  }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew, fetchingSessions, lastSavedAt]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -186,6 +190,9 @@ export default function AdminPhaseBuilder() {
 
     if (!existingPhase) return;
     if (loadingSessions || fetchingSessions) return;
+
+    const scheduleHasSessions = ((existingPhase.schedule as any[]) || []).length > 0;
+    if (phaseSessions.length === 0 && scheduleHasSessions) return;
 
     setPhaseName(existingPhase.name);
     setGoal(existingPhase.goal || "");

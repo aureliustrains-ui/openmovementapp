@@ -18,8 +18,8 @@ A training plan management platform with role-based access for coaches (Admin) a
 
 ## Key Features
 - **Phase Builder** (`admin/PhaseBuilder.tsx`): Full local-state editor for Phase → Sessions → Sections → Exercises hierarchy. Tracks dirty state (including schedule changes), warns on unsaved changes, deletes orphaned sessions on save. **Weekly Schedule Grid Editor**: Day 1-7 rows × AM/PM columns, week selector tabs, assign sessions to time slots, copy week to all weeks. Schedule entries have `{day, week, slot, sessionId}` format. Save Draft atomically persists phase + sessions + schedule, syncs local state with canonical DB IDs (no re-init race condition). Publish Phase button with confirmation dialog. Movement Check Gate selector. **Delete Phase** with cascade (sessions + workout logs) and "Type DELETE" confirmation modal. **Exercise Demo URL** field per exercise for video links.
-- **Client Management** (`admin/ClientProfile.tsx`): Programming tab shows Current Phase (Active/Waiting), Drafts In Progress section (with edit/delete buttons and session counts), and Phase History (with delete buttons). Weekly schedule grid preview for active phase. Create Phase button always visible. Delete Phase with "Type DELETE" confirmation modal and cascade cleanup. Chat, Movement Checks, and Logs tabs.
-- **Client My Phase** (`client/MyPhase.tsx`): Active phase view with week selector. **Schedule grid at top of page** (read-only, AM/PM columns) when schedule has slot data. Session chips are clickable (navigate to session detail). Completed sessions shown with green styling and checkmark. Falls back to card layout for legacy schedule format. Movement Check flow for pending phases.
+- **Client Management** (`admin/ClientProfile.tsx`): Programming tab shows Active Phases (with Finish button), Waiting for Movement Check phases, Drafts In Progress, and Completed Phase History — all as separate grouped sections. Phase-scoped movement check review with phase selector dropdown. Approve dialog with optional approval note, Resubmit dialog with required feedback — stored distinctly as `approvedNote`/`resubmitFeedback`/`decision`/`decidedAt` on each movement check entry. Finish Phase button transitions to Completed status. Create Phase button always visible. Chat, Movement Checks, and Logs tabs.
+- **Client My Phase** (`client/MyPhase.tsx`): Supports multiple active phases with tab-style selector. Only shows Active and Waiting for Movement Check phases (Completed phases hidden from client). Phase-scoped movement check submissions. **Schedule grid at top of page** (read-only, AM/PM columns) when schedule has slot data. Session chips are clickable (navigate to session detail). Completed sessions shown with green styling and checkmark. Falls back to card layout for legacy schedule format. Movement Check flow for pending phases — shows coach approval notes and resubmit feedback.
 - **Client Session View** (`client/SessionView.tsx`): Redesigned exercise cards — large exercise name header, 3-column Sets/Reps/Tempo display grid, coaching notes block, expandable "Log sets" section (collapsed by default with toggle), large textarea for client notes. **Exercise Demo Videos**: "Demo" button opens YouTube embed in dialog or external link for other URLs. Completion toggle per exercise. Finish Session button.
 - **Templates CRUD** (`admin/Templates.tsx`): Full CRUD for exercise templates with create/edit/duplicate/delete, search filtering, and confirmation dialogs.
 - **Movement Checks** (`client/MyPhase.tsx` + `admin/ClientProfile.tsx`): Client submits video URL with notes, admin can approve or request resubmission with feedback. Auto-activates phase when all checks approved. Publishing with gate=yes auto-generates movement check items from exercise names.
@@ -28,7 +28,7 @@ A training plan management platform with role-based access for coaches (Admin) a
 - **Coming Soon Dialog** (`components/ComingSoonDialog.tsx`): Reusable dialog for unimplemented features.
 
 ## Data Model
-- `phases.movementChecks` (JSONB): `[{name, exerciseId, status, videoUrl, filename, submittedAt, clientNote, feedback}]`
+- `phases.movementChecks` (JSONB): `[{name, exerciseId, status, videoUrl, submittedAt, clientNote, decision, approvedNote, resubmitFeedback, decidedAt}]`
 - `phases.schedule` (JSONB): `[{day: "Monday", week: 1, slot: "AM"|"PM", sessionId: "..."}]` — day is weekday name, week is 1-indexed, slot is AM/PM time-of-day
 - `sessions.sections` (JSONB): `[{id, name, exercises: [{id, name, sets, reps, load, rpe, tempo, rest, notes, demoUrl}]}]`
 
@@ -59,8 +59,10 @@ A training plan management platform with role-based access for coaches (Admin) a
 3. Remap schedule entries from temp IDs to canonical DB IDs
 4. Filter out schedule entries referencing non-existent sessions
 5. Save schedule to phase record
-6. Update local state in-place with canonical IDs (NO `setInitializedForPhase(null)` — avoids race condition with TanStack Query cache invalidation)
+6. Update local state in-place with canonical IDs (NO re-init — avoids race condition with TanStack Query cache invalidation)
 7. Show "Saved at [time]" badge, clear dirty flag
+8. `isDirty` is suppressed during session refetch after save (`fetchingSessions && lastSavedAt` guard)
+9. Init effect guarded: won't re-init when `phaseSessions` is empty but schedule implies sessions exist
 
 ## Delete Phase Flow
 1. "Type DELETE" confirmation modal in PhaseBuilder header and ClientProfile

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2 } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -33,16 +34,21 @@ export default function AdminClientProfile() {
   const deletePhase = useDeletePhase();
 
   const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [approveNote, setApproveNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("programming");
   const [chatMessage, setChatMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
+  const [finishTargetPhase, setFinishTargetPhase] = useState<any>(null);
+  const [finishing, setFinishing] = useState(false);
+  const [movementCheckPhaseId, setMovementCheckPhaseId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -59,9 +65,23 @@ export default function AdminClientProfile() {
 
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
-  const activePhase = clientPhases.find((p: any) => p.status === 'Active' || p.status === 'Waiting for Movement Check');
+  const activePhases = clientPhases.filter((p: any) => p.status === 'Active');
+  const pendingPhases = clientPhases.filter((p: any) => p.status === 'Waiting for Movement Check');
   const draftPhases = clientPhases.filter((p: any) => p.status === 'Draft');
-  const pastPhases = clientPhases.filter((p: any) => p.status === 'Completed' || p.status === 'Archived');
+  const completedPhases = clientPhases.filter((p: any) => p.status === 'Completed');
+
+  const phasesWithMovementChecks = clientPhases.filter((p: any) =>
+    (p.status === 'Waiting for Movement Check' || p.status === 'Active') &&
+    (p.movementChecks as any[])?.length > 0
+  );
+
+  useEffect(() => {
+    if (phasesWithMovementChecks.length > 0 && !movementCheckPhaseId) {
+      setMovementCheckPhaseId(phasesWithMovementChecks[0].id);
+    }
+  }, [phasesWithMovementChecks, movementCheckPhaseId]);
+
+  const selectedMovementPhase = allPhases.find((p: any) => p.id === movementCheckPhaseId);
 
   if (!client) return (
     <div className="flex items-center justify-center py-20">
@@ -83,29 +103,44 @@ export default function AdminClientProfile() {
     setChatMessage("");
   };
 
-  const handleApproveMovementCheck = async (phaseId: string, exerciseId: string) => {
-    const phase = allPhases.find((p: any) => p.id === phaseId);
+  const handleOpenApprove = (phaseId: string, exerciseId: string) => {
+    setSelectedPhaseId(phaseId);
+    setSelectedExerciseId(exerciseId);
+    setApproveNote("");
+    setIsApproveOpen(true);
+  };
+
+  const handleApproveMovementCheck = async () => {
+    if (!selectedPhaseId || !selectedExerciseId) return;
+    const phase = allPhases.find((p: any) => p.id === selectedPhaseId);
     if (!phase) return;
     
     setIsSubmitting(true);
     try {
       const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
-        if (mc.exerciseId !== exerciseId) return mc;
-        return { ...mc, status: 'Approved', feedback: 'Looking great, ready to go!' };
+        if (mc.exerciseId !== selectedExerciseId) return mc;
+        return {
+          ...mc,
+          status: 'Approved',
+          decision: 'approved',
+          approvedNote: approveNote || '',
+          decidedAt: new Date().toISOString(),
+        };
       });
 
       const allApproved = updatedChecks.every((mc: any) => mc.status === 'Approved');
       
       await updatePhase.mutateAsync({
-        id: phaseId,
+        id: selectedPhaseId,
         movementChecks: updatedChecks,
         ...(allApproved ? { status: 'Active' } : {}),
       });
 
       toast({
         title: "Check Approved",
-        description: allApproved ? "Phase is now active!" : "Movement check approved.",
+        description: allApproved ? "All checks approved — phase is now active!" : "Movement check approved.",
       });
+      setIsApproveOpen(false);
     } catch (error) {
       toast({
         title: "Error",
@@ -134,7 +169,13 @@ export default function AdminClientProfile() {
     try {
       const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
         if (mc.exerciseId !== selectedExerciseId) return mc;
-        return { ...mc, status: 'Needs Resubmission', feedback: feedback };
+        return {
+          ...mc,
+          status: 'Needs Resubmission',
+          decision: 'resubmit',
+          resubmitFeedback: feedback,
+          decidedAt: new Date().toISOString(),
+        };
       });
 
       await updatePhase.mutateAsync({
@@ -158,6 +199,23 @@ export default function AdminClientProfile() {
     }
   };
 
+  const handleFinishPhase = async () => {
+    if (finishing || !finishTargetPhase) return;
+    setFinishing(true);
+    try {
+      await updatePhase.mutateAsync({
+        id: finishTargetPhase.id,
+        status: 'Completed',
+      });
+      toast({ title: "Phase Completed", description: `"${finishTargetPhase.name}" has been marked as completed.` });
+      setFinishTargetPhase(null);
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to finish phase.", variant: "destructive" });
+    } finally {
+      setFinishing(false);
+    }
+  };
+
   const handleDeletePhase = async () => {
     if (deleting || !deleteTargetPhase) return;
     setDeleting(true);
@@ -174,6 +232,95 @@ export default function AdminClientProfile() {
 
   const getSessionCount = (phaseId: string) => {
     return allSessions.filter((s: any) => s.phaseId === phaseId).length;
+  };
+
+  const renderPhaseCard = (phase: any, showFinish: boolean) => {
+    const statusColor = phase.status === 'Active' ? 'bg-green-100 text-green-700 border-green-200'
+      : phase.status === 'Waiting for Movement Check' ? 'bg-amber-100 text-amber-700 border-amber-200'
+      : phase.status === 'Draft' ? 'bg-slate-100 text-slate-600 border-slate-200'
+      : 'bg-slate-100 text-slate-500 border-slate-200';
+
+    return (
+      <Card key={phase.id} className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white" data-testid={`card-phase-${phase.id}`}>
+        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <Badge variant="outline" className={statusColor} data-testid={`badge-status-${phase.id}`}>
+                {phase.status}
+              </Badge>
+              <span className="text-sm font-medium text-slate-500">{phase.durationWeeks} weeks &middot; {getSessionCount(phase.id)} session(s)</span>
+            </div>
+            <h3 className="text-2xl font-bold text-slate-900" data-testid={`text-phase-name-${phase.id}`}>{phase.name}</h3>
+            {phase.goal && <p className="text-slate-600 mt-1">{phase.goal}</p>}
+          </div>
+          <div className="flex items-start gap-2 shrink-0">
+            <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
+              <Button variant="outline" className="bg-white" data-testid={`button-edit-${phase.id}`}><Pencil className="mr-2 h-4 w-4" /> Edit</Button>
+            </Link>
+            {showFinish && (phase.status === 'Active') && (
+              <Button
+                variant="outline"
+                className="text-slate-600 border-slate-200 hover:bg-slate-50"
+                onClick={() => setFinishTargetPhase(phase)}
+                data-testid={`button-finish-${phase.id}`}
+              >
+                <Archive className="mr-2 h-4 w-4" /> Finish
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="text-red-600 border-red-200 hover:bg-red-50"
+              onClick={() => setDeleteTargetPhase(phase)}
+              data-testid={`button-delete-${phase.id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        <CardContent className="p-6">
+          <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <CalendarDays className="h-4 w-4" /> Weekly Schedule
+          </h4>
+          {(() => {
+            const schedule = (phase.schedule as any[]) || [];
+            const week1 = schedule.filter((s: any) => s.week === 1);
+            if (week1.length === 0) {
+              return <p className="text-sm text-slate-400 italic">No schedule assigned yet.</p>;
+            }
+            return (
+              <div className="overflow-x-auto">
+                <div className="min-w-[400px] grid grid-cols-[80px_1fr_1fr] border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase" />
+                  <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">AM</div>
+                  <div className="p-2 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">PM</div>
+                  {WEEKDAYS.map(day => {
+                    const amEntries = week1.filter((s: any) => s.day === day && (s.slot || "AM") === "AM");
+                    const pmEntries = week1.filter((s: any) => s.day === day && s.slot === "PM");
+                    if (amEntries.length === 0 && pmEntries.length === 0) return null;
+                    return [
+                      <div key={`${day}-label`} className="p-2 border-b border-r border-slate-100 text-xs font-medium text-slate-600">{day.slice(0, 3)}</div>,
+                      <div key={`${day}-am`} className="p-1.5 border-b border-r border-slate-100 flex flex-wrap gap-1">
+                        {amEntries.map((e: any, i: number) => {
+                          const s = allSessions.find((ss: any) => ss.id === e.sessionId);
+                          return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
+                        })}
+                      </div>,
+                      <div key={`${day}-pm`} className="p-1.5 border-b border-slate-100 flex flex-wrap gap-1">
+                        {pmEntries.map((e: any, i: number) => {
+                          const s = allSessions.find((ss: any) => ss.id === e.sessionId);
+                          return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
+                        })}
+                      </div>
+                    ];
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -240,80 +387,21 @@ export default function AdminClientProfile() {
               </Link>
             </div>
 
-            {activePhase && (
+            {activePhases.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Current Phase</h3>
-                <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
-                  <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
-                    <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <Badge variant={activePhase.status === 'Waiting for Movement Check' ? 'destructive' : 'default'} 
-                          className={activePhase.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-green-200 border-none' : 'bg-rose-100 text-rose-700 hover:bg-rose-200 border-none'}
-                          data-testid="badge-phase-status">
-                          {activePhase.status}
-                        </Badge>
-                        <span className="text-sm font-medium text-slate-500">Week 1 of {activePhase.durationWeeks}</span>
-                      </div>
-                      <h3 className="text-2xl font-bold text-slate-900" data-testid="text-phase-name">{activePhase.name}</h3>
-                      <p className="text-slate-600 mt-1">{activePhase.goal}</p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Link href={`/app/admin/clients/${clientId}/builder/${activePhase.id}`}>
-                        <Button variant="outline" className="bg-white" data-testid="button-edit-phase"><Pencil className="mr-2 h-4 w-4" /> Edit</Button>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                        onClick={() => setDeleteTargetPhase(activePhase)}
-                        data-testid="button-delete-active-phase"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <CardContent className="p-6">
-                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4" /> Weekly Schedule
-                    </h4>
-                    {(() => {
-                      const schedule = (activePhase.schedule as any[]) || [];
-                      const week1 = schedule.filter((s: any) => s.week === 1);
-                      if (week1.length === 0) {
-                        return <p className="text-sm text-slate-400 italic">No schedule assigned yet.</p>;
-                      }
-                      return (
-                        <div className="overflow-x-auto">
-                          <div className="min-w-[400px] grid grid-cols-[80px_1fr_1fr] border border-slate-200 rounded-xl overflow-hidden">
-                            <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase" />
-                            <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">AM</div>
-                            <div className="p-2 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">PM</div>
-                            {WEEKDAYS.map(day => {
-                              const amEntries = week1.filter((s: any) => s.day === day && (s.slot || "AM") === "AM");
-                              const pmEntries = week1.filter((s: any) => s.day === day && s.slot === "PM");
-                              if (amEntries.length === 0 && pmEntries.length === 0) return null;
-                              return [
-                                <div key={`${day}-label`} className="p-2 border-b border-r border-slate-100 text-xs font-medium text-slate-600">{day.slice(0, 3)}</div>,
-                                <div key={`${day}-am`} className="p-1.5 border-b border-r border-slate-100 flex flex-wrap gap-1">
-                                  {amEntries.map((e: any, i: number) => {
-                                    const s = allSessions.find((ss: any) => ss.id === e.sessionId);
-                                    return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
-                                  })}
-                                </div>,
-                                <div key={`${day}-pm`} className="p-1.5 border-b border-slate-100 flex flex-wrap gap-1">
-                                  {pmEntries.map((e: any, i: number) => {
-                                    const s = allSessions.find((ss: any) => ss.id === e.sessionId);
-                                    return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
-                                  })}
-                                </div>
-                              ];
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Active Phase{activePhases.length > 1 ? 's' : ''}</h3>
+                <div className="space-y-4">
+                  {activePhases.map((phase: any) => renderPhaseCard(phase, true))}
+                </div>
+              </div>
+            )}
+
+            {pendingPhases.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Waiting for Movement Check</h3>
+                <div className="space-y-4">
+                  {pendingPhases.map((phase: any) => renderPhaseCard(phase, false))}
+                </div>
               </div>
             )}
 
@@ -355,7 +443,7 @@ export default function AdminClientProfile() {
               </div>
             )}
 
-            {!activePhase && draftPhases.length === 0 && (
+            {clientPhases.length === 0 && (
               <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
                 <Dumbbell className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">No Phases Yet</h3>
@@ -366,28 +454,35 @@ export default function AdminClientProfile() {
               </div>
             )}
 
-            {pastPhases.length > 0 && (
+            {completedPhases.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Phase History</h3>
                 <div className="space-y-3">
-                  {pastPhases.map((phase: any) => (
-                    <Card key={phase.id} className="border-slate-200 shadow-none hover:bg-slate-50 transition-colors">
+                  {completedPhases.map((phase: any) => (
+                    <Card key={phase.id} className="border-slate-200 shadow-none hover:bg-slate-50 transition-colors rounded-2xl" data-testid={`card-completed-${phase.id}`}>
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="bg-slate-100 text-slate-500 border-slate-200 text-xs">Completed</Badge>
+                          </div>
                           <div className="font-medium text-slate-900">{phase.name}</div>
-                          <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks &bull; Completed</div>
+                          <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
+                            <Button variant="ghost" size="sm" className="text-slate-500" data-testid={`button-view-completed-${phase.id}`}>
+                              <Pencil className="h-4 w-4 mr-1" /> View
+                            </Button>
+                          </Link>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
                             onClick={() => setDeleteTargetPhase(phase)}
-                            data-testid={`button-delete-past-${phase.id}`}
+                            data-testid={`button-delete-completed-${phase.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                          <ArrowRight className="h-5 w-5 text-slate-400" />
                         </div>
                       </CardContent>
                     </Card>
@@ -400,12 +495,31 @@ export default function AdminClientProfile() {
           <TabsContent value="movement" className="m-0 outline-none">
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
-                <CardTitle>Movement Checks Required</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Movement Checks</CardTitle>
+                  {phasesWithMovementChecks.length > 1 && (
+                    <Select value={movementCheckPhaseId || ''} onValueChange={setMovementCheckPhaseId}>
+                      <SelectTrigger className="w-[220px] bg-white" data-testid="select-movement-phase">
+                        <SelectValue placeholder="Select phase" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {phasesWithMovementChecks.map((p: any) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} ({p.status})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                {selectedMovementPhase && (
+                  <p className="text-sm text-slate-500 mt-1">{selectedMovementPhase.name} — {selectedMovementPhase.status}</p>
+                )}
               </CardHeader>
               <CardContent className="p-0">
-                {activePhase && (activePhase.movementChecks as any[]).length > 0 ? (
+                {selectedMovementPhase && (selectedMovementPhase.movementChecks as any[]).length > 0 ? (
                   <div className="divide-y divide-slate-100">
-                    {(activePhase.movementChecks as any[]).map((mc: any, i: number) => (
+                    {(selectedMovementPhase.movementChecks as any[]).map((mc: any, i: number) => (
                       <div key={i} className="p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between hover:bg-slate-50/50 transition-colors" data-testid={`movement-check-${i}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
@@ -417,10 +531,16 @@ export default function AdminClientProfile() {
                             }>
                               {mc.status || 'Not Submitted'}
                             </Badge>
-                            {mc.submittedAt && (
+                            {mc.decidedAt && (
                               <span className="text-xs text-slate-500 flex items-center">
                                 <Clock className="h-3 w-3 mr-1" />
-                                {new Date(mc.submittedAt).toLocaleDateString()}
+                                Reviewed {new Date(mc.decidedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {!mc.decidedAt && mc.submittedAt && (
+                              <span className="text-xs text-slate-500 flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Submitted {new Date(mc.submittedAt).toLocaleDateString()}
                               </span>
                             )}
                           </div>
@@ -430,10 +550,15 @@ export default function AdminClientProfile() {
                               <span className="font-bold">Client Note:</span> {mc.clientNote}
                             </div>
                           )}
-                          {mc.feedback && (
-                            <p className="text-sm text-slate-600 mt-2 bg-slate-100 p-3 rounded-lg border border-slate-200 italic">
-                              "{mc.feedback}"
-                            </p>
+                          {mc.approvedNote && mc.status === 'Approved' && (
+                            <div className="mt-2 text-sm bg-green-50 text-green-800 p-2 rounded-lg border border-green-100">
+                              <span className="font-bold">Approval Note:</span> {mc.approvedNote}
+                            </div>
+                          )}
+                          {mc.resubmitFeedback && mc.status === 'Needs Resubmission' && (
+                            <div className="mt-2 text-sm bg-red-50 text-red-800 p-2 rounded-lg border border-red-100">
+                              <span className="font-bold">Resubmission Feedback:</span> {mc.resubmitFeedback}
+                            </div>
                           )}
                         </div>
                         
@@ -453,20 +578,19 @@ export default function AdminClientProfile() {
                               <Button 
                                 variant="outline"
                                 className="border-red-200 text-red-700 hover:bg-red-50"
-                                onClick={() => handleOpenReject(activePhase.id, mc.exerciseId)}
+                                onClick={() => handleOpenReject(selectedMovementPhase.id, mc.exerciseId)}
                                 data-testid={`button-reject-${i}`}
                                 disabled={isSubmitting}
                               >
-                                <XCircle className="mr-2 h-4 w-4" /> Request Resubmission
+                                <XCircle className="mr-2 h-4 w-4" /> Resubmit
                               </Button>
                               <Button 
                                 className="bg-green-600 hover:bg-green-700 text-white"
-                                onClick={() => handleApproveMovementCheck(activePhase.id, mc.exerciseId)}
+                                onClick={() => handleOpenApprove(selectedMovementPhase.id, mc.exerciseId)}
                                 data-testid={`button-approve-${i}`}
                                 disabled={isSubmitting}
                               >
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                Approve
+                                <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
                               </Button>
                             </div>
                           )}
@@ -556,6 +680,47 @@ export default function AdminClientProfile() {
         </div>
       </Tabs>
 
+      <Dialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Approve Movement Check</DialogTitle>
+            <DialogDescription>
+              Optionally leave a note for the client with your approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="approve-note">Approval Note (optional)</Label>
+              <Textarea 
+                id="approve-note" 
+                placeholder="e.g. Great form! You're ready to start with full load." 
+                value={approveNote}
+                onChange={(e) => setApproveNote(e.target.value)}
+                data-testid="input-approve-note"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsApproveOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleApproveMovementCheck}
+              disabled={isSubmitting}
+              data-testid="button-confirm-approve"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -566,7 +731,7 @@ export default function AdminClientProfile() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="feedback">Feedback</Label>
+              <Label htmlFor="feedback">Resubmission Feedback</Label>
               <Textarea 
                 id="feedback" 
                 placeholder="e.g. Your camera angle makes it hard to see your depth. Please record from the side." 
@@ -592,6 +757,31 @@ export default function AdminClientProfile() {
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Send Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={finishTargetPhase !== null} onOpenChange={(open) => { if (!open) setFinishTargetPhase(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Finish Phase</DialogTitle>
+            <DialogDescription>
+              Mark "{finishTargetPhase?.name}" as completed? It will remain visible in your admin history but will no longer appear for the client.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFinishTargetPhase(null)} disabled={finishing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFinishPhase}
+              className="bg-slate-900 hover:bg-slate-800 text-white"
+              disabled={finishing}
+              data-testid="button-confirm-finish"
+            >
+              {finishing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Archive className="h-4 w-4 mr-2" />}
+              Finish Phase
             </Button>
           </DialogFooter>
         </DialogContent>
