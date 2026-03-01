@@ -507,6 +507,7 @@ export default function AdminPhaseBuilder() {
           isNew: false,
         })));
         setLocalSchedule(result.persistedSchedule);
+        setLastSavedAt(new Date());
 
         if (isNew) {
           setInitializedForPhase(phaseId);
