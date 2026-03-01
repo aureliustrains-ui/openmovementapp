@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2 } from "lucide-react";
+import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +17,7 @@ function generateId() {
 }
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const SLOTS = ["AM", "PM"];
 
 type Exercise = {
   id: string;
@@ -45,6 +46,13 @@ type LocalSession = {
   isNew?: boolean;
 };
 
+type ScheduleEntry = {
+  day: string;
+  week: number;
+  slot: string;
+  sessionId: string;
+};
+
 function makeExercise(name = "New Exercise"): Exercise {
   return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", rpe: "8", tempo: "3010", rest: "90s", notes: "" };
 }
@@ -55,17 +63,6 @@ function makeSection(name = "New Section"): Section {
 
 function makeSession(name = "New Session"): LocalSession {
   return { id: generateId(), name, description: "", sections: [makeSection("A. Main")], isNew: true };
-}
-
-function buildSchedule(sessionIds: string[], dayAssignments: Record<number, string>, weeks: number) {
-  const schedule: { day: string; week: number; sessionId: string }[] = [];
-  for (let w = 1; w <= weeks; w++) {
-    sessionIds.forEach((sid, idx) => {
-      const day = dayAssignments[idx] || WEEKDAYS[idx % 7];
-      schedule.push({ day, week: w, sessionId: sid });
-    });
-  }
-  return schedule;
 }
 
 function collectExerciseNames(sessions: LocalSession[]): string[] {
@@ -103,28 +100,28 @@ export default function AdminPhaseBuilder() {
   const [goal, setGoal] = useState("");
   const [durationWeeks, setDurationWeeks] = useState("4");
   const [localSessions, setLocalSessions] = useState<LocalSession[]>([]);
+  const [localSchedule, setLocalSchedule] = useState<ScheduleEntry[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState(1);
   const [initializedForPhase, setInitializedForPhase] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [movementCheckGate, setMovementCheckGate] = useState("yes");
-  const [dayAssignments, setDayAssignments] = useState<Record<number, string>>({});
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
 
   const isDirty = useMemo(() => {
     if (!existingPhase && isNew) {
-      return phaseName !== "New Phase" || goal !== "" || durationWeeks !== "4" || localSessions.length > 1 || localSessions[0]?.sections.length > 1 || localSessions[0]?.sections[0]?.exercises.length > 0;
+      return phaseName !== "New Phase" || goal !== "" || durationWeeks !== "4" || localSessions.length > 1 || localSessions[0]?.sections.length > 1 || localSessions[0]?.sections[0]?.exercises.length > 0 || localSchedule.length > 0;
     }
     if (!existingPhase) return false;
 
     const nameChanged = phaseName !== existingPhase.name;
     const goalChanged = goal !== (existingPhase.goal || "");
     const durationChanged = durationWeeks !== String(existingPhase.durationWeeks);
-
     if (nameChanged || goalChanged || durationChanged) return true;
 
     if (localSessions.length !== phaseSessions.length) return true;
-
     for (let i = 0; i < localSessions.length; i++) {
       const ls = localSessions[i];
       const ps = phaseSessions.find((s: any) => s.id === ls.dbId);
@@ -134,8 +131,12 @@ export default function AdminPhaseBuilder() {
       if (JSON.stringify(ls.sections) !== JSON.stringify(ps.sections)) return true;
     }
 
+    const sortSched = (s: any[]) => [...s].sort((a, b) => a.week - b.week || a.day.localeCompare(b.day) || (a.slot || "AM").localeCompare(b.slot || "AM") || a.sessionId.localeCompare(b.sessionId));
+    const dbSched = ((existingPhase.schedule as any[]) || []).map((e: any) => ({ day: e.day, week: e.week, slot: e.slot || "AM", sessionId: e.sessionId }));
+    if (JSON.stringify(sortSched(localSchedule)) !== JSON.stringify(sortSched(dbSched))) return true;
+
     return false;
-  }, [phaseName, goal, durationWeeks, localSessions, existingPhase, phaseSessions, isNew]);
+  }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -162,7 +163,8 @@ export default function AdminPhaseBuilder() {
       setDurationWeeks("4");
       setMovementCheckGate("yes");
       setLocalSessions([makeSession("Session 1")]);
-      setDayAssignments({ 0: "Monday" });
+      setLocalSchedule([]);
+      setSelectedWeek(1);
       setLastSavedAt(null);
       setInitializedForPhase(currentPhaseId);
       return;
@@ -186,45 +188,45 @@ export default function AdminPhaseBuilder() {
         description: s.description || "",
         sections: (s.sections as Section[]) || [],
       })));
-
-      const existingSchedule = (existingPhase.schedule as any[]) || [];
-      const assignments: Record<number, string> = {};
-      phaseSessions.forEach((s: any, idx: number) => {
-        const schedEntry = existingSchedule.find((sc: any) => sc.sessionId === s.id);
-        assignments[idx] = schedEntry?.day || WEEKDAYS[idx % 7];
-      });
-      setDayAssignments(assignments);
     } else {
       setLocalSessions([makeSession("Session 1")]);
-      setDayAssignments({ 0: "Monday" });
     }
+
+    const existingSchedule = (existingPhase.schedule as any[]) || [];
+    setLocalSchedule(existingSchedule.map((e: any) => ({
+      day: e.day,
+      week: e.week,
+      slot: e.slot || "AM",
+      sessionId: e.sessionId,
+    })));
+    setSelectedWeek(1);
+
     setLastSavedAt(null);
     setInitializedForPhase(currentPhaseId);
   }, [existingPhase, phaseSessions, isNew, currentPhaseId, initializedForPhase, loadingSessions]);
+
+  useEffect(() => {
+    const maxWeek = parseInt(durationWeeks) || 4;
+    setLocalSchedule(prev => {
+      const filtered = prev.filter(e => e.week <= maxWeek);
+      return filtered.length !== prev.length ? filtered : prev;
+    });
+    if (selectedWeek > maxWeek) setSelectedWeek(maxWeek);
+  }, [durationWeeks]);
 
   const updateLocalSession = useCallback((sessionIdx: number, updater: (s: LocalSession) => LocalSession) => {
     setLocalSessions(prev => prev.map((s, i) => i === sessionIdx ? updater(s) : s));
   }, []);
 
   const addSession = () => {
-    setLocalSessions(prev => {
-      const newIdx = prev.length;
-      setDayAssignments(a => ({ ...a, [newIdx]: WEEKDAYS[newIdx % 7] }));
-      return [...prev, makeSession(`Session ${newIdx + 1}`)];
-    });
+    setLocalSessions(prev => [...prev, makeSession(`Session ${prev.length + 1}`)]);
   };
 
   const removeSession = (idx: number) => {
+    const removedSession = localSessions[idx];
+    const removedId = removedSession.dbId || removedSession.id;
     setLocalSessions(prev => prev.filter((_, i) => i !== idx));
-    setDayAssignments(prev => {
-      const next: Record<number, string> = {};
-      Object.entries(prev).forEach(([k, v]) => {
-        const ki = parseInt(k);
-        if (ki < idx) next[ki] = v;
-        else if (ki > idx) next[ki - 1] = v;
-      });
-      return next;
-    });
+    setLocalSchedule(prev => prev.filter(e => e.sessionId !== removedId));
   };
 
   const addSection = (sessionIdx: number) => {
@@ -281,9 +283,39 @@ export default function AdminPhaseBuilder() {
     }));
   };
 
-  const savePhase = async (): Promise<{ phaseId: string; savedSessions: any[] } | null> => {
-    const clientId = params?.clientId;
+  const addScheduleEntry = (day: string, slot: string, sessionId: string) => {
+    const weeks = parseInt(durationWeeks) || 4;
+    setLocalSchedule(prev => {
+      const newEntries: ScheduleEntry[] = [];
+      for (let w = 1; w <= weeks; w++) {
+        if (!prev.find(e => e.day === day && e.week === w && e.slot === slot && e.sessionId === sessionId)) {
+          newEntries.push({ day, week: w, slot, sessionId });
+        }
+      }
+      return [...prev, ...newEntries];
+    });
+  };
 
+  const removeScheduleEntry = (day: string, slot: string, sessionId: string) => {
+    setLocalSchedule(prev => prev.filter(e => !(e.day === day && e.slot === slot && e.sessionId === sessionId)));
+  };
+
+  const copyWeekToAll = () => {
+    const weeks = parseInt(durationWeeks) || 4;
+    const week1 = localSchedule.filter(e => e.week === selectedWeek);
+    const otherWeeks: ScheduleEntry[] = [];
+    for (let w = 1; w <= weeks; w++) {
+      if (w === selectedWeek) continue;
+      week1.forEach(e => {
+        otherWeeks.push({ ...e, week: w });
+      });
+    }
+    setLocalSchedule([...localSchedule.filter(e => e.week === selectedWeek), ...otherWeeks]);
+    toast({ title: "Schedule Copied", description: `Week ${selectedWeek}'s schedule applied to all ${weeks} weeks.` });
+  };
+
+  const savePhase = async (): Promise<{ phaseId: string; savedSessions: any[]; persistedSchedule: ScheduleEntry[] } | null> => {
+    const clientId = params?.clientId;
     let phaseId: string;
 
     if (isNew && clientId) {
@@ -339,15 +371,26 @@ export default function AdminPhaseBuilder() {
       }
     }
 
-    const sessionIds = savedSessions.map((s: any) => s.id);
-    const schedule = buildSchedule(sessionIds, dayAssignments, parseInt(durationWeeks));
+    const idMap: Record<string, string> = {};
+    localSessions.forEach((ls, idx) => {
+      const savedId = savedSessions[idx]?.id;
+      if (savedId) {
+        idMap[ls.id] = savedId;
+        if (ls.dbId) idMap[ls.dbId] = savedId;
+      }
+    });
+
+    const validSessionIds = new Set(savedSessions.map((s: any) => s.id));
+    const persistedSchedule = localSchedule
+      .map(e => ({ ...e, sessionId: idMap[e.sessionId] || e.sessionId }))
+      .filter(e => validSessionIds.has(e.sessionId));
 
     await updatePhase.mutateAsync({
       id: phaseId,
-      schedule,
+      schedule: persistedSchedule,
     });
 
-    return { phaseId, savedSessions };
+    return { phaseId, savedSessions, persistedSchedule };
   };
 
   const handleSave = async () => {
@@ -361,7 +404,7 @@ export default function AdminPhaseBuilder() {
         return;
       }
 
-      const { phaseId, savedSessions } = result;
+      const { phaseId, savedSessions, persistedSchedule } = result;
 
       setLocalSessions(prev => prev.map((ls, idx) => ({
         ...ls,
@@ -369,9 +412,8 @@ export default function AdminPhaseBuilder() {
         dbId: savedSessions[idx]?.id || ls.dbId,
         isNew: false,
       })));
-
-      const now = new Date();
-      setLastSavedAt(now);
+      setLocalSchedule(persistedSchedule);
+      setLastSavedAt(new Date());
 
       if (isNew) {
         setInitializedForPhase(phaseId);
@@ -408,6 +450,7 @@ export default function AdminPhaseBuilder() {
           dbId: result.savedSessions[idx]?.id || ls.dbId,
           isNew: false,
         })));
+        setLocalSchedule(result.persistedSchedule);
 
         if (isNew) {
           setInitializedForPhase(phaseId);
@@ -475,6 +518,9 @@ export default function AdminPhaseBuilder() {
   const formatSavedTime = (d: Date) => {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  const weekSchedule = localSchedule.filter(e => e.week === selectedWeek);
+  const numWeeks = parseInt(durationWeeks) || 4;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in">
@@ -584,7 +630,6 @@ export default function AdminPhaseBuilder() {
           </div>
 
           <div className="p-6 space-y-4">
-
           {session.sections.map((section, sectionIdx) => (
             <div key={section.id} className="border-2 border-slate-200 rounded-2xl bg-slate-50/50 p-4 relative" data-testid={`section-${sessionIdx}-${sectionIdx}`}>
               <div className="flex items-center gap-2 mb-4">
@@ -699,28 +744,112 @@ export default function AdminPhaseBuilder() {
       </div>
 
       {localSessions.length > 0 && (
-        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden">
-          <div className="bg-slate-900 text-white px-6 py-4 flex items-center gap-3">
-            <CalendarDays className="h-5 w-5 text-indigo-400" />
-            <h3 className="font-display font-bold text-lg">Weekly Schedule</h3>
-          </div>
-          <CardContent className="p-6 space-y-3">
-            <p className="text-sm text-slate-500 mb-4">Assign each session to a day of the week. This schedule repeats for all {durationWeeks} weeks.</p>
-            {localSessions.map((session, idx) => (
-              <div key={session.id} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100" data-testid={`schedule-row-${idx}`}>
-                <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 border-none shrink-0 text-xs">Session {idx + 1}</Badge>
-                <span className="font-medium text-slate-900 flex-1 min-w-0 truncate">{session.name}</span>
-                <Select value={dayAssignments[idx] || WEEKDAYS[idx % 7]} onValueChange={(val) => setDayAssignments(prev => ({ ...prev, [idx]: val }))}>
-                  <SelectTrigger className="w-[140px] bg-white" data-testid={`select-day-${idx}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {WEEKDAYS.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
+          <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CalendarDays className="h-5 w-5 text-indigo-400" />
+              <h3 className="font-display font-bold text-lg">Weekly Schedule</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-800 rounded-lg p-1 gap-0.5">
+                {Array.from({ length: numWeeks }, (_, i) => i + 1).map(w => (
+                  <button
+                    key={w}
+                    onClick={() => setSelectedWeek(w)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedWeek === w ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                    data-testid={`button-week-${w}`}
+                  >
+                    W{w}
+                  </button>
+                ))}
               </div>
-            ))}
-          </CardContent>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-white ml-2"
+                onClick={copyWeekToAll}
+                title={`Copy Week ${selectedWeek} to all weeks`}
+              >
+                <Copy className="h-4 w-4 mr-1" /> Copy to all
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[500px]">
+              <div className="grid grid-cols-[110px_1fr_1fr] border-b border-slate-200 bg-slate-50">
+                <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
+                <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
+                <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
+              </div>
+              {WEEKDAYS.map((day, dayIdx) => (
+                <div key={day} className={`grid grid-cols-[110px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                  <div className="p-3 text-sm font-medium text-slate-700 border-r border-slate-100 flex items-center">
+                    <span className="text-xs text-slate-400 mr-2 font-mono w-5">{dayIdx + 1}</span>
+                    {day}
+                  </div>
+                  {SLOTS.map(slot => {
+                    const entries = weekSchedule.filter(e => e.day === day && e.slot === slot);
+                    return (
+                      <div key={slot} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
+                        {entries.map((entry, i) => {
+                          const session = localSessions.find(s => (s.dbId || s.id) === entry.sessionId);
+                          return (
+                            <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 gap-1 pr-1 text-xs font-medium" data-testid={`sched-chip-${day}-${slot}-${i}`}>
+                              {session?.name || "?"}
+                              <button
+                                onClick={() => removeScheduleEntry(day, slot, entry.sessionId)}
+                                className="ml-0.5 rounded-full hover:bg-indigo-200 p-0.5 transition-colors"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          );
+                        })}
+                        <button
+                          onClick={() => setAssignSessionTarget({ day, slot })}
+                          className="h-7 w-7 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors shrink-0"
+                          data-testid={`button-assign-${day}-${slot}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
         </Card>
       )}
+
+      <Dialog open={assignSessionTarget !== null} onOpenChange={(open) => { if (!open) setAssignSessionTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign Session</DialogTitle>
+            <DialogDescription>
+              {assignSessionTarget?.day} &mdash; {assignSessionTarget?.slot}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {localSessions.map((session, idx) => (
+              <button
+                key={session.id}
+                className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors flex items-center gap-3 group"
+                onClick={() => {
+                  if (assignSessionTarget) {
+                    addScheduleEntry(assignSessionTarget.day, assignSessionTarget.slot, session.dbId || session.id);
+                    setAssignSessionTarget(null);
+                  }
+                }}
+                data-testid={`assign-session-${idx}`}
+              >
+                <Badge className="bg-indigo-600 text-white border-none text-xs shrink-0">S{idx + 1}</Badge>
+                <span className="font-medium text-slate-900 group-hover:text-indigo-700 transition-colors">{session.name}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -744,6 +873,10 @@ export default function AdminPhaseBuilder() {
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
               <span className="text-sm font-medium text-slate-700">Duration</span>
               <span className="text-sm font-semibold text-slate-900">{durationWeeks} weeks</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+              <span className="text-sm font-medium text-slate-700">Scheduled Slots</span>
+              <span className="text-sm font-semibold text-slate-900">{localSchedule.filter(e => e.week === 1).length} / week</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
               <span className="text-sm font-medium text-slate-700">Movement Checks</span>

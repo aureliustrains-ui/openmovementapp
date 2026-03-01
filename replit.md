@@ -17,17 +17,19 @@ A training plan management platform with role-based access for coaches (Admin) a
 - `client/src/lib/auth.ts` — Auth store with `login`, `logout`, `impersonate`, `stopImpersonating`
 
 ## Key Features
-- **Phase Builder** (`admin/PhaseBuilder.tsx`): Full local-state editor for Phase → Sessions → Sections → Exercises hierarchy. Tracks dirty state, warns on unsaved changes, deletes orphaned sessions on save. Schedule assignment UI maps sessions to weekdays, generates schedule entries for all weeks. Save Draft and Publish Phase buttons. Movement Check Gate selector controls whether phase requires video approval or goes live immediately.
-- **Templates CRUD** (`admin/Templates.tsx`): Full CRUD for exercise templates with create/edit/duplicate/delete, search filtering, and confirmation dialogs. Phases/Sessions/Sections tabs show "Coming Soon" for template creation.
+- **Phase Builder** (`admin/PhaseBuilder.tsx`): Full local-state editor for Phase → Sessions → Sections → Exercises hierarchy. Tracks dirty state (including schedule changes), warns on unsaved changes, deletes orphaned sessions on save. **Weekly Schedule Grid Editor**: Day 1-7 rows × AM/PM columns, week selector tabs, assign sessions to time slots, copy week to all weeks. Schedule entries have `{day, week, slot, sessionId}` format. Save Draft atomically persists phase + sessions + schedule, syncs local state with canonical DB IDs (no re-init race condition). Publish Phase button with confirmation dialog. Movement Check Gate selector.
+- **Client Management** (`admin/ClientProfile.tsx`): Programming tab shows Current Phase (Active/Waiting), Drafts In Progress section (with edit links and session counts), and Phase History. Weekly schedule grid preview for active phase. Create Phase button always visible. Chat, Movement Checks, and Logs tabs.
+- **Client My Phase** (`client/MyPhase.tsx`): Active phase view with week selector. Schedule grid (read-only, AM/PM columns) when schedule has slot data. Session chips are clickable (navigate to session detail). Falls back to card layout for legacy schedule format. Movement Check flow for pending phases.
+- **Templates CRUD** (`admin/Templates.tsx`): Full CRUD for exercise templates with create/edit/duplicate/delete, search filtering, and confirmation dialogs.
 - **Movement Checks** (`client/MyPhase.tsx` + `admin/ClientProfile.tsx`): Client submits video URL with notes, admin can approve or request resubmission with feedback. Auto-activates phase when all checks approved. Publishing with gate=yes auto-generates movement check items from exercise names.
 - **Client Session View** (`client/SessionView.tsx`): Per-exercise set/rep/weight logging with completion tracking.
-- **Chat** (`client/Chat.tsx` + `admin/ClientProfile.tsx` Chat tab): Bidirectional real-time messaging. Client chat polls every 5s. Admin chat tab in ClientProfile with full send/receive, auto-scroll, polling. Message button in profile header switches to Chat tab.
-- **QA Checklist** (`admin/QAChecklist.tsx`): Admin-only page with data counts, quick navigation links, impersonation shortcuts, and visual QA checklist.
-- **Coming Soon Dialog** (`components/ComingSoonDialog.tsx`): Reusable dialog for unimplemented features. Used across Settings, ClientsList, SessionView, Templates pages.
+- **Chat** (`client/Chat.tsx` + `admin/ClientProfile.tsx` Chat tab): Bidirectional real-time messaging with polling.
+- **QA Checklist** (`admin/QAChecklist.tsx`): Data counts, quick navigation, impersonation shortcuts, visual checklist, automated Save/Publish test.
+- **Coming Soon Dialog** (`components/ComingSoonDialog.tsx`): Reusable dialog for unimplemented features.
 
 ## Data Model
 - `phases.movementChecks` (JSONB): `[{name, exerciseId, status, videoUrl, filename, submittedAt, clientNote, feedback}]`
-- `phases.schedule` (JSONB): `[{day: "Monday", week: 1, sessionId: "..."}]` — day is weekday name, week is 1-indexed, duplicated for each week of the phase
+- `phases.schedule` (JSONB): `[{day: "Monday", week: 1, slot: "AM"|"PM", sessionId: "..."}]` — day is weekday name, week is 1-indexed, slot is AM/PM time-of-day
 - `sessions.sections` (JSONB): `[{id, name, exercises: [{id, name, sets, reps, load, rpe, tempo, rest, notes}]}]`
 
 ## Routes
@@ -50,3 +52,12 @@ A training plan management platform with role-based access for coaches (Admin) a
 - Layout: `AppLayout.tsx` wraps all `/app/*` routes
 - Admin nav: Clients, Templates, Analytics, QA, Settings
 - Client nav: My Phase, Chat, Settings, Info
+
+## Save Draft Flow (PhaseBuilder)
+1. Create/update phase record in DB
+2. Create/update/delete sessions individually, collect canonical DB IDs
+3. Remap schedule entries from temp IDs to canonical DB IDs
+4. Filter out schedule entries referencing non-existent sessions
+5. Save schedule to phase record
+6. Update local state in-place with canonical IDs (NO `setInitializedForPhase(null)` — avoids race condition with TanStack Query cache invalidation)
+7. Show "Saved at [time]" badge, clear dirty flag

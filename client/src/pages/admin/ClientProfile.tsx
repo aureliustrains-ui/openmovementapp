@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -16,6 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default function AdminClientProfile() {
   const [, params] = useRoute("/app/admin/clients/:id");
@@ -55,6 +57,7 @@ export default function AdminClientProfile() {
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
   const activePhase = clientPhases.find((p: any) => p.status === 'Active' || p.status === 'Waiting for Movement Check');
+  const draftPhases = clientPhases.filter((p: any) => p.status === 'Draft');
   const pastPhases = clientPhases.filter((p: any) => p.status === 'Completed' || p.status === 'Archived');
 
   if (!client) return (
@@ -152,6 +155,16 @@ export default function AdminClientProfile() {
     }
   };
 
+  const getSchedulePreview = (phase: any) => {
+    const schedule = (phase.schedule as any[]) || [];
+    const week1 = schedule.filter((s: any) => s.week === 1);
+    return week1;
+  };
+
+  const getSessionCount = (phaseId: string) => {
+    return allSessions.filter((s: any) => s.phaseId === phaseId).length;
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in">
       <div className="flex flex-col md:flex-row gap-6 justify-between items-start">
@@ -209,17 +222,16 @@ export default function AdminClientProfile() {
         
         <div className="mt-8">
           <TabsContent value="programming" className="space-y-8 m-0 outline-none">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-display font-bold text-slate-900">Current Phase</h2>
-                {!activePhase && (
-                  <Link href={`/app/admin/clients/${clientId}/builder/new`}>
-                    <Button className="bg-slate-900 hover:bg-slate-800 text-white rounded-full" data-testid="button-create-phase"><Plus className="mr-2 h-4 w-4" /> Create Phase</Button>
-                  </Link>
-                )}
-              </div>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-display font-bold text-slate-900">Phases</h2>
+              <Link href={`/app/admin/clients/${clientId}/builder/new`}>
+                <Button className="bg-slate-900 hover:bg-slate-800 text-white rounded-full" data-testid="button-create-phase"><Plus className="mr-2 h-4 w-4" /> Create Phase</Button>
+              </Link>
+            </div>
 
-              {activePhase ? (
+            {activePhase && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Current Phase</h3>
                 <Card className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white">
                   <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
                     <div>
@@ -236,49 +248,105 @@ export default function AdminClientProfile() {
                     </div>
                     <div className="flex items-start gap-2">
                       <Link href={`/app/admin/clients/${clientId}/builder/${activePhase.id}`}>
-                        <Button variant="outline" className="bg-white" data-testid="button-edit-phase">Edit Structure</Button>
+                        <Button variant="outline" className="bg-white" data-testid="button-edit-phase"><Pencil className="mr-2 h-4 w-4" /> Edit</Button>
                       </Link>
                     </div>
                   </div>
                   
                   <CardContent className="p-6">
-                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Weekly Schedule</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {(activePhase.schedule as any[]).filter((s: any) => s.week === 1).map((sched: any, i: number) => {
-                        const session = allSessions.find((s: any) => s.id === sched.sessionId);
-                        return (
-                          <div key={i} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors" data-testid={`card-schedule-${i}`}>
-                            <div className="text-xs font-semibold text-indigo-600 mb-1">{sched.day}</div>
-                            <div className="font-medium text-slate-900 mb-2">{session?.name}</div>
-                            <div className="text-xs text-slate-500">{(session?.sections as any[])?.length} Sections</div>
+                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4" /> Weekly Schedule
+                    </h4>
+                    {(() => {
+                      const week1 = getSchedulePreview(activePhase);
+                      if (week1.length === 0) {
+                        return <p className="text-sm text-slate-400 italic">No schedule assigned yet.</p>;
+                      }
+                      return (
+                        <div className="overflow-x-auto">
+                          <div className="min-w-[400px] grid grid-cols-[80px_1fr_1fr] border border-slate-200 rounded-xl overflow-hidden">
+                            <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase" />
+                            <div className="p-2 bg-slate-50 border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">AM</div>
+                            <div className="p-2 bg-slate-50 border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">PM</div>
+                            {WEEKDAYS.map(day => {
+                              const amEntries = week1.filter((s: any) => s.day === day && (s.slot || "AM") === "AM");
+                              const pmEntries = week1.filter((s: any) => s.day === day && s.slot === "PM");
+                              if (amEntries.length === 0 && pmEntries.length === 0) return null;
+                              return [
+                                <div key={`${day}-label`} className="p-2 border-b border-r border-slate-100 text-xs font-medium text-slate-600">{day.slice(0, 3)}</div>,
+                                <div key={`${day}-am`} className="p-1.5 border-b border-r border-slate-100 flex flex-wrap gap-1">
+                                  {amEntries.map((e: any, i: number) => {
+                                    const s = allSessions.find((ss: any) => ss.id === e.sessionId);
+                                    return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
+                                  })}
+                                </div>,
+                                <div key={`${day}-pm`} className="p-1.5 border-b border-slate-100 flex flex-wrap gap-1">
+                                  {pmEntries.map((e: any, i: number) => {
+                                    const s = allSessions.find((ss: any) => ss.id === e.sessionId);
+                                    return s ? <Badge key={i} variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{s.name}</Badge> : null;
+                                  })}
+                                </div>
+                              ];
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
-              ) : (
-                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
-                  <Dumbbell className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900">No Active Phase</h3>
-                  <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">This client doesn't have an active training phase. Build one from scratch or use a template.</p>
-                  <Link href={`/app/admin/clients/${clientId}/builder/new`}>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" data-testid="button-build-phase">Build Phase</Button>
-                  </Link>
+              </div>
+            )}
+
+            {draftPhases.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Drafts In Progress</h3>
+                <div className="space-y-3">
+                  {draftPhases.map((phase: any) => (
+                    <Card key={phase.id} className="border-slate-200 shadow-sm hover:shadow-md transition-all rounded-2xl bg-white overflow-hidden" data-testid={`card-draft-${phase.id}`}>
+                      <CardContent className="p-5 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1">
+                            <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200 text-xs">Draft</Badge>
+                            <span className="text-xs text-slate-400">{getSessionCount(phase.id)} session(s) &middot; {phase.durationWeeks} weeks</span>
+                          </div>
+                          <h4 className="text-lg font-bold text-slate-900 truncate">{phase.name}</h4>
+                          {phase.goal && <p className="text-sm text-slate-500 mt-0.5 truncate">{phase.goal}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
+                            <Button variant="outline" size="sm" className="bg-white" data-testid={`button-edit-draft-${phase.id}`}>
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
+                            </Button>
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {!activePhase && draftPhases.length === 0 && (
+              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
+                <Dumbbell className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-slate-900">No Phases Yet</h3>
+                <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">This client doesn't have any training phases. Build one from scratch or use a template.</p>
+                <Link href={`/app/admin/clients/${clientId}/builder/new`}>
+                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" data-testid="button-build-phase">Build Phase</Button>
+                </Link>
+              </div>
+            )}
 
             {pastPhases.length > 0 && (
               <div>
-                <h2 className="text-xl font-display font-bold text-slate-900 mb-4">Phase History</h2>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Phase History</h3>
                 <div className="space-y-3">
                   {pastPhases.map((phase: any) => (
                     <Card key={phase.id} className="border-slate-200 shadow-none hover:bg-slate-50 transition-colors cursor-pointer">
                       <CardContent className="p-4 flex items-center justify-between">
                         <div>
                           <div className="font-medium text-slate-900">{phase.name}</div>
-                          <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks • Completed</div>
+                          <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks &bull; Completed</div>
                         </div>
                         <ArrowRight className="h-5 w-5 text-slate-400" />
                       </CardContent>
@@ -477,9 +545,9 @@ export default function AdminClientProfile() {
               Cancel
             </Button>
             <Button 
+              className="bg-red-600 hover:bg-red-700 text-white"
               onClick={handleRejectMovementCheck}
-              variant="destructive"
-              disabled={isSubmitting || !feedback}
+              disabled={isSubmitting || !feedback.trim()}
               data-testid="button-confirm-reject"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}

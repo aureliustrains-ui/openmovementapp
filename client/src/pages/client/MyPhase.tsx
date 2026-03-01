@@ -5,13 +5,15 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, AlertCircle, PlayCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, AlertCircle, PlayCircle, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default function ClientMyPhase() {
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
@@ -25,6 +27,7 @@ export default function ClientMyPhase() {
   const [videoUrl, setVideoUrl] = useState("");
   const [clientNote, setClientNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState(1);
 
   if (!user) return null;
 
@@ -224,6 +227,11 @@ export default function ClientMyPhase() {
     );
   }
 
+  const phaseSessions = allSessions.filter((s: any) => s.phaseId === activePhase.id);
+  const schedule = (activePhase.schedule as any[]) || [];
+  const weekSchedule = schedule.filter((s: any) => s.week === selectedWeek);
+  const hasGridSchedule = schedule.some((s: any) => s.slot);
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
       <div className="bg-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-xl relative overflow-hidden">
@@ -232,7 +240,7 @@ export default function ClientMyPhase() {
         </div>
         <div className="relative z-10">
           <Badge className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-md mb-6 py-1.5 px-3" data-testid="badge-active-phase">
-            Active Phase • Week 1 / {activePhase.durationWeeks}
+            Active Phase &bull; Week {selectedWeek} / {activePhase.durationWeeks}
           </Badge>
           <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4" data-testid="text-phase-name">{activePhase.name}</h1>
           <p className="text-slate-300 text-lg max-w-xl leading-relaxed">{activePhase.goal}</p>
@@ -240,53 +248,124 @@ export default function ClientMyPhase() {
       </div>
 
       <div>
-        <h2 className="text-2xl font-display font-bold text-slate-900 mb-6">This Week's Schedule</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(() => {
-            const schedule = (activePhase.schedule as any[]) || [];
-            const week1Schedule = schedule.filter((s: any) => s.week === 1);
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
+            <CalendarDays className="h-6 w-6 text-indigo-600" />
+            Weekly Schedule
+          </h2>
+          {activePhase.durationWeeks > 1 && (
+            <div className="flex bg-slate-100 rounded-lg p-1 gap-0.5">
+              {Array.from({ length: activePhase.durationWeeks }, (_, i) => i + 1).map(w => (
+                <button
+                  key={w}
+                  onClick={() => setSelectedWeek(w)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedWeek === w ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
+                  data-testid={`button-week-${w}`}
+                >
+                  W{w}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-            const phaseSessions = allSessions.filter((s: any) => s.phaseId === activePhase.id);
+        {hasGridSchedule ? (
+          <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
+            <div className="overflow-x-auto">
+              <div className="min-w-[500px]">
+                <div className="grid grid-cols-[100px_1fr_1fr] border-b border-slate-200 bg-slate-50">
+                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
+                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
+                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
+                </div>
+                {WEEKDAYS.map((day, dayIdx) => {
+                  const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
+                  const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
+                  const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
 
-            const displayItems = week1Schedule.length > 0
-              ? week1Schedule.map((sched: any, i: number) => {
-                  const session = allSessions.find((s: any) => s.id === sched.sessionId);
-                  return { session, day: sched.day, key: i };
-                })
-              : phaseSessions.map((session: any, i: number) => ({
-                  session,
-                  day: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][i % 7],
-                  key: i,
-                }));
-
-            return displayItems.map(({ session, day, key }: any) => {
-              if (!session) return null;
-              const isCompleted = (session?.completedInstances as any[])?.includes('w1_' + session?.id);
-              
-              return (
-                <Link key={key} href={`/app/client/session/${session?.id}`}>
-                  <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
-                    <CardContent className="p-0 h-full">
-                      <div className="flex items-stretch h-full">
-                        <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
-                        <div className="p-6 flex-1 flex justify-between items-center">
-                          <div>
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
-                            <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
-                            <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks • {session?.description}</p>
+                  return (
+                    <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-50'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                      <div className="p-3 text-sm font-medium text-slate-600 border-r border-slate-100 flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
+                        {day.slice(0, 3)}
+                      </div>
+                      {["AM", "PM"].map(slot => {
+                        const entries = slot === "AM" ? amEntries : pmEntries;
+                        return (
+                          <div key={slot} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
+                            {entries.map((entry: any, i: number) => {
+                              const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
+                              if (!session) return null;
+                              const isCompleted = (session?.completedInstances as any[])?.includes(`w${selectedWeek}_${session?.id}`);
+                              return (
+                                <Link key={i} href={`/app/client/session/${session.id}`}>
+                                  <Badge
+                                    variant="outline"
+                                    className={`cursor-pointer transition-colors text-xs font-medium ${
+                                      isCompleted
+                                        ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                    }`}
+                                    data-testid={`sched-session-${day}-${slot}-${i}`}
+                                  >
+                                    {isCompleted && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                    {session.name}
+                                  </Badge>
+                                </Link>
+                              );
+                            })}
                           </div>
-                          <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
-                             {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(() => {
+              const displayItems = weekSchedule.length > 0
+                ? weekSchedule.map((sched: any, i: number) => {
+                    const session = allSessions.find((s: any) => s.id === sched.sessionId);
+                    return { session, day: sched.day, key: i };
+                  })
+                : phaseSessions.map((session: any, i: number) => ({
+                    session,
+                    day: WEEKDAYS[i % 7],
+                    key: i,
+                  }));
+
+              return displayItems.map(({ session, day, key }: any) => {
+                if (!session) return null;
+                const isCompleted = (session?.completedInstances as any[])?.includes(`w${selectedWeek}_` + session?.id);
+                
+                return (
+                  <Link key={key} href={`/app/client/session/${session?.id}`}>
+                    <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
+                      <CardContent className="p-0 h-full">
+                        <div className="flex items-stretch h-full">
+                          <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
+                          <div className="p-6 flex-1 flex justify-between items-center">
+                            <div>
+                              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
+                              <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
+                              <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks &bull; {session?.description}</p>
+                            </div>
+                            <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
+                               {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            });
-          })()}
-        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              });
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );
