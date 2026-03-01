@@ -3,11 +3,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { currentUser } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function Settings() {
+  const { user } = useAuth();
+  
+  if (!user) return null;
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div>
@@ -25,6 +29,20 @@ export default function Settings() {
         
         <div className="mt-6">
           <TabsContent value="profile" className="space-y-6 m-0">
+            <Card className="border-none shadow-sm mb-6 bg-indigo-50 border-indigo-100">
+              <CardContent className="p-4 flex items-start gap-4">
+                <div className="bg-indigo-100 p-2 rounded-full text-indigo-600 mt-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinelinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-indigo-900 mb-1">External Auth (Memberstack later)</h4>
+                  <p className="text-sm text-indigo-800">
+                    The current login system uses demo accounts for testing and preview purposes. In a production environment, this will be swapped out for Memberstack to handle real user authentication, billing, and secure sessions. The demo auth will continue working end-to-end for now.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="border-none shadow-sm">
               <CardHeader>
                 <CardTitle>Profile Information</CardTitle>
@@ -33,8 +51,8 @@ export default function Settings() {
               <CardContent className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={currentUser.avatar} />
-                    <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={user.avatar} />
+                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <Button variant="outline">Change Avatar</Button>
                 </div>
@@ -42,11 +60,11 @@ export default function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={currentUser.name} />
+                    <Input id="name" defaultValue={user.name} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" defaultValue={currentUser.email} disabled />
+                    <Input id="email" defaultValue={user.email} disabled />
                   </div>
                 </div>
                 <Button>Save Changes</Button>

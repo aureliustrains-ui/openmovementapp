@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Link, useRoute } from "wouter";
-import { phasesData, sessionsData, exerciseTemplates } from "@/lib/mock-data";
+import { useState, useEffect } from "react";
+import { Link, useRoute, useLocation } from "wouter";
+import { useDataStore } from "@/lib/store";
+import { exerciseTemplates } from "@/lib/mock-data";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,13 +10,41 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dumbbell, Plus, GripVertical, Trash2, ArrowLeft, Save, PlayCircle, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminPhaseBuilder() {
   const [, params] = useRoute("/app/admin/clients/:clientId/builder/:phaseId");
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const isNew = params?.phaseId === 'new';
   
-  // Minimal state for demo purposes - referencing the provided design
-  const [phaseName, setPhaseName] = useState(isNew ? "New Phase" : "Hypertrophy Block 1");
+  const { phases, updatePhaseName, updatePhaseStatus } = useDataStore();
+  const existingPhase = phases.find(p => p.id === params?.phaseId);
+  
+  const [phaseName, setPhaseName] = useState(existingPhase?.name || "New Phase");
+  
+  useEffect(() => {
+    if (existingPhase) {
+      setPhaseName(existingPhase.name);
+    }
+  }, [existingPhase]);
+
+  const handleSave = () => {
+    if (!isNew && params?.phaseId) {
+      updatePhaseName(params.phaseId, phaseName);
+      updatePhaseStatus(params.phaseId, 'Active');
+      toast({
+        title: "Phase Published",
+        description: "The phase has been saved and is now active for the client.",
+      });
+      setLocation(`/app/admin/clients/${params.clientId}`);
+    } else {
+      toast({
+        title: "Draft Saved",
+        description: "Your changes have been saved.",
+      });
+    }
+  };
   
   // Exercise row component matching the provided reference screenshot
   const ExerciseRow = ({ name, sets, reps, load, rpe, tempo, rest }: any) => (
@@ -81,8 +110,8 @@ export default function AdminPhaseBuilder() {
           <div className="font-semibold text-slate-900">Builder</div>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="bg-white">Save Draft</Button>
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6">
+          <Button variant="outline" className="bg-white" onClick={() => toast({ title: "Draft Saved" })}>Save Draft</Button>
+          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6" onClick={handleSave}>
             <Save className="mr-2 h-4 w-4" /> Publish Phase
           </Button>
         </div>

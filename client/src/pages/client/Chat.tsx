@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { chatsData, currentUser } from "@/lib/mock-data";
+import { useState, useRef, useEffect } from "react";
+import { useDataStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,26 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function ClientChat() {
   const [message, setMessage] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { chats, addMessage } = useDataStore();
+  const { user } = useAuth();
+  
+  const chatMessages = chats.filter(c => c.clientId === user?.id);
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim() || !user) return;
+    
+    addMessage(user.id, user.name, message, true);
+    setMessage("");
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  if (!user) return null;
   
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col animate-in fade-in">
@@ -18,7 +39,7 @@ export default function ClientChat() {
 
       <Card className="flex-1 flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-2xl">
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {chatsData.map(msg => (
+          {chatMessages.map(msg => (
             <div key={msg.id} className={`flex gap-4 ${msg.isClient ? 'flex-row-reverse' : ''}`}>
               <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
                 <AvatarFallback className={msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
@@ -40,10 +61,11 @@ export default function ClientChat() {
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <form className="relative flex items-center" onSubmit={e => e.preventDefault()}>
+          <form className="relative flex items-center" onSubmit={handleSend}>
             <Input 
               placeholder="Message your coach..." 
               className="w-full pr-12 py-6 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"

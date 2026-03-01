@@ -1,14 +1,26 @@
 import { useState } from "react";
-import { phasesData, sessionsData, currentUser } from "@/lib/mock-data";
+import { useDataStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Circle, PlayCircle, FileText, ChevronRight, Lock, Calendar as CalIcon } from "lucide-react";
+import { CheckCircle2, Circle, PlayCircle, FileText, ChevronRight, Lock, Calendar as CalIcon, UploadCloud } from "lucide-react";
 
 export default function ClientMyPhase() {
-  const activePhase = phasesData.find(p => p.clientId === currentUser.id && p.status === 'Active');
-  const pendingPhase = phasesData.find(p => p.clientId === currentUser.id && p.status === 'Waiting for Movement Check');
+  const { phases, sessions, updateMovementCheck } = useDataStore();
+  const { user } = useAuth();
+  
+  if (!user) return null;
+
+  const activePhase = phases.find(p => p.clientId === user.id && p.status === 'Active');
+  const pendingPhase = phases.find(p => p.clientId === user.id && p.status === 'Waiting for Movement Check');
+
+  const handleUploadVideo = (exerciseId: string) => {
+    if (pendingPhase) {
+      updateMovementCheck(pendingPhase.id, exerciseId, 'Pending', 'https://example.com/demo.mp4');
+    }
+  };
 
   // Logic to handle pending movement checks block
   if (pendingPhase) {
@@ -49,9 +61,16 @@ export default function ClientMyPhase() {
                     <div className="flex items-center text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg border border-green-100">
                       <CheckCircle2 className="mr-2 h-5 w-5" /> Approved
                     </div>
+                  ) : mc.status === 'Pending' ? (
+                    <div className="flex items-center text-amber-600 font-medium bg-amber-50 px-4 py-2 rounded-lg border border-amber-100">
+                      <UploadCloud className="mr-2 h-5 w-5" /> Submitted
+                    </div>
                   ) : (
-                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6">
-                      Upload Video
+                    <Button 
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6"
+                      onClick={() => handleUploadVideo(mc.exerciseId)}
+                    >
+                      <UploadCloud className="mr-2 h-5 w-5" /> Upload Video
                     </Button>
                   )}
                 </div>
@@ -96,9 +115,9 @@ export default function ClientMyPhase() {
         <h2 className="text-2xl font-display font-bold text-slate-900 mb-6">This Week's Schedule</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {activePhase.schedule.filter(s => s.week === 1).map((sched, i) => {
-            const session = sessionsData.find(s => s.id === sched.sessionId);
-            // Mock completion state
-            const isCompleted = false; 
+            const session = sessions.find(s => s.id === sched.sessionId);
+            // Interactive completion state
+            const isCompleted = session?.completedInstances?.includes('w1_' + session.id); 
             
             return (
               <Link key={i} href={`/app/client/session/${session?.id}`}>

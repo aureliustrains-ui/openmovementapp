@@ -1,20 +1,25 @@
 import { useState } from "react";
-import { useRoute } from "wouter";
-import { usersData, phasesData, sessionsData, chatsData } from "@/lib/mock-data";
+import { useRoute, useLocation } from "wouter";
+import { useDataStore } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 
 export default function AdminClientProfile() {
   const [, params] = useRoute("/app/admin/clients/:id");
+  const [, setLocation] = useLocation();
   const clientId = params?.id;
   
-  const client = usersData.find(u => u.id === clientId);
-  const clientPhases = phasesData.filter(p => p.clientId === clientId);
+  const { users, phases, sessions, updateMovementCheck } = useDataStore();
+  const { impersonate } = useAuth();
+  
+  const client = users.find(u => u.id === clientId);
+  const clientPhases = phases.filter(p => p.clientId === clientId);
   const activePhase = clientPhases.find(p => p.status === 'Active' || p.status === 'Waiting for Movement Check');
   const pastPhases = clientPhases.filter(p => p.status === 'Completed' || p.status === 'Archived');
 
@@ -43,6 +48,18 @@ export default function AdminClientProfile() {
         </div>
         
         <div className="flex gap-3 w-full md:w-auto">
+          <Button 
+            variant="outline" 
+            className="bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            onClick={() => {
+              if (clientId) {
+                impersonate(clientId);
+                setLocation("/app/client/my-phase");
+              }
+            }}
+          >
+            <Repeat className="mr-2 h-4 w-4" /> Impersonate
+          </Button>
           <Button variant="outline" className="bg-white"><MessageCircle className="mr-2 h-4 w-4" /> Message</Button>
           <Button variant="outline" className="bg-white"><Settings className="mr-2 h-4 w-4" /> Edit Profile</Button>
         </div>
@@ -93,7 +110,7 @@ export default function AdminClientProfile() {
                     <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Weekly Schedule</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {activePhase.schedule.filter(s => s.week === 1).map((sched, i) => {
-                        const session = sessionsData.find(s => s.id === sched.sessionId);
+                        const session = sessions.find(s => s.id === sched.sessionId);
                         return (
                           <div key={i} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                             <div className="text-xs font-semibold text-indigo-600 mb-1">{sched.day}</div>
@@ -170,7 +187,12 @@ export default function AdminClientProfile() {
                             <div className="text-sm text-slate-400 italic">No video submitted</div>
                           )}
                           {mc.status === 'Pending' && mc.videoUrl && (
-                            <Button className="bg-green-600 hover:bg-green-700 text-white">Review & Approve</Button>
+                            <Button 
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => updateMovementCheck(activePhase.id, mc.exerciseId, 'Approved', mc.videoUrl, 'Looking great, ready to go!')}
+                            >
+                              Review & Approve
+                            </Button>
                           )}
                         </div>
                       </div>

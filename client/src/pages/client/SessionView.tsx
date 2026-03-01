@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useRoute, useLocation } from "wouter";
-import { sessionsData, phasesData, clientLogsData } from "@/lib/mock-data";
+import { useDataStore } from "@/lib/store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle2, Circle, MessageSquare, PlayCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, MessageSquare, PlayCircle, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function ClientSessionView() {
@@ -12,12 +12,17 @@ export default function ClientSessionView() {
   const [, setLocation] = useLocation();
   const sessionId = params?.sessionId;
   
-  const session = sessionsData.find(s => s.id === sessionId);
-  const phase = phasesData.find(p => p.id === session?.phaseId);
+  const { sessions, phases, toggleSessionComplete } = useDataStore();
+
+  const session = sessions.find(s => s.id === sessionId);
+  const phase = phases.find(p => p.id === session?.phaseId);
 
   const [completedExercises, setCompletedExercises] = useState<Record<string, boolean>>({});
 
   if (!session) return <div>Session not found</div>;
+
+  const instanceId = 'w1_' + session.id;
+  const isSessionComplete = session.completedInstances?.includes(instanceId);
 
   const toggleExercise = (id: string) => {
     setCompletedExercises(prev => ({
@@ -27,6 +32,9 @@ export default function ClientSessionView() {
   };
 
   const handleFinish = () => {
+    if (!isSessionComplete) {
+      toggleSessionComplete(session.id, instanceId);
+    }
     setLocation("/app/client/my-phase");
   };
 

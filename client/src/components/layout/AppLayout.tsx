@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { currentUser } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth";
 import { 
   Users, 
   Library, 
@@ -9,7 +9,8 @@ import {
   Dumbbell, 
   MessageCircle, 
   Info,
-  LogOut
+  LogOut,
+  Repeat
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,8 +38,22 @@ const getClientNavItems = () => [
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  const navItems = currentUser.role === 'Admin' ? getAdminNavItems() : getClientNavItems();
+  const [location, setLocation] = useLocation();
+  const { user, logout, impersonating, stopImpersonating } = useAuth();
+  
+  if (!user) return null; // Or a loading spinner
+
+  const navItems = user.role === 'Admin' ? getAdminNavItems() : getClientNavItems();
+
+  const handleLogout = () => {
+    logout();
+    setLocation("/login");
+  };
+
+  const handleStopImpersonating = () => {
+    stopImpersonating();
+    setLocation("/app/admin/clients");
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -79,12 +94,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="p-4 border-t border-slate-800">
            <div className="flex items-center gap-3 px-2">
              <Avatar className="h-8 w-8 border border-slate-700">
-               <AvatarImage src={currentUser.avatar} />
-               <AvatarFallback className="bg-slate-800 text-slate-400">{currentUser.name.charAt(0)}</AvatarFallback>
+               <AvatarImage src={user.avatar} />
+               <AvatarFallback className="bg-slate-800 text-slate-400">{user.name.charAt(0)}</AvatarFallback>
              </Avatar>
              <div className="flex-1 min-w-0">
-               <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
-               <p className="text-xs text-slate-500 truncate">{currentUser.role}</p>
+               <p className="text-sm font-medium text-white truncate flex items-center gap-2">
+                 {user.name}
+               </p>
+               <p className="text-xs text-slate-500 truncate">{user.role}</p>
              </div>
            </div>
         </div>
@@ -100,21 +117,32 @@ export function AppLayout({ children }: { children: ReactNode }) {
            </div>
 
           <div className="flex items-center gap-4">
+            {impersonating && (
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="hidden md:flex"
+                onClick={handleStopImpersonating}
+              >
+                <Repeat className="mr-2 h-4 w-4" /> Exit Impersonation
+              </Button>
+            )}
+            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full border border-slate-200">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                    <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={user.avatar} alt={user.name} />
+                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none text-slate-900">{currentUser.name}</p>
+                    <p className="text-sm font-medium leading-none text-slate-900">{user.name}</p>
                     <p className="text-xs leading-none text-slate-500">
-                      {currentUser.email}
+                      {user.email}
                     </p>
                   </div>
                 </DropdownMenuLabel>
@@ -123,11 +151,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <Link href="/app/settings">Profile Settings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/login" className="text-red-600 flex items-center cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
-                  </Link>
+                
+                {impersonating && (
+                  <DropdownMenuItem onClick={handleStopImpersonating} className="text-indigo-600 font-medium cursor-pointer">
+                    <UserSwitch className="mr-2 h-4 w-4" />
+                    <span>Exit Impersonation</span>
+                  </DropdownMenuItem>
+                )}
+                
+                <DropdownMenuItem onClick={handleLogout} className="text-red-600 flex items-center cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Log out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

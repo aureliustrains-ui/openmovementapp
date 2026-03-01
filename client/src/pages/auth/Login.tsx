@@ -1,96 +1,92 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Box } from "lucide-react";
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dumbbell, ShieldCheck, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { usersData } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth";
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    // Mock login delay
-    setTimeout(() => {
-      setLoading(false);
-      toast({ title: "Welcome back!" });
-      setLocation("/app/dashboard");
-    }, 1000);
+  const handleLogin = (userId: string) => {
+    login(userId);
+    const user = usersData.find(u => u.id === userId);
+    if (user?.role === 'Admin') {
+      setLocation("/app/admin/clients");
+    } else {
+      setLocation("/app/client/my-phase");
+    }
   };
 
+  const adminUser = usersData.find(u => u.role === 'Admin');
+  const clientUsers = usersData.filter(u => u.role === 'Client');
+
   return (
-    <div className="min-h-screen flex bg-slate-50">
-      <div className="flex-1 flex flex-col justify-center px-4 sm:px-6 lg:flex-none lg:px-20 xl:px-24">
-        <div className="mx-auto w-full max-w-sm lg:w-96">
-          <div className="flex items-center gap-2 mb-8">
-            <Box className="h-8 w-8 text-indigo-600" />
-            <span className="font-display font-bold text-2xl">Nexus</span>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center">
+          <div className="mx-auto h-16 w-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-indigo-200">
+            <Dumbbell className="h-8 w-8" />
           </div>
-
-          <h2 className="mt-6 text-3xl font-display font-bold tracking-tight text-gray-900">
-            Sign in to your account
+          <h2 className="text-3xl font-display font-bold text-slate-900 tracking-tight">
+            Welcome to Nexus
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-              Sign up today
-            </Link>
+          <p className="mt-2 text-slate-500">
+            Select a demo account to sign in and explore the app.
           </p>
-
-          <div className="mt-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-1">
-                <Label htmlFor="email">Email address</Label>
-                <Input id="email" type="email" required defaultValue="alex@example.com" />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <div className="text-sm">
-                    <Link href="/reset-password" className="font-medium text-indigo-600 hover:text-indigo-500">
-                      Forgot your password?
-                    </Link>
-                  </div>
-                </div>
-                <Input id="password" type="password" required defaultValue="password" />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Signing in..." : "Sign in"}
-              </Button>
-            </form>
-            
-            <div className="mt-6 text-center text-sm text-slate-500">
-              <p>Demo Credentials: alex@example.com / password</p>
-            </div>
-          </div>
         </div>
-      </div>
-      
-      {/* Right side artistic panel */}
-      <div className="hidden lg:block relative w-0 flex-1 bg-slate-900">
-        <div className="absolute inset-0 flex flex-col justify-center px-16 text-white overflow-hidden">
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-          <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-cyan-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-          
-          <h2 className="text-4xl font-display font-bold z-10 relative">Build faster, together.</h2>
-          <p className="mt-4 text-xl text-slate-300 max-w-lg z-10 relative">
-            Join thousands of teams who have transformed how they work with Nexus.
-          </p>
-          
-          <div className="mt-12 grid grid-cols-2 gap-8 z-10 relative">
-            <div className="border border-slate-700 bg-slate-800/50 p-6 rounded-2xl backdrop-blur-sm">
-              <h3 className="font-bold text-2xl mb-1">99.9%</h3>
-              <p className="text-slate-400">Uptime SLA</p>
-            </div>
-            <div className="border border-slate-700 bg-slate-800/50 p-6 rounded-2xl backdrop-blur-sm">
-              <h3 className="font-bold text-2xl mb-1">2M+</h3>
-              <p className="text-slate-400">Tasks Completed</p>
+        
+        <div className="space-y-6 mt-10">
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">Admin View</h3>
+            {adminUser && (
+              <Card 
+                className="cursor-pointer border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all group bg-white overflow-hidden"
+                onClick={() => handleLogin(adminUser.id)}
+              >
+                <CardContent className="p-4 flex items-center gap-4">
+                  <Avatar className="h-12 w-12 border border-slate-100">
+                    <AvatarImage src={adminUser.avatar} />
+                    <AvatarFallback className="bg-slate-100 text-slate-600"><ShieldCheck className="h-5 w-5" /></AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{adminUser.name}</h4>
+                    <p className="text-sm text-slate-500">{adminUser.email}</p>
+                  </div>
+                  <Button variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 bg-indigo-50 rounded-full">
+                    Log in
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">Client View</h3>
+            <div className="space-y-3">
+              {clientUsers.map(client => (
+                <Card 
+                  key={client.id}
+                  className="cursor-pointer border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all group bg-white overflow-hidden"
+                  onClick={() => handleLogin(client.id)}
+                >
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <Avatar className="h-12 w-12 border border-slate-100">
+                      <AvatarImage src={client.avatar} />
+                      <AvatarFallback className="bg-slate-100 text-slate-600"><User className="h-5 w-5" /></AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{client.name}</h4>
+                      <p className="text-sm text-slate-500">{client.email}</p>
+                    </div>
+                    <Button variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 bg-indigo-50 rounded-full">
+                      Log in
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </div>
