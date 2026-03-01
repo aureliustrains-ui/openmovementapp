@@ -50,7 +50,7 @@ export default function AdminClientProfile() {
   const { data: allUsers = [] } = useQuery(usersQuery);
   const { data: allPhases = [] } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
-  const { impersonate } = useAuth();
+  const { user, impersonate } = useAuth();
   const updatePhase = useUpdatePhase();
   const deletePhase = useDeletePhase();
 
