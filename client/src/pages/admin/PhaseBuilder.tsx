@@ -192,7 +192,12 @@ export default function AdminPhaseBuilder() {
     setDurationWeeks(String(existingPhase.durationWeeks));
 
     const hasMovementChecks = (existingPhase.movementChecks as any[])?.length > 0;
-    setMovementCheckEnabled(hasMovementChecks || existingPhase.status === 'Waiting for Movement Check');
+    const hasExerciseLevelFlags = phaseSessions.some((s: any) =>
+      ((s.sections as any[]) || []).some((sec: any) =>
+        (sec.exercises || []).some((ex: any) => ex.requiresMovementCheck)
+      )
+    );
+    setMovementCheckEnabled(hasMovementChecks || hasExerciseLevelFlags || existingPhase.status === 'Waiting for Movement Check');
 
     if (phaseSessions.length > 0) {
       setLocalSessions(phaseSessions.map((s: any) => ({
@@ -508,13 +513,9 @@ export default function AdminPhaseBuilder() {
         return;
       }
 
-      if (movementCheckEnabled) {
-        const checkedExercises = collectMovementCheckExercises(localSessions);
-        if (checkedExercises.length === 0) {
-          toast({ title: "No Exercises Selected", description: "Movement check is enabled but no exercises are marked. Please select exercises or disable the gate.", variant: "destructive" });
-          setPublishing(false);
-          return;
-        }
+      const checkedExercises = collectMovementCheckExercises(localSessions);
+
+      if (checkedExercises.length > 0) {
         const movementChecks = checkedExercises.map(ex => ({
           exerciseId: ex.id,
           name: ex.name,
@@ -674,14 +675,25 @@ export default function AdminPhaseBuilder() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-slate-600">Movement Check</Label>
+            <Label className="text-slate-600">Movement Check (optional)</Label>
             <div className="flex items-center gap-3 h-9 px-3 bg-slate-50 border border-slate-200 rounded-md">
               <Switch
                 checked={movementCheckEnabled}
-                onCheckedChange={setMovementCheckEnabled}
+                onCheckedChange={(checked) => {
+                  setMovementCheckEnabled(checked);
+                  if (!checked) {
+                    setLocalSessions(prev => prev.map(s => ({
+                      ...s,
+                      sections: s.sections.map(sec => ({
+                        ...sec,
+                        exercises: sec.exercises.map(ex => ({ ...ex, requiresMovementCheck: false })),
+                      })),
+                    })));
+                  }
+                }}
                 data-testid="switch-movement-check-gate"
               />
-              <span className="text-sm text-slate-700">{movementCheckEnabled ? "Require video approval" : "Disabled"}</span>
+              <span className="text-sm text-slate-700">{movementCheckEnabled ? "Per-exercise video checks" : "Disabled"}</span>
             </div>
           </div>
         </CardContent>
@@ -1045,7 +1057,7 @@ export default function AdminPhaseBuilder() {
           <DialogHeader>
             <DialogTitle>{isPublished ? "Re-publish Phase" : "Publish Phase"}</DialogTitle>
             <DialogDescription>
-              {movementCheckEnabled
+              {collectMovementCheckExercises(localSessions).length > 0
                 ? "This phase will be published with movement check gating. The client will need to submit and have their form videos approved before they can start training."
                 : "This phase will go live immediately. The client will be able to see and start logging sessions right away."}
             </DialogDescription>
@@ -1069,9 +1081,14 @@ export default function AdminPhaseBuilder() {
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
               <span className="text-sm font-medium text-slate-700">Movement Checks</span>
-              <Badge className={movementCheckEnabled ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-green-100 text-green-700 border-green-200"}>
-                {movementCheckEnabled ? `${collectMovementCheckExercises(localSessions).length} exercise(s)` : "Disabled"}
-              </Badge>
+              {(() => {
+                const count = collectMovementCheckExercises(localSessions).length;
+                return (
+                  <Badge className={count > 0 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-green-100 text-green-700 border-green-200"}>
+                    {count > 0 ? `${count} exercise(s) flagged` : "None — goes Active"}
+                  </Badge>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
