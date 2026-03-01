@@ -42,6 +42,7 @@ export default function AdminClientProfile() {
   const [chatMessage, setChatMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -157,12 +158,13 @@ export default function AdminClientProfile() {
     }
   };
 
-  const handleDeletePhase = async (phase: any) => {
-    if (deleting) return;
+  const handleDeletePhase = async () => {
+    if (deleting || !deleteTargetPhase) return;
     setDeleting(true);
     try {
-      await deletePhase.mutateAsync(phase.id);
-      toast({ title: "Phase Deleted", description: `"${phase.name}" and all associated data removed.` });
+      await deletePhase.mutateAsync(deleteTargetPhase.id);
+      toast({ title: "Phase Deleted", description: `"${deleteTargetPhase.name}" and all associated data removed.` });
+      setDeleteTargetPhase(null);
     } catch (err) {
       toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
     } finally {
@@ -262,7 +264,7 @@ export default function AdminClientProfile() {
                       <Button
                         variant="outline"
                         className="text-red-600 border-red-200 hover:bg-red-50"
-                        onClick={() => handleDeletePhase(activePhase)}
+                        onClick={() => setDeleteTargetPhase(activePhase)}
                         data-testid="button-delete-active-phase"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -340,7 +342,7 @@ export default function AdminClientProfile() {
                             variant="outline"
                             size="sm"
                             className="text-red-600 border-red-200 hover:bg-red-50"
-                            onClick={() => handleDeletePhase(phase)}
+                            onClick={() => setDeleteTargetPhase(phase)}
                             data-testid={`button-delete-draft-${phase.id}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -380,7 +382,7 @@ export default function AdminClientProfile() {
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleDeletePhase(phase)}
+                            onClick={() => setDeleteTargetPhase(phase)}
                             data-testid={`button-delete-past-${phase.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -595,6 +597,30 @@ export default function AdminClientProfile() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={deleteTargetPhase !== null} onOpenChange={(open) => { if (!open) setDeleteTargetPhase(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Delete Phase</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteTargetPhase?.name}"? This will also remove all sessions and logs tied to it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTargetPhase(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeletePhase}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleting}
+              data-testid="button-confirm-delete-phase"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

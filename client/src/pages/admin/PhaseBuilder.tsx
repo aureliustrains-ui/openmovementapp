@@ -110,6 +110,7 @@ export default function AdminPhaseBuilder() {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
 
@@ -519,6 +520,7 @@ export default function AdminPhaseBuilder() {
     try {
       await deletePhase.mutateAsync(phaseId);
       toast({ title: "Phase Deleted", description: "Phase and all associated data have been permanently removed." });
+      setDeleteDialogOpen(false);
       setLocation(`/app/admin/clients/${params?.clientId}`);
     } catch (err) {
       toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
@@ -571,7 +573,7 @@ export default function AdminPhaseBuilder() {
             <Button
               variant="outline"
               className="rounded-full px-4 text-red-600 border-red-200 hover:bg-red-50"
-              onClick={handleDeletePhase}
+              onClick={() => setDeleteDialogOpen(true)}
               disabled={saving || publishing || deleting}
               data-testid="button-delete-phase"
             >
@@ -888,6 +890,31 @@ export default function AdminPhaseBuilder() {
               </button>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Delete Phase</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{phaseName}"? This will also remove all sessions and logs tied to it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeletePhase}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleting}
+              data-testid="button-confirm-delete"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
