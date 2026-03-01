@@ -7,12 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy, Video } from "lucide-react";
+import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy, Video, ChevronDown, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 function generateId() {
   return crypto.randomUUID();
@@ -33,6 +34,7 @@ type Exercise = {
   additionalInstructions: string;
   demoUrl: string;
   enableStructuredLogging: boolean;
+  requiresMovementCheck: boolean;
 };
 
 type Section = {
@@ -58,7 +60,7 @@ type ScheduleEntry = {
 };
 
 function makeExercise(name = "New Exercise"): Exercise {
-  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", tempo: "3010", notes: "", goal: "", additionalInstructions: "", demoUrl: "", enableStructuredLogging: false };
+  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", tempo: "3010", notes: "", goal: "", additionalInstructions: "", demoUrl: "", enableStructuredLogging: false, requiresMovementCheck: false };
 }
 
 function makeSection(name = "New Section"): Section {
@@ -69,18 +71,18 @@ function makeSession(name = "New Session"): LocalSession {
   return { id: generateId(), name, description: "", sections: [makeSection("A. Main")], isNew: true };
 }
 
-function collectExerciseNames(sessions: LocalSession[]): string[] {
-  const names: string[] = [];
+function collectMovementCheckExercises(sessions: LocalSession[]): { id: string; name: string }[] {
+  const result: { id: string; name: string }[] = [];
   for (const s of sessions) {
     for (const sec of s.sections) {
       for (const ex of sec.exercises) {
-        if (ex.name && !names.includes(ex.name)) {
-          names.push(ex.name);
+        if (ex.requiresMovementCheck && ex.name) {
+          result.push({ id: ex.id, name: ex.name });
         }
       }
     }
   }
-  return names;
+  return result;
 }
 
 export default function AdminPhaseBuilder() {
@@ -90,7 +92,7 @@ export default function AdminPhaseBuilder() {
   const isNew = params?.phaseId === 'new';
 
   const { data: allPhases = [] } = useQuery(phasesQuery);
-  const { data: phaseSessions = [], isLoading: loadingSessions } = useQuery(sessionsByPhaseQuery(params?.phaseId || ''));
+  const { data: phaseSessions = [], isLoading: loadingSessions, isFetching: fetchingSessions } = useQuery(sessionsByPhaseQuery(params?.phaseId || ''));
   const { data: templates = [] } = useQuery(exerciseTemplatesQuery);
   const updatePhase = useUpdatePhase();
   const createPhase = useCreatePhase();
@@ -109,13 +111,18 @@ export default function AdminPhaseBuilder() {
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [initializedForPhase, setInitializedForPhase] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [movementCheckGate, setMovementCheckGate] = useState("yes");
+  const [movementCheckEnabled, setMovementCheckEnabled] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
+  const [collapsedSessions, setCollapsedSessions] = useState<Record<string, boolean>>({});
+
+  const toggleSessionCollapse = (sessionId: string) => {
+    setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
+  };
 
   const isDirty = useMemo(() => {
     if (!existingPhase && isNew) {
@@ -168,7 +175,7 @@ export default function AdminPhaseBuilder() {
       setPhaseName("New Phase");
       setGoal("");
       setDurationWeeks("4");
-      setMovementCheckGate("yes");
+      setMovementCheckEnabled(false);
       setLocalSessions([makeSession("Session 1")]);
       setLocalSchedule([]);
       setSelectedWeek(1);
@@ -178,14 +185,14 @@ export default function AdminPhaseBuilder() {
     }
 
     if (!existingPhase) return;
-    if (loadingSessions) return;
+    if (loadingSessions || fetchingSessions) return;
 
     setPhaseName(existingPhase.name);
     setGoal(existingPhase.goal || "");
     setDurationWeeks(String(existingPhase.durationWeeks));
 
     const hasMovementChecks = (existingPhase.movementChecks as any[])?.length > 0;
-    setMovementCheckGate(hasMovementChecks || existingPhase.status === 'Waiting for Movement Check' ? "yes" : "no");
+    setMovementCheckEnabled(hasMovementChecks || existingPhase.status === 'Waiting for Movement Check');
 
     if (phaseSessions.length > 0) {
       setLocalSessions(phaseSessions.map((s: any) => ({
@@ -207,6 +214,7 @@ export default function AdminPhaseBuilder() {
             additionalInstructions: ex.additionalInstructions || "",
             demoUrl: ex.demoUrl || "",
             enableStructuredLogging: ex.enableStructuredLogging || false,
+            requiresMovementCheck: ex.requiresMovementCheck || false,
           })),
         })),
       })));
@@ -225,7 +233,7 @@ export default function AdminPhaseBuilder() {
 
     setLastSavedAt(null);
     setInitializedForPhase(currentPhaseId);
-  }, [existingPhase, phaseSessions, isNew, currentPhaseId, initializedForPhase, loadingSessions]);
+  }, [existingPhase, phaseSessions, isNew, currentPhaseId, initializedForPhase, loadingSessions, fetchingSessions]);
 
   useEffect(() => {
     const maxWeek = parseInt(durationWeeks) || 4;
@@ -288,6 +296,20 @@ export default function AdminPhaseBuilder() {
       sections: s.sections.map((sec, si) =>
         si === sectionIdx ? { ...sec, exercises: sec.exercises.filter((_, ei) => ei !== exerciseIdx) } : sec
       ),
+    }));
+  };
+
+  const moveExercise = (sessionIdx: number, sectionIdx: number, exerciseIdx: number, direction: 'up' | 'down') => {
+    updateLocalSession(sessionIdx, s => ({
+      ...s,
+      sections: s.sections.map((sec, si) => {
+        if (si !== sectionIdx) return sec;
+        const exercises = [...sec.exercises];
+        const targetIdx = direction === 'up' ? exerciseIdx - 1 : exerciseIdx + 1;
+        if (targetIdx < 0 || targetIdx >= exercises.length) return sec;
+        [exercises[exerciseIdx], exercises[targetIdx]] = [exercises[targetIdx], exercises[exerciseIdx]];
+        return { ...sec, exercises };
+      }),
     }));
   };
 
@@ -486,11 +508,16 @@ export default function AdminPhaseBuilder() {
         return;
       }
 
-      if (movementCheckGate === "yes") {
-        const exerciseNames = collectExerciseNames(localSessions);
-        const movementChecks = exerciseNames.slice(0, 5).map(name => ({
-          exerciseId: generateId(),
-          name,
+      if (movementCheckEnabled) {
+        const checkedExercises = collectMovementCheckExercises(localSessions);
+        if (checkedExercises.length === 0) {
+          toast({ title: "No Exercises Selected", description: "Movement check is enabled but no exercises are marked. Please select exercises or disable the gate.", variant: "destructive" });
+          setPublishing(false);
+          return;
+        }
+        const movementChecks = checkedExercises.map(ex => ({
+          exerciseId: ex.id,
+          name: ex.name,
           status: "Not Submitted",
           videoUrl: "",
           feedback: "",
@@ -561,6 +588,8 @@ export default function AdminPhaseBuilder() {
   const weekSchedule = localSchedule.filter(e => e.week === selectedWeek);
   const numWeeks = parseInt(durationWeeks) || 4;
 
+  const totalExercises = localSessions.reduce((sum, s) => sum + s.sections.reduce((sSum, sec) => sSum + sec.exercises.length, 0), 0);
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in">
       <div className="sticky top-0 z-20 bg-slate-50/80 backdrop-blur-xl border-b border-slate-200 py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center justify-between">
@@ -611,7 +640,7 @@ export default function AdminPhaseBuilder() {
           <Button
             className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6"
             onClick={() => setPublishDialogOpen(true)}
-            disabled={saving || publishing || !phaseName.trim() || localSessions.every(s => s.sections.every(sec => sec.exercises.length === 0))}
+            disabled={saving || publishing || !phaseName.trim() || totalExercises === 0}
             data-testid="button-publish-phase"
           >
             <Send className="mr-2 h-4 w-4" />
@@ -645,189 +674,18 @@ export default function AdminPhaseBuilder() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-slate-600">Movement Check Gate</Label>
-            <Select value={movementCheckGate} onValueChange={setMovementCheckGate}>
-              <SelectTrigger className={`bg-slate-50 ${movementCheckGate === 'yes' ? 'border-amber-200 text-amber-900' : ''}`} data-testid="select-movement-gate"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="yes">Require video approval before start</SelectItem>
-                <SelectItem value="no">Bypass (Go online immediately)</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="text-slate-600">Movement Check</Label>
+            <div className="flex items-center gap-3 h-9 px-3 bg-slate-50 border border-slate-200 rounded-md">
+              <Switch
+                checked={movementCheckEnabled}
+                onCheckedChange={setMovementCheckEnabled}
+                data-testid="switch-movement-check-gate"
+              />
+              <span className="text-sm text-slate-700">{movementCheckEnabled ? "Require video approval" : "Disabled"}</span>
+            </div>
           </div>
         </CardContent>
       </Card>
-
-      {localSessions.map((session, sessionIdx) => (
-        <Card key={session.id} className="mt-6 border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid={`card-session-${sessionIdx}`}>
-          <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <Badge variant="secondary" className="bg-indigo-600 text-white border-none shrink-0 text-xs">Session {sessionIdx + 1}</Badge>
-              <Input
-                value={session.name}
-                onChange={(e) => updateLocalSession(sessionIdx, s => ({ ...s, name: e.target.value }))}
-                className="text-lg font-display font-bold text-white border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-400 px-2 h-auto bg-transparent placeholder:text-slate-400"
-                placeholder="Session name..."
-                data-testid={`input-session-name-${sessionIdx}`}
-              />
-            </div>
-            <div className="flex gap-2 shrink-0">
-              {localSessions.length > 1 && (
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-rose-400 hover:bg-slate-800" onClick={() => removeSession(sessionIdx)} data-testid={`button-remove-session-${sessionIdx}`}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="p-6 space-y-4">
-          {session.sections.map((section, sectionIdx) => (
-            <div key={section.id} className="border-2 border-slate-200 rounded-2xl bg-slate-50/50 p-4 relative" data-testid={`section-${sessionIdx}-${sectionIdx}`}>
-              <div className="flex items-center gap-2 mb-4">
-                <Input
-                  value={section.name}
-                  onChange={(e) => updateSectionName(sessionIdx, sectionIdx, e.target.value)}
-                  className="text-sm font-bold uppercase tracking-wider text-slate-700 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-2 h-8 bg-transparent max-w-[200px]"
-                  data-testid={`input-section-name-${sessionIdx}-${sectionIdx}`}
-                />
-                <div className="flex-1" />
-                {session.sections.length > 1 && (
-                  <Button variant="ghost" size="sm" className="h-7 text-slate-400 hover:text-rose-600" onClick={() => removeSection(sessionIdx, sectionIdx)} data-testid={`button-remove-section-${sessionIdx}-${sectionIdx}`}>
-                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
-                  </Button>
-                )}
-              </div>
-
-              <div>
-                {section.exercises.map((ex, exIdx) => (
-                  <div key={ex.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-3 shadow-sm group" data-testid={`exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}>
-                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className="cursor-move text-slate-400 hover:text-slate-600 shrink-0">
-                          <GripVertical className="h-5 w-5" />
-                        </div>
-                        <Input
-                          value={ex.name}
-                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "name", e.target.value)}
-                          className="font-semibold text-slate-900 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-1 h-8 bg-transparent"
-                          data-testid={`input-exercise-name-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onClick={() => removeExercise(sessionIdx, sectionIdx, exIdx)}
-                        data-testid={`button-remove-exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {([
-                        { key: "sets", label: "Sets" },
-                        { key: "reps", label: "Reps" },
-                        { key: "load", label: "Load" },
-                        { key: "tempo", label: "Tempo" },
-                      ] as const).map(({ key, label }) => (
-                        <div key={key} className="space-y-1.5">
-                          <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{label}</Label>
-                          <Input
-                            value={ex[key]}
-                            onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, key, e.target.value)}
-                            className="h-9 bg-slate-50 border-slate-200 font-medium"
-                            data-testid={`input-${key}-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 space-y-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Goal</Label>
-                        <Input
-                          value={ex.goal}
-                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "goal", e.target.value)}
-                          placeholder="e.g. Hit 3x10 at RPE 7, increase load by 2.5kg next week"
-                          className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                          data-testid={`input-goal-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Additional Instructions</Label>
-                        <Textarea
-                          value={ex.additionalInstructions}
-                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "additionalInstructions", e.target.value)}
-                          placeholder="Cues, form tips, modifications..."
-                          className="min-h-[60px] text-sm bg-white border-slate-200 text-slate-600 resize-none"
-                          data-testid={`input-instructions-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                        />
-                      </div>
-                      <Input
-                        value={ex.notes}
-                        onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "notes", e.target.value)}
-                        placeholder="Coaching notes..."
-                        className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                        data-testid={`input-notes-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                      />
-                      <div className="flex items-center gap-2">
-                        <Video className="h-4 w-4 text-slate-400 shrink-0" />
-                        <Input
-                          value={ex.demoUrl || ""}
-                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "demoUrl", e.target.value)}
-                          placeholder="Demo video URL (YouTube, Vimeo, etc.)"
-                          className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                          data-testid={`input-demo-url-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                        <Label className="text-xs text-slate-500">Enable structured set logging for client</Label>
-                        <Switch
-                          checked={ex.enableStructuredLogging}
-                          onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "enableStructuredLogging", checked)}
-                          data-testid={`switch-structured-logging-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full mt-2 border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300"
-                onClick={() => {
-                  setAddExerciseTarget({ sessionIdx, sectionIdx });
-                  setExerciseSearch("");
-                }}
-                data-testid={`button-add-exercise-${sessionIdx}-${sectionIdx}`}
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add Exercise
-              </Button>
-            </div>
-          ))}
-
-          <Button
-            variant="outline"
-            className="w-full border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300 rounded-xl"
-            onClick={() => addSection(sessionIdx)}
-            data-testid={`button-add-section-${sessionIdx}`}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Add Section
-          </Button>
-          </div>
-        </Card>
-      ))}
-
-      <div className="flex justify-center mt-8">
-        <Button
-          className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-8 py-6 text-base shadow-lg"
-          onClick={addSession}
-          data-testid="button-add-session"
-        >
-          <Plus className="mr-2 h-5 w-5" /> Add Session
-        </Button>
-      </div>
 
       {localSessions.length > 0 && (
         <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
@@ -908,6 +766,226 @@ export default function AdminPhaseBuilder() {
         </Card>
       )}
 
+      {localSessions.map((session, sessionIdx) => {
+        const isCollapsed = collapsedSessions[session.id] ?? false;
+        const exerciseCount = session.sections.reduce((sum, sec) => sum + sec.exercises.length, 0);
+
+        return (
+          <Card key={session.id} className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid={`card-session-${sessionIdx}`}>
+            <div
+              className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3 cursor-pointer select-none"
+              onClick={() => toggleSessionCollapse(session.id)}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {isCollapsed ? <ChevronRight className="h-5 w-5 text-slate-400 shrink-0" /> : <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" />}
+                <Badge variant="secondary" className="bg-indigo-600 text-white border-none shrink-0 text-xs">S{sessionIdx + 1}</Badge>
+                <Input
+                  value={session.name}
+                  onChange={(e) => updateLocalSession(sessionIdx, s => ({ ...s, name: e.target.value }))}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-lg font-display font-bold text-white border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-400 px-2 h-auto bg-transparent placeholder:text-slate-400"
+                  placeholder="Session name..."
+                  data-testid={`input-session-name-${sessionIdx}`}
+                />
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-xs text-slate-400">
+                  {session.sections.length} section{session.sections.length !== 1 ? 's' : ''} / {exerciseCount} exercise{exerciseCount !== 1 ? 's' : ''}
+                </span>
+                {localSessions.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                    onClick={(e) => { e.stopPropagation(); removeSession(sessionIdx); }}
+                    data-testid={`button-remove-session-${sessionIdx}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {!isCollapsed && (
+              <div className="p-6 space-y-4">
+                {session.sections.map((section, sectionIdx) => (
+                  <div key={section.id} className="border-2 border-slate-200 rounded-2xl bg-slate-50/50 p-4 relative" data-testid={`section-${sessionIdx}-${sectionIdx}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Input
+                        value={section.name}
+                        onChange={(e) => updateSectionName(sessionIdx, sectionIdx, e.target.value)}
+                        className="text-sm font-bold uppercase tracking-wider text-slate-700 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-2 h-8 bg-transparent max-w-[200px]"
+                        data-testid={`input-section-name-${sessionIdx}-${sectionIdx}`}
+                      />
+                      <div className="flex-1" />
+                      {session.sections.length > 1 && (
+                        <Button variant="ghost" size="sm" className="h-7 text-slate-400 hover:text-rose-600" onClick={() => removeSection(sessionIdx, sectionIdx)} data-testid={`button-remove-section-${sessionIdx}-${sectionIdx}`}>
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                        </Button>
+                      )}
+                    </div>
+
+                    <div>
+                      {section.exercises.map((ex, exIdx) => (
+                        <div key={ex.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-3 shadow-sm group" data-testid={`exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}>
+                          <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className="flex flex-col gap-0.5 shrink-0">
+                                <button
+                                  onClick={() => moveExercise(sessionIdx, sectionIdx, exIdx, 'up')}
+                                  disabled={exIdx === 0}
+                                  className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed p-0.5"
+                                  data-testid={`button-move-up-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                                >
+                                  <ArrowUp className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => moveExercise(sessionIdx, sectionIdx, exIdx, 'down')}
+                                  disabled={exIdx === section.exercises.length - 1}
+                                  className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed p-0.5"
+                                  data-testid={`button-move-down-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                                >
+                                  <ArrowDown className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <Input
+                                value={ex.name}
+                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "name", e.target.value)}
+                                className="font-semibold text-slate-900 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-1 h-8 bg-transparent"
+                                data-testid={`input-exercise-name-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {movementCheckEnabled && (
+                                <div className="flex items-center gap-1.5 mr-2" onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={ex.requiresMovementCheck}
+                                    onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "requiresMovementCheck", !!checked)}
+                                    data-testid={`checkbox-movement-check-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                                  />
+                                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold whitespace-nowrap">Video check</span>
+                                </div>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => removeExercise(sessionIdx, sectionIdx, exIdx)}
+                                data-testid={`button-remove-exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {([
+                              { key: "sets", label: "Sets" },
+                              { key: "reps", label: "Reps" },
+                              { key: "load", label: "Load" },
+                              { key: "tempo", label: "Tempo" },
+                            ] as const).map(({ key, label }) => (
+                              <div key={key} className="space-y-1.5">
+                                <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{label}</Label>
+                                <Input
+                                  value={ex[key]}
+                                  onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, key, e.target.value)}
+                                  className="h-9 bg-slate-50 border-slate-200 font-medium"
+                                  data-testid={`input-${key}-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 space-y-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Goal</Label>
+                              <Input
+                                value={ex.goal}
+                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "goal", e.target.value)}
+                                placeholder="e.g. Hit 3x10 at RPE 7, increase load by 2.5kg next week"
+                                className="h-8 text-sm bg-white border-slate-200 text-slate-600"
+                                data-testid={`input-goal-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Additional Instructions</Label>
+                              <Textarea
+                                value={ex.additionalInstructions}
+                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "additionalInstructions", e.target.value)}
+                                placeholder="Cues, form tips, modifications..."
+                                className="min-h-[60px] text-sm bg-white border-slate-200 text-slate-600 resize-none"
+                                data-testid={`input-instructions-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              />
+                            </div>
+                            <Input
+                              value={ex.notes}
+                              onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "notes", e.target.value)}
+                              placeholder="Coaching notes..."
+                              className="h-8 text-sm bg-white border-slate-200 text-slate-600"
+                              data-testid={`input-notes-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                            />
+                            <div className="flex items-center gap-2">
+                              <Video className="h-4 w-4 text-slate-400 shrink-0" />
+                              <Input
+                                value={ex.demoUrl || ""}
+                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "demoUrl", e.target.value)}
+                                placeholder="Demo video URL (YouTube, Vimeo, etc.)"
+                                className="h-8 text-sm bg-white border-slate-200 text-slate-600"
+                                data-testid={`input-demo-url-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                              <Label className="text-xs text-slate-500">Enable structured set logging for client</Label>
+                              <Switch
+                                checked={ex.enableStructuredLogging}
+                                onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "enableStructuredLogging", checked)}
+                                data-testid={`switch-structured-logging-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      className="w-full mt-2 border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300"
+                      onClick={() => {
+                        setAddExerciseTarget({ sessionIdx, sectionIdx });
+                        setExerciseSearch("");
+                      }}
+                      data-testid={`button-add-exercise-${sessionIdx}-${sectionIdx}`}
+                    >
+                      <Plus className="mr-2 h-4 w-4" /> Add Exercise
+                    </Button>
+                  </div>
+                ))}
+
+                <Button
+                  variant="outline"
+                  className="w-full border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300 rounded-xl"
+                  onClick={() => addSection(sessionIdx)}
+                  data-testid={`button-add-section-${sessionIdx}`}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> Add Section
+                </Button>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+
+      <div className="flex justify-center mt-8">
+        <Button
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-8 py-6 text-base shadow-lg"
+          onClick={addSession}
+          data-testid="button-add-session"
+        >
+          <Plus className="mr-2 h-5 w-5" /> Add Session
+        </Button>
+      </div>
+
       <Dialog open={assignSessionTarget !== null} onOpenChange={(open) => { if (!open) setAssignSessionTarget(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -967,7 +1045,7 @@ export default function AdminPhaseBuilder() {
           <DialogHeader>
             <DialogTitle>{isPublished ? "Re-publish Phase" : "Publish Phase"}</DialogTitle>
             <DialogDescription>
-              {movementCheckGate === "yes"
+              {movementCheckEnabled
                 ? "This phase will be published with movement check gating. The client will need to submit and have their form videos approved before they can start training."
                 : "This phase will go live immediately. The client will be able to see and start logging sessions right away."}
             </DialogDescription>
@@ -991,8 +1069,8 @@ export default function AdminPhaseBuilder() {
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
               <span className="text-sm font-medium text-slate-700">Movement Checks</span>
-              <Badge className={movementCheckGate === "yes" ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-green-100 text-green-700 border-green-200"}>
-                {movementCheckGate === "yes" ? "Required" : "Bypassed"}
+              <Badge className={movementCheckEnabled ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-green-100 text-green-700 border-green-200"}>
+                {movementCheckEnabled ? `${collectMovementCheckExercises(localSessions).length} exercise(s)` : "Disabled"}
               </Badge>
             </div>
           </div>
