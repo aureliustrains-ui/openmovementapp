@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, sectionTemplatesQuery, sessionTemplatesQuery, phaseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase, useCreateExerciseTemplate, useCreateSectionTemplate, useCreateSessionTemplate, useCreatePhaseTemplate } from "@/lib/api";
@@ -127,6 +127,7 @@ export default function AdminPhaseBuilder() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
   const [collapsedSessions, setCollapsedSessions] = useState<Record<string, boolean>>({});
+  const justSavedRef = useRef(false);
 
   const toggleSessionCollapse = (sessionId: string) => {
     setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
@@ -182,6 +183,12 @@ export default function AdminPhaseBuilder() {
 
   useEffect(() => {
     if (initializedForPhase === currentPhaseId) return;
+
+    if (justSavedRef.current) {
+      setInitializedForPhase(currentPhaseId);
+      justSavedRef.current = false;
+      return;
+    }
 
     if (isNew) {
       setPhaseName("New Phase");
@@ -479,12 +486,13 @@ export default function AdminPhaseBuilder() {
       })));
       setLocalSchedule(persistedSchedule);
       setLastSavedAt(new Date());
+      justSavedRef.current = true;
 
       if (isNew) {
-        setInitializedForPhase(phaseId);
         toast({ title: "Phase Created", description: `Phase and ${savedSessions.length} session(s) saved as Draft.` });
         setLocation(`/app/admin/clients/${params?.clientId}/builder/${phaseId}`);
       } else {
+        setInitializedForPhase(currentPhaseId);
         toast({ title: "Phase Saved", description: `Phase and ${savedSessions.length} session(s) updated.` });
       }
     } catch (err) {
@@ -517,9 +525,9 @@ export default function AdminPhaseBuilder() {
         })));
         setLocalSchedule(result.persistedSchedule);
         setLastSavedAt(new Date());
+        justSavedRef.current = true;
 
         if (isNew) {
-          setInitializedForPhase(phaseId);
           setLocation(`/app/admin/clients/${params?.clientId}/builder/${phaseId}`);
         }
       }
@@ -567,6 +575,7 @@ export default function AdminPhaseBuilder() {
       }
 
       setLastSavedAt(new Date());
+      justSavedRef.current = true;
       setPublishDialogOpen(false);
     } catch (err) {
       toast({ title: "Publish Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
