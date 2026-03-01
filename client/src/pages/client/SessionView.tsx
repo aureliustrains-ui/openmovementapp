@@ -302,38 +302,6 @@ export default function ClientSessionView() {
                       </div>
                     )}
 
-                    {lastSession && (
-                      <div className="ml-11 bg-indigo-50/60 border border-indigo-100 rounded-xl p-3" data-testid={`last-session-${ex.id}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-500">Last Session</span>
-                          <span className="text-[11px] text-indigo-400">{formatOccurrenceLabel(lastSession)}</span>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          {lastSession.sets && (lastSession.sets as any[]).length > 0 && (
-                            <div className="flex gap-2 flex-wrap">
-                              {(lastSession.sets as any[]).map((s: any, si: number) => (
-                                <span key={si} className="text-xs bg-white border border-indigo-200 rounded-md px-2 py-0.5 text-indigo-700 font-medium">
-                                  Set {si + 1}: {s.weight || '--'}lbs × {s.reps || '--'}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {lastSession.notes && (
-                            <p className="text-xs text-slate-600 leading-relaxed mt-0.5">"{lastSession.notes}"</p>
-                          )}
-                          {!lastSession.notes && (!lastSession.sets || (lastSession.sets as any[]).length === 0) && (
-                            <p className="text-xs text-indigo-400 italic">Completed, no details logged</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {!lastSession && !isSessionComplete && (
-                      <div className="ml-11 bg-slate-50 border border-slate-100 rounded-xl p-3">
-                        <span className="text-xs text-slate-400 italic">No previous entries yet</span>
-                      </div>
-                    )}
-
                     <div className="ml-11 space-y-3">
                       {hasHistory && (
                         <button
@@ -351,8 +319,7 @@ export default function ClientSessionView() {
                         <div className="border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 overflow-hidden">
                           {history.map((h, hi) => (
                             <div key={hi} className="px-4 py-3">
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                              <div className="mb-1.5">
                                 <span className="text-xs font-semibold text-slate-700">{formatOccurrenceLabel(h)}</span>
                               </div>
                               {h.sets && (h.sets as any[]).length > 0 && (
