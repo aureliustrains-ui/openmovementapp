@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { usersData } from './mock-data';
 
 interface User {
   id: string;
@@ -8,16 +7,16 @@ interface User {
   email: string;
   role: string;
   status: string;
-  avatar: string;
+  avatar: string | null;
 }
 
 interface AuthState {
   user: User | null;
   impersonating: boolean;
   originalAdmin: User | null;
-  login: (userId: string) => void;
+  login: (user: User) => void;
   logout: () => void;
-  impersonate: (clientId: string) => void;
+  impersonate: (client: User) => void;
   stopImpersonating: () => void;
 }
 
@@ -28,28 +27,22 @@ export const useAuth = create<AuthState>()(
       impersonating: false,
       originalAdmin: null,
       
-      login: (userId: string) => {
-        const user = usersData.find(u => u.id === userId);
-        if (user) {
-          set({ user, impersonating: false, originalAdmin: null });
-        }
+      login: (user: User) => {
+        set({ user, impersonating: false, originalAdmin: null });
       },
       
       logout: () => {
         set({ user: null, impersonating: false, originalAdmin: null });
       },
       
-      impersonate: (clientId: string) => {
+      impersonate: (client: User) => {
         const { user } = get();
         if (user?.role === 'Admin') {
-          const client = usersData.find(u => u.id === clientId);
-          if (client) {
-            set({ 
-              user: client, 
-              impersonating: true, 
-              originalAdmin: user 
-            });
-          }
+          set({ 
+            user: client, 
+            impersonating: true, 
+            originalAdmin: user 
+          });
         }
       },
       

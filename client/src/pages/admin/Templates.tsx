@@ -1,17 +1,20 @@
-import { exerciseTemplates } from "@/lib/mock-data";
+import { useQuery } from "@tanstack/react-query";
+import { exerciseTemplatesQuery } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Plus, Dumbbell, Folder, List, LayoutTemplate, MoreHorizontal } from "lucide-react";
+import { Search, Plus, Dumbbell, Folder, List, LayoutTemplate, MoreHorizontal, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function AdminTemplates() {
+  const { data: templates = [], isLoading } = useQuery(exerciseTemplatesQuery);
+
   return (
     <div className="space-y-8 animate-in fade-in max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight">Template Library</h1>
+          <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-templates-title">Template Library</h1>
           <p className="text-slate-500 mt-1">Manage reusable components for faster programming.</p>
         </div>
       </div>
@@ -41,31 +44,38 @@ export default function AdminTemplates() {
                    type="search" 
                    placeholder="Search exercises..." 
                    className="border-none shadow-none focus-visible:ring-0 px-0 h-10 bg-transparent text-slate-900"
+                   data-testid="input-search-exercises"
                  />
                </div>
-               <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full">
+               <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" data-testid="button-new-exercise">
                  <Plus className="mr-2 h-4 w-4" /> New Exercise
                </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {exerciseTemplates.map(ex => (
-                <Card key={ex.id} className="border-slate-200 shadow-sm hover:border-slate-300 transition-colors bg-white rounded-xl">
-                  <CardContent className="p-4 flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-slate-900 text-lg mb-1">{ex.name}</h3>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{ex.targetMuscle}</Badge>
-                        {ex.demoUrl && <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 font-normal text-xs">Has Video</Badge>}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {templates.map((ex: any) => (
+                  <Card key={ex.id} className="border-slate-200 shadow-sm hover:border-slate-300 transition-colors bg-white rounded-xl" data-testid={`card-template-${ex.id}`}>
+                    <CardContent className="p-4 flex items-start justify-between">
+                      <div>
+                        <h3 className="font-semibold text-slate-900 text-lg mb-1">{ex.name}</h3>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{ex.targetMuscle}</Badge>
+                          {ex.demoUrl && <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 font-normal text-xs">Has Video</Badge>}
+                        </div>
                       </div>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
+                        <MoreHorizontal className="h-5 w-5" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
           
           <TabsContent value="sessions" className="m-0 outline-none">
@@ -77,7 +87,6 @@ export default function AdminTemplates() {
               </div>
           </TabsContent>
 
-          {/* Placeholders for other tabs */}
           <TabsContent value="phases" className="m-0 outline-none">
              <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
                 <LayoutTemplate className="h-12 w-12 text-slate-300 mx-auto mb-4" />
