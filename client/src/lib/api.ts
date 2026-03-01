@@ -59,6 +59,21 @@ export const exerciseTemplatesQuery = queryOptions({
   queryFn: () => fetchApi("/api/exercise-templates"),
 });
 
+export const sectionTemplatesQuery = queryOptions({
+  queryKey: ["sectionTemplates"],
+  queryFn: () => fetchApi("/api/section-templates"),
+});
+
+export const sessionTemplatesQuery = queryOptions({
+  queryKey: ["sessionTemplates"],
+  queryFn: () => fetchApi("/api/session-templates"),
+});
+
+export const phaseTemplatesQuery = queryOptions({
+  queryKey: ["phaseTemplates"],
+  queryFn: () => fetchApi("/api/phase-templates"),
+});
+
 export function messagesQuery(clientId: string) {
   return queryOptions({
     queryKey: ["messages", clientId],
@@ -70,6 +85,14 @@ export function workoutLogsQuery(clientId: string) {
   return queryOptions({
     queryKey: ["workoutLogs", clientId],
     queryFn: () => fetchApi(`/api/workout-logs?clientId=${clientId}`),
+  });
+}
+
+export function chatUnreadQuery(userId: string, role: string) {
+  return queryOptions({
+    queryKey: ["chatUnread", userId],
+    queryFn: () => fetchApi(`/api/chat/unread?userId=${userId}&role=${role}`),
+    refetchInterval: 5000,
   });
 }
 
@@ -154,6 +177,87 @@ export function useDeleteExerciseTemplate() {
   return useMutation({
     mutationFn: (id: string) => fetchApi(`/api/exercise-templates/${id}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exerciseTemplates"] }); },
+  });
+}
+
+export function useCreateSectionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => fetchApi("/api/section-templates", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sectionTemplates"] }); },
+  });
+}
+
+export function useUpdateSectionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => fetchApi(`/api/section-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sectionTemplates"] }); },
+  });
+}
+
+export function useDeleteSectionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/section-templates/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sectionTemplates"] }); },
+  });
+}
+
+export function useCreateSessionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => fetchApi("/api/session-templates", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sessionTemplates"] }); },
+  });
+}
+
+export function useUpdateSessionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => fetchApi(`/api/session-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sessionTemplates"] }); },
+  });
+}
+
+export function useDeleteSessionTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/session-templates/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sessionTemplates"] }); },
+  });
+}
+
+export function useCreatePhaseTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => fetchApi("/api/phase-templates", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["phaseTemplates"] }); },
+  });
+}
+
+export function useUpdatePhaseTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => fetchApi(`/api/phase-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["phaseTemplates"] }); },
+  });
+}
+
+export function useDeletePhaseTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/phase-templates/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["phaseTemplates"] }); },
+  });
+}
+
+export function useMarkChatRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { userId: string; clientId: string }) =>
+      fetchApi("/api/chat/read", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["chatUnread"] }); },
   });
 }
 

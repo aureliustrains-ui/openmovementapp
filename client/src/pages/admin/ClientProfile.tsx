@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, useDeletePhase, messagesQuery, useSendMessage } from "@/lib/api";
+import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, useDeletePhase, messagesQuery, useSendMessage, useMarkChatRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,12 +79,19 @@ export default function AdminClientProfile() {
     refetchInterval: 5000,
   });
   const sendMessage = useSendMessage();
+  const markRead = useMarkChatRead();
 
   useEffect(() => {
     if (activeTab === "chat") {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [chatMessages, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "chat" && user && clientId && chatMessages.length > 0) {
+      markRead.mutate({ userId: user.id, clientId });
+    }
+  }, [activeTab, user?.id, clientId, chatMessages.length]);
 
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
@@ -120,7 +127,7 @@ export default function AdminClientProfile() {
       clientId: clientId,
       sender: "Head Coach",
       text: chatMessage,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date().toISOString(),
       isClient: false,
     });
     setChatMessage("");
@@ -711,7 +718,7 @@ export default function AdminClientProfile() {
                       <div className={`flex flex-col ${!msg.isClient ? 'items-end' : 'items-start'}`}>
                         <div className="flex items-baseline gap-2 mb-1">
                           <span className="font-semibold text-slate-900 text-sm">{msg.sender}</span>
-                          <span className="text-xs text-slate-500">{msg.time}</span>
+                          <span className="text-xs text-slate-500">{msg.time?.includes("T") ? new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : msg.time}</span>
                         </div>
                         <div className={`text-sm leading-relaxed p-4 rounded-2xl max-w-md ${
                           !msg.isClient

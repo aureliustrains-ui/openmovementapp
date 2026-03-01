@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { chatUnreadQuery } from "@/lib/api";
 import { 
   Users, 
   Library, 
@@ -43,9 +45,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user, logout, impersonating, stopImpersonating } = useAuth();
   
+  const { data: unreadData } = useQuery({
+    ...chatUnreadQuery(user?.id || "", user?.role || "Client"),
+    enabled: !!user,
+  });
+
   if (!user) return null;
 
   const navItems = user.role === 'Admin' ? getAdminNavItems() : getClientNavItems();
+  const totalUnread = unreadData?.total || 0;
 
   const handleLogout = () => {
     logout();
@@ -71,11 +79,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
               const isActive = location.startsWith(item.href) && (item.href !== '/app/settings' || location === '/app/settings');
+              const isChatItem = item.label === "Chat";
               return (
                 <Link 
                   key={item.href} 
                   href={item.href}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive 
                       ? "bg-indigo-50 text-indigo-700" 
                       : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"
@@ -83,6 +92,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 >
                   <item.icon className="h-4 w-4" />
                   <span className="hidden md:inline">{item.label}</span>
+                  {isChatItem && totalUnread > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 shadow-sm" data-testid="badge-chat-unread">
+                      {totalUnread > 99 ? "99+" : totalUnread}
+                    </span>
+                  )}
                 </Link>
               );
             })}

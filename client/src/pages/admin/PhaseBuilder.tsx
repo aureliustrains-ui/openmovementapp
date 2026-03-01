@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase } from "@/lib/api";
+import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, sectionTemplatesQuery, sessionTemplatesQuery, phaseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase, useCreateExerciseTemplate, useCreateSectionTemplate, useCreateSessionTemplate, useCreatePhaseTemplate } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 function generateId() {
   return crypto.randomUUID();
+}
+
+function stableStringify(obj: any): string {
+  if (obj === null || obj === undefined) return JSON.stringify(obj);
+  if (typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return '[' + obj.map(stableStringify).join(',') + ']';
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
 }
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -146,12 +154,12 @@ export default function AdminPhaseBuilder() {
       if (!ps) return true;
       if (ls.name !== ps.name) return true;
       if (ls.description !== (ps.description || "")) return true;
-      if (JSON.stringify(ls.sections) !== JSON.stringify(ps.sections)) return true;
+      if (stableStringify(ls.sections) !== stableStringify(ps.sections)) return true;
     }
 
     const sortSched = (s: any[]) => [...s].sort((a, b) => a.week - b.week || a.day.localeCompare(b.day) || (a.slot || "AM").localeCompare(b.slot || "AM") || a.sessionId.localeCompare(b.sessionId));
     const dbSched = ((existingPhase.schedule as any[]) || []).map((e: any) => ({ day: e.day, week: e.week, slot: e.slot || "AM", sessionId: e.sessionId }));
-    if (JSON.stringify(sortSched(localSchedule)) !== JSON.stringify(sortSched(dbSched))) return true;
+    if (stableStringify(sortSched(localSchedule)) !== stableStringify(sortSched(dbSched))) return true;
 
     return false;
   }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew, fetchingSessions, fetchingPhases, lastSavedAt]);
@@ -189,10 +197,11 @@ export default function AdminPhaseBuilder() {
     }
 
     if (!existingPhase) return;
-    if (loadingSessions || fetchingSessions) return;
+    if (loadingSessions || fetchingSessions || fetchingPhases) return;
 
     const scheduleHasSessions = ((existingPhase.schedule as any[]) || []).length > 0;
-    if (phaseSessions.length === 0 && scheduleHasSessions) return;
+    const dbHasSessions = scheduleHasSessions || (existingPhase.status !== 'Draft');
+    if (phaseSessions.length === 0 && dbHasSessions) return;
 
     setPhaseName(existingPhase.name);
     setGoal(existingPhase.goal || "");
@@ -245,7 +254,7 @@ export default function AdminPhaseBuilder() {
 
     setLastSavedAt(null);
     setInitializedForPhase(currentPhaseId);
-  }, [existingPhase, phaseSessions, isNew, currentPhaseId, initializedForPhase, loadingSessions, fetchingSessions]);
+  }, [existingPhase, phaseSessions, isNew, currentPhaseId, initializedForPhase, loadingSessions, fetchingSessions, fetchingPhases]);
 
   useEffect(() => {
     const maxWeek = parseInt(durationWeeks) || 4;

@@ -1,12 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { messagesQuery, useSendMessage } from "@/lib/api";
+import { messagesQuery, useSendMessage, useMarkChatRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+function formatTime(t: string) {
+  if (t.includes("T") || t.includes("Z")) {
+    try { return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return t; }
+  }
+  return t;
+}
 
 export default function ClientChat() {
   const [message, setMessage] = useState("");
@@ -19,6 +26,13 @@ export default function ClientChat() {
     refetchInterval: 5000,
   });
   const sendMessage = useSendMessage();
+  const markRead = useMarkChatRead();
+
+  useEffect(() => {
+    if (user && chatMessages.length > 0) {
+      markRead.mutate({ userId: user.id, clientId: user.id });
+    }
+  }, [user?.id, chatMessages.length]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +42,7 @@ export default function ClientChat() {
       clientId: user.id,
       sender: user.name,
       text: message,
-      time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+      time: new Date().toISOString(),
       isClient: true,
     });
     setMessage("");
@@ -64,7 +78,7 @@ export default function ClientChat() {
                 <div className={`flex flex-col ${msg.isClient ? 'items-end' : 'items-start'}`}>
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className="font-semibold text-slate-900 text-sm">{msg.sender}</span>
-                    <span className="text-xs text-slate-500">{msg.time}</span>
+                    <span className="text-xs text-slate-500">{formatTime(msg.time)}</span>
                   </div>
                   <div className={`text-sm leading-relaxed p-4 rounded-2xl max-w-md ${
                     msg.isClient 
