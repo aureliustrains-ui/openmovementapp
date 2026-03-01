@@ -91,7 +91,7 @@ export default function AdminPhaseBuilder() {
   const { toast } = useToast();
   const isNew = params?.phaseId === 'new';
 
-  const { data: allPhases = [] } = useQuery(phasesQuery);
+  const { data: allPhases = [], isFetching: fetchingPhases } = useQuery(phasesQuery);
   const { data: phaseSessions = [], isLoading: loadingSessions, isFetching: fetchingSessions } = useQuery(sessionsByPhaseQuery(params?.phaseId || ''));
   const { data: templates = [] } = useQuery(exerciseTemplatesQuery);
   const updatePhase = useUpdatePhase();
@@ -125,7 +125,7 @@ export default function AdminPhaseBuilder() {
   };
 
   const isDirty = useMemo(() => {
-    if (fetchingSessions && lastSavedAt) return false;
+    if ((fetchingSessions || fetchingPhases) && lastSavedAt) return false;
 
     if (!existingPhase && isNew) {
       return phaseName !== "New Phase" || goal !== "" || durationWeeks !== "4" || localSessions.length > 1 || localSessions[0]?.sections.length > 1 || localSessions[0]?.sections[0]?.exercises.length > 0 || localSchedule.length > 0;
@@ -137,7 +137,7 @@ export default function AdminPhaseBuilder() {
     const durationChanged = durationWeeks !== String(existingPhase.durationWeeks);
     if (nameChanged || goalChanged || durationChanged) return true;
 
-    if (fetchingSessions) return false;
+    if (fetchingSessions || fetchingPhases) return false;
 
     if (localSessions.length !== phaseSessions.length) return true;
     for (let i = 0; i < localSessions.length; i++) {
@@ -154,7 +154,7 @@ export default function AdminPhaseBuilder() {
     if (JSON.stringify(sortSched(localSchedule)) !== JSON.stringify(sortSched(dbSched))) return true;
 
     return false;
-  }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew, fetchingSessions, lastSavedAt]);
+  }, [phaseName, goal, durationWeeks, localSessions, localSchedule, existingPhase, phaseSessions, isNew, fetchingSessions, fetchingPhases, lastSavedAt]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {

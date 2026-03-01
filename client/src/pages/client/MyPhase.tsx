@@ -5,13 +5,14 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays, ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -24,24 +25,34 @@ export default function ClientMyPhase() {
   
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [uploadPhaseId, setUploadPhaseId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [clientNote, setClientNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState(1);
-  const [activePhaseId, setActivePhaseId] = useState<string | null>(null);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
 
   if (!user) return null;
 
-  const activePhases = allPhases.filter((p: any) => p.clientId === user.id && p.status === 'Active');
-  const pendingPhases = allPhases.filter((p: any) => p.clientId === user.id && p.status === 'Waiting for Movement Check');
+  const visiblePhases = allPhases.filter((p: any) =>
+    p.clientId === user.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check')
+  );
 
-  const currentPhase = activePhaseId
-    ? activePhases.find((p: any) => p.id === activePhaseId) || activePhases[0]
-    : activePhases[0];
+  useEffect(() => {
+    if (visiblePhases.length > 0 && !selectedPhaseId) {
+      const pending = visiblePhases.find((p: any) => p.status === 'Waiting for Movement Check');
+      setSelectedPhaseId(pending?.id || visiblePhases[0].id);
+    }
+    if (selectedPhaseId && !visiblePhases.find((p: any) => p.id === selectedPhaseId)) {
+      const pending = visiblePhases.find((p: any) => p.status === 'Waiting for Movement Check');
+      setSelectedPhaseId(pending?.id || visiblePhases[0]?.id || null);
+    }
+  }, [visiblePhases.map((p: any) => p.id).join(',')]);
+
+  const currentPhase = visiblePhases.find((p: any) => p.id === selectedPhaseId) || visiblePhases[0];
 
   const handleOpenUpload = (phaseId: string, exerciseId: string) => {
-    setSelectedPhaseId(phaseId);
+    setUploadPhaseId(phaseId);
     setSelectedExerciseId(exerciseId);
     setVideoUrl("");
     setClientNote("");
@@ -49,8 +60,8 @@ export default function ClientMyPhase() {
   };
 
   const handleSubmitVideo = async () => {
-    if (!selectedPhaseId || !selectedExerciseId) return;
-    const phase = allPhases.find((p: any) => p.id === selectedPhaseId);
+    if (!uploadPhaseId || !selectedExerciseId) return;
+    const phase = allPhases.find((p: any) => p.id === uploadPhaseId);
     if (!phase) return;
     
     setIsSubmitting(true);
@@ -67,7 +78,7 @@ export default function ClientMyPhase() {
       });
 
       await updatePhase.mutateAsync({
-        id: selectedPhaseId,
+        id: uploadPhaseId,
         movementChecks: updatedChecks,
       });
 
@@ -95,159 +106,22 @@ export default function ClientMyPhase() {
     );
   }
 
-  if (pendingPhases.length > 0 && activePhases.length === 0) {
-    return (
-      <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
-        {pendingPhases.map((pendingPhase: any) => (
-          <div key={pendingPhase.id} className="mb-10">
-            <div className="text-center mb-10 mt-8">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-6">
-                <Lock className="h-8 w-8" />
-              </div>
-              <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">Movement Check Required</h1>
-              <p className="text-slate-600 mt-3 text-lg">Your coach needs to review your form before unlocking: <span className="font-semibold text-slate-900">{pendingPhase.name}</span></p>
-            </div>
-
-            <div className="space-y-4">
-              {(pendingPhase.movementChecks as any[]).map((mc: any, i: number) => (
-                <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
-                  <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Badge variant="outline" className={
-                          mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
-                          mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
-                          'bg-slate-50 text-slate-700 border-slate-200'
-                        }>
-                          {mc.status || 'Not Submitted'}
-                        </Badge>
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-900">{mc.name}</h3>
-                      {mc.approvedNote && mc.status === 'Approved' && (
-                        <div className="mt-3 bg-green-50 border border-green-100 p-4 rounded-xl">
-                          <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">Coach's Note</p>
-                          <p className="text-slate-700">"{mc.approvedNote}"</p>
-                        </div>
-                      )}
-                      {mc.resubmitFeedback && mc.status === 'Needs Resubmission' && (
-                        <div className="mt-3 bg-red-50 border border-red-100 p-4 rounded-xl">
-                          <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Coach Feedback</p>
-                          <p className="text-slate-700 italic">"{mc.resubmitFeedback}"</p>
-                        </div>
-                      )}
-                      {mc.clientNote && mc.status === 'Pending' && (
-                        <p className="text-sm text-slate-500 mt-2 italic">Note: {mc.clientNote}</p>
-                      )}
-                    </div>
-                    
-                    <div className="w-full md:w-auto shrink-0">
-                      {mc.status === 'Approved' ? (
-                        <div className="flex items-center text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg border border-green-100">
-                          <CheckCircle2 className="mr-2 h-5 w-5" /> Approved
-                        </div>
-                      ) : mc.status === 'Pending' ? (
-                        <div className="flex items-center text-amber-600 font-medium bg-amber-50 px-4 py-2 rounded-lg border border-amber-100">
-                          <UploadCloud className="mr-2 h-5 w-5" /> Awaiting Review
-                        </div>
-                      ) : (
-                        <Button 
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6"
-                          onClick={() => handleOpenUpload(pendingPhase.id, mc.exerciseId)}
-                          data-testid={`button-upload-video-${i}`}
-                        >
-                          <UploadCloud className="mr-2 h-5 w-5" /> {mc.status === 'Needs Resubmission' ? 'Re-upload Video' : 'Upload Video'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Submit Movement Check</DialogTitle>
-              <DialogDescription>
-                Upload a video of your performance or provide a link (YouTube, Drive, etc.)
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="video-file">Video File</Label>
-                <Input id="video-file" type="file" accept="video/*" className="cursor-pointer" />
-                <p className="text-[10px] text-slate-500 italic">Files are simulated in this prototype. Use the URL field below for direct links.</p>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-slate-500">Or use a URL</span>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="video-url">Video URL</Label>
-                <Input 
-                  id="video-url" 
-                  placeholder="https://youtube.com/..." 
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  data-testid="input-video-url"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="note">Optional Note</Label>
-                <Textarea 
-                  id="note" 
-                  placeholder="Anything the coach should know?" 
-                  value={clientNote}
-                  onChange={(e) => setClientNote(e.target.value)}
-                  data-testid="input-client-note"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setIsUploadOpen(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSubmitVideo}
-                className="bg-indigo-600 hover:bg-indigo-700"
-                disabled={isSubmitting}
-                data-testid="button-submit-video"
-              >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
-                Submit for Review
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-    );
-  }
-
-  if (activePhases.length === 0 && pendingPhases.length === 0) {
+  if (visiblePhases.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-32 text-center">
         <div className="h-20 w-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
           <CalIcon className="h-10 w-10 text-slate-300" />
         </div>
-        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">No Active Phase</h2>
-        <p className="text-slate-500 mt-2 max-w-md">You don't have an active training phase right now. Your coach is likely building your next block.</p>
+        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">No Active Phases</h2>
+        <p className="text-slate-500 mt-2 max-w-md">You don't have any active training phases right now. Your coach is likely building your next block.</p>
       </div>
     );
   }
 
   if (!currentPhase) return null;
 
+  const isMovementCheckPhase = currentPhase.status === 'Waiting for Movement Check';
+  const movementChecks = (currentPhase.movementChecks as any[]) || [];
   const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id);
   const schedule = (currentPhase.schedule as any[]) || [];
   const weekSchedule = schedule.filter((s: any) => s.week === selectedWeek);
@@ -263,172 +137,307 @@ export default function ClientMyPhase() {
     return `/app/client/session/${sessionId}?week=${selectedWeek}&day=${encodeURIComponent(day)}&slot=${encodeURIComponent(slotVal)}`;
   };
 
+  const getStatusBadge = (status: string) => {
+    if (status === 'Active') return <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] ml-auto shrink-0">Active</Badge>;
+    if (status === 'Waiting for Movement Check') return <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] ml-auto shrink-0">Pending</Badge>;
+    return null;
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
-      {activePhases.length > 1 && (
-        <div className="flex gap-2 flex-wrap">
-          {activePhases.map((p: any) => (
-            <Button
-              key={p.id}
-              variant={currentPhase.id === p.id ? "default" : "outline"}
-              className={currentPhase.id === p.id ? "bg-indigo-600 text-white" : "bg-white"}
-              onClick={() => { setActivePhaseId(p.id); setSelectedWeek(1); }}
-              data-testid={`button-switch-phase-${p.id}`}
-            >
-              {p.name}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {pendingPhases.length > 0 && activePhases.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/50 rounded-2xl">
-          <CardContent className="p-4 flex items-center gap-3">
-            <Lock className="h-5 w-5 text-amber-600 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-amber-800">
-                {pendingPhases.length} phase{pendingPhases.length > 1 ? 's' : ''} waiting for movement check approval
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="bg-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
-          <div className="w-64 h-64 border-8 border-indigo-500 rounded-full blur-3xl mix-blend-screen" />
-        </div>
-        <div className="relative z-10">
-          <Badge className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-md mb-6 py-1.5 px-3" data-testid="badge-active-phase">
-            Active Phase &bull; Week {selectedWeek} / {currentPhase.durationWeeks}
-          </Badge>
-          <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4" data-testid="text-phase-name">{currentPhase.name}</h1>
-          <p className="text-slate-300 text-lg max-w-xl leading-relaxed">{currentPhase.goal}</p>
-        </div>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-indigo-600" />
-            Weekly Schedule
-          </h2>
-          {currentPhase.durationWeeks > 1 && (
-            <div className="flex bg-slate-100 rounded-lg p-1 gap-0.5">
-              {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map(w => (
-                <button
-                  key={w}
-                  onClick={() => setSelectedWeek(w)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedWeek === w ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
-                  data-testid={`button-week-${w}`}
-                >
-                  W{w}
-                </button>
+      {visiblePhases.length > 1 && (
+        <div className="flex items-center gap-3">
+          <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">My Phases</Label>
+          <Select value={selectedPhaseId || ''} onValueChange={(val) => { setSelectedPhaseId(val); setSelectedWeek(1); }}>
+            <SelectTrigger className="w-full max-w-xs bg-white border-slate-200 shadow-sm" data-testid="select-phase">
+              <SelectValue placeholder="Select a phase" />
+            </SelectTrigger>
+            <SelectContent>
+              {visiblePhases.map((p: any) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <div className="flex items-center gap-2 w-full">
+                    <span>{p.name}</span>
+                    {p.status === 'Active' && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px]">Active</Badge>}
+                    {p.status === 'Waiting for Movement Check' && <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Pending</Badge>}
+                  </div>
+                </SelectItem>
               ))}
-            </div>
-          )}
+            </SelectContent>
+          </Select>
         </div>
+      )}
 
-        {hasGridSchedule ? (
-          <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
-            <div className="overflow-x-auto">
-              <div className="min-w-[500px]">
-                <div className="grid grid-cols-[100px_1fr_1fr] border-b border-slate-200 bg-slate-50">
-                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
-                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
-                  <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
-                </div>
-                {WEEKDAYS.map((day, dayIdx) => {
-                  const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
-                  const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
-                  const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
+      {isMovementCheckPhase ? (
+        <div className="animate-in fade-in slide-in-from-bottom-4">
+          <div className="text-center mb-10 mt-4">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-6">
+              <Lock className="h-8 w-8" />
+            </div>
+            <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">Movement Check Required</h1>
+            <p className="text-slate-600 mt-3 text-lg">Your coach needs to review your form before unlocking: <span className="font-semibold text-slate-900">{currentPhase.name}</span></p>
+            {currentPhase.goal && <p className="text-slate-500 mt-2">{currentPhase.goal} &middot; {currentPhase.durationWeeks} weeks</p>}
+          </div>
 
-                  return (
-                    <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-40'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                      <div className="p-3 text-sm font-medium text-slate-600 border-r border-slate-100 flex items-center gap-2">
-                        <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
-                        {day.slice(0, 3)}
-                      </div>
-                      {["AM", "PM"].map(slotVal => {
-                        const entries = slotVal === "AM" ? amEntries : pmEntries;
-                        return (
-                          <div key={slotVal} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
-                            {entries.map((entry: any, i: number) => {
-                              const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
-                              if (!session) return null;
-                              const completed = isEntryCompleted(entry, session);
-                              return (
-                                <Link key={i} href={buildSessionUrl(session.id, day, slotVal)}>
-                                  <Badge
-                                    variant="outline"
-                                    className={`cursor-pointer transition-colors text-xs font-medium ${
-                                      completed
-                                        ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                                    }`}
-                                    data-testid={`sched-session-${day}-${slotVal}-${i}`}
-                                  >
-                                    {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                                    {session.name}
-                                  </Badge>
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
+          <div className="space-y-4">
+            {movementChecks.map((mc: any, i: number) => (
+              <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
+                <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant="outline" className={
+                        mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
+                        mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
+                        'bg-slate-50 text-slate-700 border-slate-200'
+                      }>
+                        {mc.status || 'Not Submitted'}
+                      </Badge>
                     </div>
-                  );
-                })}
+                    <h3 className="text-xl font-bold text-slate-900">{mc.name}</h3>
+                    {mc.approvedNote && mc.status === 'Approved' && (
+                      <div className="mt-3 bg-green-50 border border-green-100 p-4 rounded-xl">
+                        <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">Coach's Note</p>
+                        <p className="text-slate-700">"{mc.approvedNote}"</p>
+                      </div>
+                    )}
+                    {mc.resubmitFeedback && mc.status === 'Needs Resubmission' && (
+                      <div className="mt-3 bg-red-50 border border-red-100 p-4 rounded-xl">
+                        <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Coach Feedback</p>
+                        <p className="text-slate-700 italic">"{mc.resubmitFeedback}"</p>
+                      </div>
+                    )}
+                    {mc.clientNote && mc.status === 'Pending' && (
+                      <p className="text-sm text-slate-500 mt-2 italic">Note: {mc.clientNote}</p>
+                    )}
+                  </div>
+                  
+                  <div className="w-full md:w-auto shrink-0">
+                    {mc.status === 'Approved' ? (
+                      <div className="flex items-center text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg border border-green-100">
+                        <CheckCircle2 className="mr-2 h-5 w-5" /> Approved
+                      </div>
+                    ) : mc.status === 'Pending' ? (
+                      <div className="flex items-center text-amber-600 font-medium bg-amber-50 px-4 py-2 rounded-lg border border-amber-100">
+                        <UploadCloud className="mr-2 h-5 w-5" /> Awaiting Review
+                      </div>
+                    ) : (
+                      <Button 
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6"
+                        onClick={() => handleOpenUpload(currentPhase.id, mc.exerciseId)}
+                        data-testid={`button-upload-video-${i}`}
+                      >
+                        <UploadCloud className="mr-2 h-5 w-5" /> {mc.status === 'Needs Resubmission' ? 'Re-upload Video' : 'Upload Video'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="bg-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
+              <div className="w-64 h-64 border-8 border-indigo-500 rounded-full blur-3xl mix-blend-screen" />
+            </div>
+            <div className="relative z-10">
+              <Badge className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-md mb-6 py-1.5 px-3" data-testid="badge-active-phase">
+                Active Phase &bull; Week {selectedWeek} / {currentPhase.durationWeeks}
+              </Badge>
+              <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4" data-testid="text-phase-name">{currentPhase.name}</h1>
+              <p className="text-slate-300 text-lg max-w-xl leading-relaxed">{currentPhase.goal}</p>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="h-6 w-6 text-indigo-600" />
+                Weekly Schedule
+              </h2>
+              {currentPhase.durationWeeks > 1 && (
+                <div className="flex bg-slate-100 rounded-lg p-1 gap-0.5">
+                  {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map(w => (
+                    <button
+                      key={w}
+                      onClick={() => setSelectedWeek(w)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedWeek === w ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
+                      data-testid={`button-week-${w}`}
+                    >
+                      W{w}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {hasGridSchedule ? (
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[500px]">
+                    <div className="grid grid-cols-[100px_1fr_1fr] border-b border-slate-200 bg-slate-50">
+                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
+                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
+                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
+                    </div>
+                    {WEEKDAYS.map((day, dayIdx) => {
+                      const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
+                      const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
+                      const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
+
+                      return (
+                        <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-40'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                          <div className="p-3 text-sm font-medium text-slate-600 border-r border-slate-100 flex items-center gap-2">
+                            <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
+                            {day.slice(0, 3)}
+                          </div>
+                          {["AM", "PM"].map(slotVal => {
+                            const entries = slotVal === "AM" ? amEntries : pmEntries;
+                            return (
+                              <div key={slotVal} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
+                                {entries.map((entry: any, i: number) => {
+                                  const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
+                                  if (!session) return null;
+                                  const completed = isEntryCompleted(entry, session);
+                                  return (
+                                    <Link key={i} href={buildSessionUrl(session.id, day, slotVal)}>
+                                      <Badge
+                                        variant="outline"
+                                        className={`cursor-pointer transition-colors text-xs font-medium ${
+                                          completed
+                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                            : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                        }`}
+                                        data-testid={`sched-session-${day}-${slotVal}-${i}`}
+                                      >
+                                        {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                        {session.name}
+                                      </Badge>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(() => {
+                  const displayItems = weekSchedule.length > 0
+                    ? weekSchedule.map((sched: any, i: number) => {
+                        const session = allSessions.find((s: any) => s.id === sched.sessionId);
+                        return { session, day: sched.day, slot: sched.slot || "AM", key: i };
+                      })
+                    : phaseSessions.map((session: any, i: number) => ({
+                        session,
+                        day: WEEKDAYS[i % 7],
+                        slot: "AM",
+                        key: i,
+                      }));
+
+                  return displayItems.map(({ session, day, slot: slotVal, key }: any) => {
+                    if (!session) return null;
+                    const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
+                    const isCompleted = completedInstances.includes(instanceKey);
+                    
+                    return (
+                      <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
+                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
+                          <CardContent className="p-0 h-full">
+                            <div className="flex items-stretch h-full">
+                              <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
+                              <div className="p-6 flex-1 flex justify-between items-center">
+                                <div>
+                                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
+                                  <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
+                                  <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks</p>
+                                </div>
+                                <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
+                                   {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Submit Movement Check</DialogTitle>
+            <DialogDescription>
+              Upload a video of your performance or provide a link (YouTube, Drive, etc.)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="video-file">Video File</Label>
+              <Input id="video-file" type="file" accept="video/*" className="cursor-pointer" />
+              <p className="text-[10px] text-slate-500 italic">Files are simulated in this prototype. Use the URL field below for direct links.</p>
+            </div>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-slate-500">Or use a URL</span>
               </div>
             </div>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(() => {
-              const displayItems = weekSchedule.length > 0
-                ? weekSchedule.map((sched: any, i: number) => {
-                    const session = allSessions.find((s: any) => s.id === sched.sessionId);
-                    return { session, day: sched.day, slot: sched.slot || "AM", key: i };
-                  })
-                : phaseSessions.map((session: any, i: number) => ({
-                    session,
-                    day: WEEKDAYS[i % 7],
-                    slot: "AM",
-                    key: i,
-                  }));
-
-              return displayItems.map(({ session, day, slot: slotVal, key }: any) => {
-                if (!session) return null;
-                const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
-                const isCompleted = completedInstances.includes(instanceKey);
-                
-                return (
-                  <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
-                    <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
-                      <CardContent className="p-0 h-full">
-                        <div className="flex items-stretch h-full">
-                          <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
-                          <div className="p-6 flex-1 flex justify-between items-center">
-                            <div>
-                              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
-                              <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
-                              <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks</p>
-                            </div>
-                            <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
-                               {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              });
-            })()}
+            <div className="grid gap-2">
+              <Label htmlFor="video-url">Video URL</Label>
+              <Input 
+                id="video-url" 
+                placeholder="https://youtube.com/..." 
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+                data-testid="input-video-url"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="note">Optional Note</Label>
+              <Textarea 
+                id="note" 
+                placeholder="Anything the coach should know?" 
+                value={clientNote}
+                onChange={(e) => setClientNote(e.target.value)}
+                data-testid="input-client-note"
+              />
+            </div>
           </div>
-        )}
-      </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsUploadOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitVideo}
+              className="bg-indigo-600 hover:bg-indigo-700"
+              disabled={isSubmitting}
+              data-testid="button-submit-video"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+              Submit for Review
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

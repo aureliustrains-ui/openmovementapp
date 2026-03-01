@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive, Zap } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -19,6 +19,27 @@ import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function isPhaseReadyToActivate(phase: any): boolean {
+  const checks = (phase.movementChecks as any[]) || [];
+  if (checks.length === 0) return true;
+  return checks.every((mc: any) => mc.status === 'Approved');
+}
+
+function getPhaseDisplayStatus(phase: any): string {
+  if (phase.status === 'Waiting for Movement Check' && isPhaseReadyToActivate(phase)) {
+    return 'Ready to Activate';
+  }
+  return phase.status;
+}
+
+function getStatusColor(displayStatus: string): string {
+  if (displayStatus === 'Active') return 'bg-green-100 text-green-700 border-green-200';
+  if (displayStatus === 'Ready to Activate') return 'bg-blue-100 text-blue-700 border-blue-200';
+  if (displayStatus === 'Waiting for Movement Check') return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (displayStatus === 'Draft') return 'bg-slate-100 text-slate-600 border-slate-200';
+  return 'bg-slate-100 text-slate-500 border-slate-200';
+}
 
 export default function AdminClientProfile() {
   const [, params] = useRoute("/app/admin/clients/:id");
@@ -48,6 +69,8 @@ export default function AdminClientProfile() {
   const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
   const [finishTargetPhase, setFinishTargetPhase] = useState<any>(null);
   const [finishing, setFinishing] = useState(false);
+  const [activateTargetPhase, setActivateTargetPhase] = useState<any>(null);
+  const [activating, setActivating] = useState(false);
   const [movementCheckPhaseId, setMovementCheckPhaseId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
@@ -133,12 +156,11 @@ export default function AdminClientProfile() {
       await updatePhase.mutateAsync({
         id: selectedPhaseId,
         movementChecks: updatedChecks,
-        ...(allApproved ? { status: 'Active' } : {}),
       });
 
       toast({
         title: "Check Approved",
-        description: allApproved ? "All checks approved — phase is now active!" : "Movement check approved.",
+        description: allApproved ? "All checks approved — phase is ready to activate!" : "Movement check approved.",
       });
       setIsApproveOpen(false);
     } catch (error) {
@@ -199,6 +221,37 @@ export default function AdminClientProfile() {
     }
   };
 
+  const handleActivatePhase = async () => {
+    if (activating || !activateTargetPhase) return;
+    setActivating(true);
+    try {
+      for (const ap of activePhases) {
+        await updatePhase.mutateAsync({
+          id: ap.id,
+          status: 'Completed',
+        });
+      }
+
+      await updatePhase.mutateAsync({
+        id: activateTargetPhase.id,
+        status: 'Active',
+      });
+
+      const finishedNames = activePhases.map((p: any) => `"${p.name}"`).join(', ');
+      toast({
+        title: "Phase Activated",
+        description: activePhases.length > 0
+          ? `"${activateTargetPhase.name}" is now active. ${finishedNames} moved to completed.`
+          : `"${activateTargetPhase.name}" is now active.`,
+      });
+      setActivateTargetPhase(null);
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to activate phase.", variant: "destructive" });
+    } finally {
+      setActivating(false);
+    }
+  };
+
   const handleFinishPhase = async () => {
     if (finishing || !finishTargetPhase) return;
     setFinishing(true);
@@ -234,11 +287,13 @@ export default function AdminClientProfile() {
     return allSessions.filter((s: any) => s.phaseId === phaseId).length;
   };
 
-  const renderPhaseCard = (phase: any, showFinish: boolean) => {
-    const statusColor = phase.status === 'Active' ? 'bg-green-100 text-green-700 border-green-200'
-      : phase.status === 'Waiting for Movement Check' ? 'bg-amber-100 text-amber-700 border-amber-200'
-      : phase.status === 'Draft' ? 'bg-slate-100 text-slate-600 border-slate-200'
-      : 'bg-slate-100 text-slate-500 border-slate-200';
+  const renderPhaseCard = (phase: any) => {
+    const displayStatus = getPhaseDisplayStatus(phase);
+    const statusColor = getStatusColor(displayStatus);
+    const ready = phase.status === 'Waiting for Movement Check' && isPhaseReadyToActivate(phase);
+    const pendingChecks = phase.status === 'Waiting for Movement Check' && !ready;
+    const checksInfo = (phase.movementChecks as any[]) || [];
+    const approvedCount = checksInfo.filter((mc: any) => mc.status === 'Approved').length;
 
     return (
       <Card key={phase.id} className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white" data-testid={`card-phase-${phase.id}`}>
@@ -246,18 +301,41 @@ export default function AdminClientProfile() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <Badge variant="outline" className={statusColor} data-testid={`badge-status-${phase.id}`}>
-                {phase.status}
+                {displayStatus}
               </Badge>
               <span className="text-sm font-medium text-slate-500">{phase.durationWeeks} weeks &middot; {getSessionCount(phase.id)} session(s)</span>
+              {pendingChecks && checksInfo.length > 0 && (
+                <span className="text-xs text-amber-600">{approvedCount}/{checksInfo.length} checks approved</span>
+              )}
             </div>
             <h3 className="text-2xl font-bold text-slate-900" data-testid={`text-phase-name-${phase.id}`}>{phase.name}</h3>
             {phase.goal && <p className="text-slate-600 mt-1">{phase.goal}</p>}
           </div>
-          <div className="flex items-start gap-2 shrink-0">
+          <div className="flex items-start gap-2 shrink-0 flex-wrap">
             <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
               <Button variant="outline" className="bg-white" data-testid={`button-edit-${phase.id}`}><Pencil className="mr-2 h-4 w-4" /> Edit</Button>
             </Link>
-            {showFinish && (phase.status === 'Active') && (
+            {ready && (
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => setActivateTargetPhase(phase)}
+                data-testid={`button-activate-${phase.id}`}
+              >
+                <Zap className="mr-2 h-4 w-4" /> Activate
+              </Button>
+            )}
+            {pendingChecks && (
+              <Button
+                variant="outline"
+                className="text-amber-600 border-amber-200 cursor-not-allowed opacity-60"
+                disabled
+                data-testid={`button-activate-disabled-${phase.id}`}
+                title="All movement checks must be approved before activating"
+              >
+                <Zap className="mr-2 h-4 w-4" /> Activate
+              </Button>
+            )}
+            {phase.status === 'Active' && (
               <Button
                 variant="outline"
                 className="text-slate-600 border-slate-200 hover:bg-slate-50"
@@ -391,16 +469,18 @@ export default function AdminClientProfile() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Active Phase{activePhases.length > 1 ? 's' : ''}</h3>
                 <div className="space-y-4">
-                  {activePhases.map((phase: any) => renderPhaseCard(phase, true))}
+                  {activePhases.map((phase: any) => renderPhaseCard(phase))}
                 </div>
               </div>
             )}
 
             {pendingPhases.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Waiting for Movement Check</h3>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  Pending Phases
+                </h3>
                 <div className="space-y-4">
-                  {pendingPhases.map((phase: any) => renderPhaseCard(phase, false))}
+                  {pendingPhases.map((phase: any) => renderPhaseCard(phase))}
                 </div>
               </div>
             )}
@@ -505,7 +585,7 @@ export default function AdminClientProfile() {
                       <SelectContent>
                         {phasesWithMovementChecks.map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.status})
+                            {p.name} ({getPhaseDisplayStatus(p)})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -513,7 +593,7 @@ export default function AdminClientProfile() {
                   )}
                 </div>
                 {selectedMovementPhase && (
-                  <p className="text-sm text-slate-500 mt-1">{selectedMovementPhase.name} — {selectedMovementPhase.status}</p>
+                  <p className="text-sm text-slate-500 mt-1">{selectedMovementPhase.name} — {getPhaseDisplayStatus(selectedMovementPhase)}</p>
                 )}
               </CardHeader>
               <CardContent className="p-0">
@@ -757,6 +837,34 @@ export default function AdminClientProfile() {
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Send Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activateTargetPhase !== null} onOpenChange={(open) => { if (!open) setActivateTargetPhase(null); }}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Activate Phase</DialogTitle>
+            <DialogDescription>
+              {activePhases.length > 0
+                ? `Activating "${activateTargetPhase?.name}" will finish the current active phase${activePhases.length > 1 ? 's' : ''} (${activePhases.map((p: any) => `"${p.name}"`).join(', ')}) and make this the client's new active phase.`
+                : `Activate "${activateTargetPhase?.name}"? The client will immediately see this phase.`
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActivateTargetPhase(null)} disabled={activating}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleActivatePhase}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={activating}
+              data-testid="button-confirm-activate"
+            >
+              {activating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Zap className="h-4 w-4 mr-2" />}
+              {activePhases.length > 0 ? 'Finish & Activate' : 'Activate'}
             </Button>
           </DialogFooter>
         </DialogContent>

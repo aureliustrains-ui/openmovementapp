@@ -33,7 +33,7 @@ const getAdminNavItems = () => [
 ];
 
 const getClientNavItems = () => [
-  { href: "/app/client/my-phase", label: "My Phase", icon: Dumbbell },
+  { href: "/app/client/my-phase", label: "My Phases", icon: Dumbbell },
   { href: "/app/client/chat", label: "Chat", icon: MessageCircle },
   { href: "/app/settings", label: "Settings", icon: Settings },
   { href: "/app/client/info", label: "Info", icon: Info },
