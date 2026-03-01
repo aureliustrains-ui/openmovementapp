@@ -290,25 +290,28 @@ export default function AdminPhaseBuilder() {
       </Card>
 
       {localSessions.map((session, sessionIdx) => (
-        <div key={session.id} className="mt-10 space-y-4">
-          <div className="flex items-center justify-between mb-2 gap-3">
+        <Card key={session.id} className="mt-6 border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid={`card-session-${sessionIdx}`}>
+          <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <Badge variant="secondary" className="bg-slate-900 text-white shrink-0">{sessionIdx + 1}</Badge>
+              <Badge variant="secondary" className="bg-indigo-600 text-white border-none shrink-0 text-xs">Session {sessionIdx + 1}</Badge>
               <Input
                 value={session.name}
                 onChange={(e) => updateLocalSession(sessionIdx, s => ({ ...s, name: e.target.value }))}
-                className="text-xl font-display font-bold text-slate-900 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-2 h-auto bg-transparent"
+                className="text-lg font-display font-bold text-white border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-400 px-2 h-auto bg-transparent placeholder:text-slate-400"
+                placeholder="Session name..."
                 data-testid={`input-session-name-${sessionIdx}`}
               />
             </div>
             <div className="flex gap-2 shrink-0">
               {localSessions.length > 1 && (
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-rose-600" onClick={() => removeSession(sessionIdx)} data-testid={`button-remove-session-${sessionIdx}`}>
+                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-rose-400 hover:bg-slate-800" onClick={() => removeSession(sessionIdx)} data-testid={`button-remove-session-${sessionIdx}`}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
             </div>
           </div>
+
+          <div className="p-6 space-y-4">
 
           {session.sections.map((section, sectionIdx) => (
             <div key={section.id} className="border-2 border-slate-200 rounded-2xl bg-slate-50/50 p-4 relative" data-testid={`section-${sessionIdx}-${sectionIdx}`}>
@@ -409,17 +412,17 @@ export default function AdminPhaseBuilder() {
           >
             <Plus className="mr-2 h-4 w-4" /> Add Section
           </Button>
-        </div>
+          </div>
+        </Card>
       ))}
 
       <div className="flex justify-center mt-8">
         <Button
-          variant="outline"
-          className="border-dashed bg-white shadow-sm rounded-full px-6"
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-8 py-6 text-base shadow-lg"
           onClick={addSession}
           data-testid="button-add-session"
         >
-          <Plus className="mr-2 h-4 w-4" /> Add Session
+          <Plus className="mr-2 h-5 w-5" /> Add Session
         </Button>
       </div>
 
