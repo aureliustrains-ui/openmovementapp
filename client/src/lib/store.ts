@@ -89,7 +89,7 @@ export const useDataStore = create<DataState>()(
       })),
     }),
     {
-      name: 'nexus-data-storage',
+      name: 'nexus-data-storage-v2',
     }
   )
 );
