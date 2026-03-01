@@ -22,6 +22,7 @@ export const phases = pgTable("phases", {
   status: text("status").notNull().default("Draft"),
   movementChecks: jsonb("movement_checks").notNull().default([]),
   schedule: jsonb("schedule").notNull().default([]),
+  completedScheduleInstances: jsonb("completed_schedule_instances").notNull().default([]),
 });
 
 export const sessions = pgTable("sessions", {

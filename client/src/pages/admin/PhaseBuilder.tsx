@@ -6,11 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy, Video } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 function generateId() {
   return crypto.randomUUID();
@@ -25,11 +27,12 @@ type Exercise = {
   sets: string;
   reps: string;
   load: string;
-  rpe: string;
   tempo: string;
-  rest: string;
   notes: string;
-  demoUrl?: string;
+  goal: string;
+  additionalInstructions: string;
+  demoUrl: string;
+  enableStructuredLogging: boolean;
 };
 
 type Section = {
@@ -55,7 +58,7 @@ type ScheduleEntry = {
 };
 
 function makeExercise(name = "New Exercise"): Exercise {
-  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", rpe: "8", tempo: "3010", rest: "90s", notes: "", demoUrl: "" };
+  return { id: generateId(), name, sets: "3", reps: "10", load: "Auto", tempo: "3010", notes: "", goal: "", additionalInstructions: "", demoUrl: "", enableStructuredLogging: false };
 }
 
 function makeSection(name = "New Section"): Section {
@@ -190,7 +193,22 @@ export default function AdminPhaseBuilder() {
         dbId: s.id,
         name: s.name,
         description: s.description || "",
-        sections: (s.sections as Section[]) || [],
+        sections: ((s.sections as any[]) || []).map((sec: any) => ({
+          ...sec,
+          exercises: (sec.exercises || []).map((ex: any) => ({
+            id: ex.id,
+            name: ex.name || "",
+            sets: ex.sets || "3",
+            reps: ex.reps || "10",
+            load: ex.load || "Auto",
+            tempo: ex.tempo || "3010",
+            notes: ex.notes || "",
+            goal: ex.goal || "",
+            additionalInstructions: ex.additionalInstructions || "",
+            demoUrl: ex.demoUrl || "",
+            enableStructuredLogging: ex.enableStructuredLogging || false,
+          })),
+        })),
       })));
     } else {
       setLocalSessions([makeSession("Session 1")]);
@@ -273,7 +291,7 @@ export default function AdminPhaseBuilder() {
     }));
   };
 
-  const updateExerciseField = (sessionIdx: number, sectionIdx: number, exerciseIdx: number, field: keyof Exercise, value: string) => {
+  const updateExerciseField = (sessionIdx: number, sectionIdx: number, exerciseIdx: number, field: keyof Exercise, value: any) => {
     updateLocalSession(sessionIdx, s => ({
       ...s,
       sections: s.sections.map((sec, si) =>
@@ -705,14 +723,12 @@ export default function AdminPhaseBuilder() {
                       </Button>
                     </div>
 
-                    <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-4">
                       {([
                         { key: "sets", label: "Sets" },
                         { key: "reps", label: "Reps" },
                         { key: "load", label: "Load" },
-                        { key: "rpe", label: "RPE / RIR" },
                         { key: "tempo", label: "Tempo" },
-                        { key: "rest", label: "Rest" },
                       ] as const).map(({ key, label }) => (
                         <div key={key} className="space-y-1.5">
                           <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{label}</Label>
@@ -727,10 +743,30 @@ export default function AdminPhaseBuilder() {
                     </div>
 
                     <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 space-y-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Goal</Label>
+                        <Input
+                          value={ex.goal}
+                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "goal", e.target.value)}
+                          placeholder="e.g. Hit 3x10 at RPE 7, increase load by 2.5kg next week"
+                          className="h-8 text-sm bg-white border-slate-200 text-slate-600"
+                          data-testid={`input-goal-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Additional Instructions</Label>
+                        <Textarea
+                          value={ex.additionalInstructions}
+                          onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "additionalInstructions", e.target.value)}
+                          placeholder="Cues, form tips, modifications..."
+                          className="min-h-[60px] text-sm bg-white border-slate-200 text-slate-600 resize-none"
+                          data-testid={`input-instructions-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                        />
+                      </div>
                       <Input
                         value={ex.notes}
                         onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "notes", e.target.value)}
-                        placeholder="Add coaching notes or cues..."
+                        placeholder="Coaching notes..."
                         className="h-8 text-sm bg-white border-slate-200 text-slate-600"
                         data-testid={`input-notes-${sessionIdx}-${sectionIdx}-${exIdx}`}
                       />
@@ -742,6 +778,14 @@ export default function AdminPhaseBuilder() {
                           placeholder="Demo video URL (YouTube, Vimeo, etc.)"
                           className="h-8 text-sm bg-white border-slate-200 text-slate-600"
                           data-testid={`input-demo-url-${sessionIdx}-${sectionIdx}-${exIdx}`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                        <Label className="text-xs text-slate-500">Enable structured set logging for client</Label>
+                        <Switch
+                          checked={ex.enableStructuredLogging}
+                          onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "enableStructuredLogging", checked)}
+                          data-testid={`switch-structured-logging-${sessionIdx}-${sectionIdx}-${exIdx}`}
                         />
                       </div>
                     </div>

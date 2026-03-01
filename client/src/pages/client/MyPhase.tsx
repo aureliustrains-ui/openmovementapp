@@ -5,7 +5,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, AlertCircle, PlayCircle, CalendarDays } from "lucide-react";
+import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -231,6 +231,16 @@ export default function ClientMyPhase() {
   const schedule = (activePhase.schedule as any[]) || [];
   const weekSchedule = schedule.filter((s: any) => s.week === selectedWeek);
   const hasGridSchedule = schedule.some((s: any) => s.slot);
+  const completedInstances: string[] = (activePhase.completedScheduleInstances as string[]) || [];
+
+  const isEntryCompleted = (entry: any, session: any) => {
+    const key = `w${selectedWeek}_${entry.day}_${entry.slot || "AM"}_${session.id}`;
+    return completedInstances.includes(key);
+  };
+
+  const buildSessionUrl = (sessionId: string, day: string, slotVal: string) => {
+    return `/app/client/session/${sessionId}?week=${selectedWeek}&day=${encodeURIComponent(day)}&slot=${encodeURIComponent(slotVal)}`;
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
@@ -289,26 +299,26 @@ export default function ClientMyPhase() {
                         <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
                         {day.slice(0, 3)}
                       </div>
-                      {["AM", "PM"].map(slot => {
-                        const entries = slot === "AM" ? amEntries : pmEntries;
+                      {["AM", "PM"].map(slotVal => {
+                        const entries = slotVal === "AM" ? amEntries : pmEntries;
                         return (
-                          <div key={slot} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
+                          <div key={slotVal} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
                             {entries.map((entry: any, i: number) => {
                               const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
                               if (!session) return null;
-                              const isCompleted = (session?.completedInstances as any[])?.includes(`w${selectedWeek}_${session?.id}`);
+                              const completed = isEntryCompleted(entry, session);
                               return (
-                                <Link key={i} href={`/app/client/session/${session.id}`}>
+                                <Link key={i} href={buildSessionUrl(session.id, day, slotVal)}>
                                   <Badge
                                     variant="outline"
                                     className={`cursor-pointer transition-colors text-xs font-medium ${
-                                      isCompleted
+                                      completed
                                         ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
                                         : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
                                     }`}
-                                    data-testid={`sched-session-${day}-${slot}-${i}`}
+                                    data-testid={`sched-session-${day}-${slotVal}-${i}`}
                                   >
-                                    {isCompleted && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                    {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
                                     {session.name}
                                   </Badge>
                                 </Link>
@@ -329,20 +339,22 @@ export default function ClientMyPhase() {
               const displayItems = weekSchedule.length > 0
                 ? weekSchedule.map((sched: any, i: number) => {
                     const session = allSessions.find((s: any) => s.id === sched.sessionId);
-                    return { session, day: sched.day, key: i };
+                    return { session, day: sched.day, slot: sched.slot || "AM", key: i };
                   })
                 : phaseSessions.map((session: any, i: number) => ({
                     session,
                     day: WEEKDAYS[i % 7],
+                    slot: "AM",
                     key: i,
                   }));
 
-              return displayItems.map(({ session, day, key }: any) => {
+              return displayItems.map(({ session, day, slot: slotVal, key }: any) => {
                 if (!session) return null;
-                const isCompleted = (session?.completedInstances as any[])?.includes(`w${selectedWeek}_` + session?.id);
+                const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
+                const isCompleted = completedInstances.includes(instanceKey);
                 
                 return (
-                  <Link key={key} href={`/app/client/session/${session?.id}`}>
+                  <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
                     <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
                       <CardContent className="p-0 h-full">
                         <div className="flex items-stretch h-full">
@@ -351,7 +363,7 @@ export default function ClientMyPhase() {
                             <div>
                               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
                               <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
-                              <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks &bull; {session?.description}</p>
+                              <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks</p>
                             </div>
                             <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
                                {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
