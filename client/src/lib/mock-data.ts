@@ -1,71 +1,150 @@
-// Mock data for the SaaS template
+// Mock data for the structured Training Plan domain
 
 export const currentUser = {
-  id: 'u1',
-  name: 'Alex Developer',
-  email: 'alex@example.com',
-  role: 'Admin',
-  avatar: 'https://i.pravatar.cc/150?u=alex',
+  id: 'admin_1',
+  name: 'Head Coach',
+  email: 'coach@example.com',
+  role: 'Admin', // Change to 'Client' to view client side
+  avatar: 'https://i.pravatar.cc/150?u=coach',
 };
 
-export const currentWorkspace = {
-  id: 'w1',
-  name: 'Acme Corp',
-  logo: 'https://ui-avatars.com/api/?name=Acme+Corp&background=0D8ABC&color=fff',
-  plan: 'Pro',
-};
-
-export const projectsData = [
-  { id: 'p1', name: 'Website Redesign', status: 'In Progress', dueDate: '2026-03-15', assignee: 'Alex Developer' },
-  { id: 'p2', name: 'Q1 Marketing Campaign', status: 'Planning', dueDate: '2026-04-01', assignee: 'Sam Smith' },
-  { id: 'p3', name: 'API V2 Release', status: 'Completed', dueDate: '2026-02-20', assignee: 'Taylor Jones' },
-];
-
-export const tasksData = [
-  { id: 't1', projectId: 'p1', title: 'Design system updates', status: 'Done' },
-  { id: 't2', projectId: 'p1', title: 'Implement new landing page', status: 'In Progress' },
-  { id: 't3', projectId: 'p2', title: 'Draft email copy', status: 'Todo' },
-];
-
-export const messagesData = [
-  { id: 'm1', channel: 'general', sender: 'Sam Smith', content: 'Hey team, welcome to the new workspace!', time: '10:00 AM' },
-  { id: 'm2', channel: 'general', sender: 'Alex Developer', content: 'Thanks Sam, looks great!', time: '10:05 AM' },
-  { id: 'm3', channel: 'design', sender: 'Taylor Jones', content: 'I uploaded the new assets to the files section.', time: '11:30 AM' },
-];
-
-export const calendarData = [
-  { id: 'e1', title: 'Team Sync', date: new Date().toISOString().split('T')[0], time: '10:00 AM', participants: ['Alex', 'Sam', 'Taylor'] },
-  { id: 'e2', title: 'Product Review', date: new Date(Date.now() + 86400000).toISOString().split('T')[0], time: '2:00 PM', participants: ['Alex', 'Sam'] },
-];
-
-export const filesData = [
-  { id: 'f1', name: 'Q1_Report.pdf', size: '2.4 MB', type: 'pdf', uploadedBy: 'Sam Smith', date: '2026-02-25' },
-  { id: 'f2', name: 'Design_Assets.zip', size: '15 MB', type: 'zip', uploadedBy: 'Taylor Jones', date: '2026-02-26' },
-  { id: 'f3', name: 'Client_List.csv', size: '120 KB', type: 'csv', uploadedBy: 'Alex Developer', date: '2026-02-28' },
-];
-
+// Users
 export const usersData = [
-  { id: 'u1', name: 'Alex Developer', email: 'alex@example.com', role: 'Admin', status: 'Active' },
-  { id: 'u2', name: 'Sam Smith', email: 'sam@acme.com', role: 'Client', status: 'Active' },
-  { id: 'u3', name: 'Taylor Jones', email: 'taylor@acme.com', role: 'Client', status: 'Invited' },
+  { id: 'admin_1', name: 'Head Coach', email: 'coach@example.com', role: 'Admin', status: 'Active', avatar: 'https://i.pravatar.cc/150?u=coach' },
+  { id: 'client_1', name: 'Sarah Connor', email: 'sarah@example.com', role: 'Client', status: 'Active', avatar: 'https://i.pravatar.cc/150?u=sarah' },
+  { id: 'client_2', name: 'John Smith', email: 'john@example.com', role: 'Client', status: 'Active', avatar: 'https://i.pravatar.cc/150?u=john' },
 ];
 
-export const trainingPlansData = [
-  { id: 'tp1', clientId: 'u2', goal: 'Strength & Hypertrophy', startDate: '2026-03-01', durationWeeks: 4, status: 'Active' },
-  { id: 'tp2', clientId: 'u3', goal: 'Endurance', startDate: '2026-02-15', durationWeeks: 8, status: 'Active' }
+// Reusable Templates
+export const exerciseTemplates = [
+  { id: 'ex_t_1', name: 'Barbell Back Squat', targetMuscle: 'Quads', demoUrl: 'https://example.com/squat.mp4' },
+  { id: 'ex_t_2', name: 'Dumbbell Romanian Deadlift', targetMuscle: 'Hamstrings', demoUrl: 'https://example.com/rdl.mp4' },
+  { id: 'ex_t_3', name: 'Pull-up', targetMuscle: 'Lats', demoUrl: 'https://example.com/pullup.mp4' },
+  { id: 'ex_t_4', name: 'Push-up', targetMuscle: 'Chest', demoUrl: 'https://example.com/pushup.mp4' },
 ];
 
-export const trainingSessionsData = [
-  { id: 'ts1', planId: 'tp1', week: 1, day: 'Monday', name: 'Upper Body Power', completed: true },
-  { id: 'ts2', planId: 'tp1', week: 1, day: 'Wednesday', name: 'Lower Body Power', completed: false },
-  { id: 'ts3', planId: 'tp1', week: 1, day: 'Friday', name: 'Full Body Hypertrophy', completed: false },
-  { id: 'ts4', planId: 'tp2', week: 1, day: 'Tuesday', name: 'Long Run', completed: true },
-  { id: 'ts5', planId: 'tp2', week: 1, day: 'Thursday', name: 'Intervals', completed: false }
+// Complex Entity: Phase
+export const phasesData = [
+  {
+    id: 'ph_1',
+    clientId: 'client_1',
+    name: 'Hypertrophy Block 1',
+    goal: 'Build base muscle mass',
+    startDate: '2026-03-01',
+    durationWeeks: 4,
+    status: 'Waiting for Movement Check', // Draft | Waiting for Movement Check | Active | Completed
+    movementChecks: [
+      { exerciseId: 'ex_1', name: 'Barbell Back Squat', status: 'Pending', videoUrl: null, feedback: null },
+      { exerciseId: 'ex_2', name: 'Dumbbell Romanian Deadlift', status: 'Approved', videoUrl: 'https://example.com/vid1.mp4', feedback: 'Good hinge, keep lats tight.' }
+    ],
+    schedule: [
+      { week: 1, day: 'Monday', sessionId: 'sess_1' },
+      { week: 1, day: 'Wednesday', sessionId: 'sess_2' },
+      { week: 2, day: 'Monday', sessionId: 'sess_1' },
+      { week: 2, day: 'Wednesday', sessionId: 'sess_2' }
+    ]
+  },
+  {
+    id: 'ph_2',
+    clientId: 'client_2',
+    name: 'Strength Prep',
+    goal: 'Neurological adaptation for heavy loads',
+    startDate: '2026-02-15',
+    durationWeeks: 6,
+    status: 'Active',
+    movementChecks: [],
+    schedule: [
+      { week: 1, day: 'Tuesday', sessionId: 'sess_3' },
+      { week: 1, day: 'Thursday', sessionId: 'sess_4' }
+    ]
+  }
 ];
 
-export const exercisesData = [
-  { id: 'ex1', sessionId: 'ts1', name: 'Bench Press', sets: 4, reps: '5', load: '185 lbs', rpe: '8' },
-  { id: 'ex2', sessionId: 'ts1', name: 'Barbell Row', sets: 4, reps: '6-8', load: '135 lbs', rpe: '7' },
-  { id: 'ex3', sessionId: 'ts2', name: 'Squat', sets: 4, reps: '5', load: '225 lbs', rpe: '8' },
-  { id: 'ex4', sessionId: 'ts2', name: 'Deadlift', sets: 3, reps: '5', load: '275 lbs', rpe: '8.5' },
+// Sessions within phases
+export const sessionsData = [
+  {
+    id: 'sess_1',
+    phaseId: 'ph_1',
+    name: 'Lower Body Primary',
+    description: 'Focus on quad and glute development',
+    completedInstances: [], // e.g., ['w1_sess_1']
+    sections: [
+      {
+        id: 'sec_1',
+        name: 'A. Primary Movement',
+        order: 1,
+        exercises: [
+          { id: 'ex_1', templateId: 'ex_t_1', name: 'Barbell Back Squat', sets: 4, reps: '8-10', load: 'Auto', tempo: '3010', rest: '120s', rpe: '7-8', notes: 'Deep range of motion' }
+        ]
+      },
+      {
+        id: 'sec_2',
+        name: 'B. Secondary Posterior',
+        order: 2,
+        exercises: [
+          { id: 'ex_2', templateId: 'ex_t_2', name: 'Dumbbell Romanian Deadlift', sets: 3, reps: '10-12', load: 'Auto', tempo: '3010', rest: '90s', rpe: '8', notes: 'Slight knee bend' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'sess_2',
+    phaseId: 'ph_1',
+    name: 'Upper Body Primary',
+    description: 'Back and chest focus',
+    completedInstances: [],
+    sections: [
+      {
+        id: 'sec_3',
+        name: 'A. Vertical Pull',
+        order: 1,
+        exercises: [
+          { id: 'ex_3', templateId: 'ex_t_3', name: 'Pull-up', sets: 4, reps: 'AMRAP', load: 'Bodyweight', tempo: '2010', rest: '90s', rpe: '9', notes: 'Full extension at bottom' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'sess_3',
+    phaseId: 'ph_2',
+    name: 'Heavy Lower',
+    description: 'Strength focus',
+    completedInstances: ['w1_sess_3'], // Example completion
+    sections: [
+      {
+        id: 'sec_4',
+        name: 'A. Squat Pattern',
+        order: 1,
+        exercises: [
+          { id: 'ex_4', templateId: 'ex_t_1', name: 'Barbell Back Squat', sets: 5, reps: '5', load: '85% 1RM', tempo: '2010', rest: '180s', rpe: '8', notes: '' }
+        ]
+      }
+    ]
+  }
+];
+
+// Client Logs (attached to specific scheduled instances)
+export const clientLogsData = [
+  {
+    id: 'log_1',
+    clientId: 'client_2',
+    phaseId: 'ph_2',
+    instanceId: 'w1_sess_3', // e.g., week 1, session 3
+    exerciseId: 'ex_4',
+    date: '2026-02-17',
+    sets: [
+      { setNumber: 1, weight: 225, reps: 5, rpe: 7.5 },
+      { setNumber: 2, weight: 235, reps: 5, rpe: 8 },
+      { setNumber: 3, weight: 245, reps: 5, rpe: 8.5 },
+      { setNumber: 4, weight: 245, reps: 5, rpe: 9 },
+      { setNumber: 5, weight: 245, reps: 4, rpe: 10 }
+    ],
+    clientNotes: 'Felt heavy today, missed last rep on set 5.'
+  }
+];
+
+// Chat Data
+export const chatsData = [
+  { id: 'msg_1', clientId: 'client_1', sender: 'Head Coach', text: 'Hey Sarah, your new phase is in draft. Waiting on that squat video.', time: '2026-02-28 10:00', isClient: false },
+  { id: 'msg_2', clientId: 'client_1', sender: 'Sarah Connor', text: 'Will upload it tomorrow during my session!', time: '2026-02-28 14:30', isClient: true },
 ];

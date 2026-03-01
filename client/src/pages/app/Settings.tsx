@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { currentUser, currentWorkspace } from "@/lib/mock-data";
+import { currentUser } from "@/lib/mock-data";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -63,7 +63,7 @@ export default function Settings() {
               <CardContent className="space-y-6">
                 <div className="space-y-2 max-w-md">
                   <Label htmlFor="ws-name">Workspace Name</Label>
-                  <Input id="ws-name" defaultValue={currentWorkspace.name} />
+                  <Input id="ws-name" defaultValue="Nexus Training" />
                 </div>
                 <div className="space-y-2 max-w-md">
                   <Label htmlFor="ws-url">Workspace URL</Label>
