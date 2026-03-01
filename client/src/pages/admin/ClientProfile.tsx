@@ -7,20 +7,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2 } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminClientProfile() {
   const [, params] = useRoute("/app/admin/clients/:id");
   const [, setLocation] = useLocation();
   const clientId = params?.id;
+  const { toast } = useToast();
   
   const { data: allUsers = [] } = useQuery(usersQuery);
   const { data: allPhases = [] } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { impersonate } = useAuth();
   const updatePhase = useUpdatePhase();
+
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
@@ -33,22 +44,79 @@ export default function AdminClientProfile() {
     </div>
   );
 
-  const handleApproveMovementCheck = (phaseId: string, exerciseId: string, videoUrl: string) => {
+  const handleApproveMovementCheck = async (phaseId: string, exerciseId: string) => {
     const phase = allPhases.find((p: any) => p.id === phaseId);
     if (!phase) return;
     
-    const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
-      if (mc.exerciseId !== exerciseId) return mc;
-      return { ...mc, status: 'Approved', videoUrl, feedback: 'Looking great, ready to go!' };
-    });
+    setIsSubmitting(true);
+    try {
+      const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
+        if (mc.exerciseId !== exerciseId) return mc;
+        return { ...mc, status: 'Approved', feedback: 'Looking great, ready to go!' };
+      });
 
-    const allApproved = updatedChecks.every((mc: any) => mc.status === 'Approved');
+      const allApproved = updatedChecks.every((mc: any) => mc.status === 'Approved');
+      
+      await updatePhase.mutateAsync({
+        id: phaseId,
+        movementChecks: updatedChecks,
+        ...(allApproved ? { status: 'Active' } : {}),
+      });
+
+      toast({
+        title: "Check Approved",
+        description: allApproved ? "Phase is now active!" : "Movement check approved.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to approve movement check.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenReject = (phaseId: string, exerciseId: string) => {
+    setSelectedPhaseId(phaseId);
+    setSelectedExerciseId(exerciseId);
+    setFeedback("");
+    setIsRejectOpen(true);
+  };
+
+  const handleRejectMovementCheck = async () => {
+    if (!selectedPhaseId || !selectedExerciseId) return;
     
-    updatePhase.mutate({
-      id: phaseId,
-      movementChecks: updatedChecks,
-      ...(allApproved ? { status: 'Active' } : {}),
-    });
+    const phase = allPhases.find((p: any) => p.id === selectedPhaseId);
+    if (!phase) return;
+
+    setIsSubmitting(true);
+    try {
+      const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
+        if (mc.exerciseId !== selectedExerciseId) return mc;
+        return { ...mc, status: 'Needs Resubmission', feedback: feedback };
+      });
+
+      await updatePhase.mutateAsync({
+        id: selectedPhaseId,
+        movementChecks: updatedChecks,
+      });
+
+      toast({
+        title: "Feedback Sent",
+        description: "Client has been notified to re-upload.",
+      });
+      setIsRejectOpen(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to send feedback.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -194,31 +262,64 @@ export default function AdminClientProfile() {
                           <div className="flex items-center gap-3 mb-2">
                             <Badge variant="outline" className={
                               mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
-                              mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-700'
+                              mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
+                              mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
+                              'bg-slate-100 text-slate-700'
                             }>
-                              {mc.status}
+                              {mc.status || 'Not Submitted'}
                             </Badge>
+                            {mc.submittedAt && (
+                              <span className="text-xs text-slate-500 flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                {new Date(mc.submittedAt).toLocaleDateString()}
+                              </span>
+                            )}
                           </div>
                           <h4 className="font-semibold text-lg text-slate-900">{mc.name}</h4>
-                          {mc.feedback && <p className="text-sm text-slate-600 mt-2 bg-slate-100 p-3 rounded-lg border border-slate-200">"{mc.feedback}"</p>}
+                          {mc.clientNote && (
+                            <div className="mt-2 text-sm bg-blue-50 text-blue-800 p-2 rounded-lg border border-blue-100">
+                              <span className="font-bold">Client Note:</span> {mc.clientNote}
+                            </div>
+                          )}
+                          {mc.feedback && (
+                            <p className="text-sm text-slate-600 mt-2 bg-slate-100 p-3 rounded-lg border border-slate-200 italic">
+                              "{mc.feedback}"
+                            </p>
+                          )}
                         </div>
                         
                         <div className="shrink-0 flex items-center gap-3">
                           {mc.videoUrl ? (
-                            <Button variant="outline" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200" data-testid={`button-watch-video-${i}`}>
-                              <PlayCircle className="mr-2 h-4 w-4" /> Watch Video
-                            </Button>
+                            <a href={mc.videoUrl} target="_blank" rel="noopener noreferrer">
+                              <Button variant="outline" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200" data-testid={`button-watch-video-${i}`}>
+                                <PlayCircle className="mr-2 h-4 w-4" /> Watch Video <ExternalLink className="ml-2 h-3 w-3" />
+                              </Button>
+                            </a>
                           ) : (
                             <div className="text-sm text-slate-400 italic">No video submitted</div>
                           )}
-                          {mc.status === 'Pending' && mc.videoUrl && (
-                            <Button 
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => handleApproveMovementCheck(activePhase.id, mc.exerciseId, mc.videoUrl)}
-                              data-testid={`button-approve-${i}`}
-                            >
-                              Review & Approve
-                            </Button>
+                          
+                          {mc.status === 'Pending' && (
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="outline"
+                                className="border-red-200 text-red-700 hover:bg-red-50"
+                                onClick={() => handleOpenReject(activePhase.id, mc.exerciseId)}
+                                data-testid={`button-reject-${i}`}
+                                disabled={isSubmitting}
+                              >
+                                <XCircle className="mr-2 h-4 w-4" /> Request Resubmission
+                              </Button>
+                              <Button 
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => handleApproveMovementCheck(activePhase.id, mc.exerciseId)}
+                                data-testid={`button-approve-${i}`}
+                                disabled={isSubmitting}
+                              >
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                Approve
+                              </Button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -243,6 +344,47 @@ export default function AdminClientProfile() {
           </TabsContent>
         </div>
       </Tabs>
+
+      <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request Resubmission</DialogTitle>
+            <DialogDescription>
+              Provide feedback to the client on why this video needs to be re-recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="feedback">Feedback</Label>
+              <Textarea 
+                id="feedback" 
+                placeholder="e.g. Your camera angle makes it hard to see your depth. Please record from the side." 
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                data-testid="input-reject-feedback"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsRejectOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleRejectMovementCheck}
+              variant="destructive"
+              disabled={isSubmitting || !feedback}
+              data-testid="button-confirm-reject"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Send Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

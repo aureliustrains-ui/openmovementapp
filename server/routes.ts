@@ -83,6 +83,24 @@ export async function registerRoutes(
     res.status(201).json(template);
   });
 
+  app.patch("/api/exercise-templates/:id", async (req, res) => {
+    const template = await storage.updateExerciseTemplate(req.params.id, req.body);
+    if (!template) return res.status(404).json({ message: "Template not found" });
+    res.json(template);
+  });
+
+  app.delete("/api/exercise-templates/:id", async (req, res) => {
+    const deleted = await storage.deleteExerciseTemplate(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Template not found" });
+    res.json({ success: true });
+  });
+
+  app.delete("/api/sessions/:id", async (req, res) => {
+    const deleted = await storage.deleteSession(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Session not found" });
+    res.json({ success: true });
+  });
+
   app.get("/api/workout-logs", async (req, res) => {
     const clientId = req.query.clientId as string | undefined;
     const result = clientId

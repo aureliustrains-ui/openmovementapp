@@ -128,3 +128,27 @@ export function useCreateExerciseTemplate() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["exerciseTemplates"] }); },
   });
 }
+
+export function useUpdateExerciseTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: any) => fetchApi(`/api/exercise-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exerciseTemplates"] }); },
+  });
+}
+
+export function useDeleteExerciseTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/exercise-templates/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["exerciseTemplates"] }); },
+  });
+}
+
+export function useDeleteSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/sessions/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sessions"] }); },
+  });
+}

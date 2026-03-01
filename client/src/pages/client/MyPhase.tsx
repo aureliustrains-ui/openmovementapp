@@ -5,31 +5,74 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2 } from "lucide-react";
+import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, AlertCircle, PlayCircle } from "lucide-react";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ClientMyPhase() {
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { user } = useAuth();
   const updatePhase = useUpdatePhase();
+  const { toast } = useToast();
   
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [clientNote, setClientNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   if (!user) return null;
 
   const activePhase = allPhases.find((p: any) => p.clientId === user.id && p.status === 'Active');
   const pendingPhase = allPhases.find((p: any) => p.clientId === user.id && p.status === 'Waiting for Movement Check');
 
-  const handleUploadVideo = (exerciseId: string) => {
-    if (!pendingPhase) return;
-    
-    const updatedChecks = (pendingPhase.movementChecks as any[]).map((mc: any) => {
-      if (mc.exerciseId !== exerciseId) return mc;
-      return { ...mc, status: 'Pending', videoUrl: 'https://example.com/demo.mp4' };
-    });
+  const handleOpenUpload = (exerciseId: string) => {
+    setSelectedExerciseId(exerciseId);
+    setVideoUrl("");
+    setClientNote("");
+    setIsUploadOpen(true);
+  };
 
-    updatePhase.mutate({
-      id: pendingPhase.id,
-      movementChecks: updatedChecks,
-    });
+  const handleSubmitVideo = async () => {
+    if (!pendingPhase || !selectedExerciseId) return;
+    
+    setIsSubmitting(true);
+    try {
+      const updatedChecks = (pendingPhase.movementChecks as any[]).map((mc: any) => {
+        if (mc.exerciseId !== selectedExerciseId) return mc;
+        return { 
+          ...mc, 
+          status: 'Pending', 
+          videoUrl: videoUrl || 'https://example.com/demo.mp4',
+          submittedAt: new Date().toISOString(),
+          clientNote: clientNote
+        };
+      });
+
+      await updatePhase.mutateAsync({
+        id: pendingPhase.id,
+        movementChecks: updatedChecks,
+      });
+
+      toast({
+        title: "Video Submitted",
+        description: "Your coach will review your movement shortly.",
+      });
+      setIsUploadOpen(false);
+    } catch (error) {
+      toast({
+        title: "Submission Failed",
+        description: "There was an error submitting your video.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loadingPhases) {
@@ -55,21 +98,26 @@ export default function ClientMyPhase() {
           {(pendingPhase.movementChecks as any[]).map((mc: any, i: number) => (
             <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
               <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <Badge variant="outline" className={
                       mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
-                      'bg-amber-50 text-amber-700 border-amber-200'
+                      mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                      mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
+                      'bg-slate-50 text-slate-700 border-slate-200'
                     }>
-                      {mc.status}
+                      {mc.status || 'Not Submitted'}
                     </Badge>
                   </div>
                   <h3 className="text-xl font-bold text-slate-900">{mc.name}</h3>
                   {mc.feedback && (
-                    <div className="mt-3 bg-slate-50 border border-slate-100 p-4 rounded-xl">
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Coach Feedback</p>
+                    <div className="mt-3 bg-red-50 border border-red-100 p-4 rounded-xl">
+                      <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Coach Feedback</p>
                       <p className="text-slate-700 italic">"{mc.feedback}"</p>
                     </div>
+                  )}
+                  {mc.clientNote && mc.status === 'Pending' && (
+                    <p className="text-sm text-slate-500 mt-2 italic">Note: {mc.clientNote}</p>
                   )}
                 </div>
                 
@@ -80,15 +128,15 @@ export default function ClientMyPhase() {
                     </div>
                   ) : mc.status === 'Pending' ? (
                     <div className="flex items-center text-amber-600 font-medium bg-amber-50 px-4 py-2 rounded-lg border border-amber-100">
-                      <UploadCloud className="mr-2 h-5 w-5" /> Submitted
+                      <UploadCloud className="mr-2 h-5 w-5" /> Awaiting Review
                     </div>
                   ) : (
                     <Button 
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6"
-                      onClick={() => handleUploadVideo(mc.exerciseId)}
+                      onClick={() => handleOpenUpload(mc.exerciseId)}
                       data-testid={`button-upload-video-${i}`}
                     >
-                      <UploadCloud className="mr-2 h-5 w-5" /> Upload Video
+                      <UploadCloud className="mr-2 h-5 w-5" /> {mc.status === 'Needs Resubmission' ? 'Re-upload Video' : 'Upload Video'}
                     </Button>
                   )}
                 </div>
@@ -96,6 +144,70 @@ export default function ClientMyPhase() {
             </Card>
           ))}
         </div>
+
+        <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Submit Movement Check</DialogTitle>
+              <DialogDescription>
+                Upload a video of your performance or provide a link (YouTube, Drive, etc.)
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="video-file">Video File</Label>
+                <Input id="video-file" type="file" accept="video/*" className="cursor-pointer" />
+                <p className="text-[10px] text-slate-500 italic">Files are simulated in this prototype. Use the URL field below for direct links.</p>
+              </div>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-slate-500">Or use a URL</span>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="video-url">Video URL</Label>
+                <Input 
+                  id="video-url" 
+                  placeholder="https://youtube.com/..." 
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  data-testid="input-video-url"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="note">Optional Note</Label>
+                <Textarea 
+                  id="note" 
+                  placeholder="Anything the coach should know?" 
+                  value={clientNote}
+                  onChange={(e) => setClientNote(e.target.value)}
+                  data-testid="input-client-note"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsUploadOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSubmitVideo}
+                className="bg-indigo-600 hover:bg-indigo-700"
+                disabled={isSubmitting}
+                data-testid="button-submit-video"
+              >
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+                Submit for Review
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

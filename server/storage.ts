@@ -30,6 +30,9 @@ export interface IStorage {
 
   getExerciseTemplates(): Promise<ExerciseTemplate[]>;
   createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate>;
+  updateExerciseTemplate(id: string, data: Partial<InsertExerciseTemplate>): Promise<ExerciseTemplate | undefined>;
+  deleteExerciseTemplate(id: string): Promise<boolean>;
+  deleteSession(id: string): Promise<boolean>;
 
   getWorkoutLogs(): Promise<WorkoutLog[]>;
   getLogsByClient(clientId: string): Promise<WorkoutLog[]>;
@@ -113,6 +116,21 @@ export class DatabaseStorage implements IStorage {
   async createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate> {
     const [created] = await db.insert(exerciseTemplates).values(template).returning();
     return created;
+  }
+
+  async updateExerciseTemplate(id: string, data: Partial<InsertExerciseTemplate>): Promise<ExerciseTemplate | undefined> {
+    const [updated] = await db.update(exerciseTemplates).set(data).where(eq(exerciseTemplates.id, id)).returning();
+    return updated;
+  }
+
+  async deleteExerciseTemplate(id: string): Promise<boolean> {
+    const result = await db.delete(exerciseTemplates).where(eq(exerciseTemplates.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteSession(id: string): Promise<boolean> {
+    const result = await db.delete(sessions).where(eq(sessions.id, id)).returning();
+    return result.length > 0;
   }
 
   async getWorkoutLogs(): Promise<WorkoutLog[]> {

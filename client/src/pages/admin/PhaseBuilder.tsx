@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { phasesQuery, sessionsQuery, exerciseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession } from "@/lib/api";
+import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2 } from "lucide-react";
+import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -62,15 +62,15 @@ export default function AdminPhaseBuilder() {
   const isNew = params?.phaseId === 'new';
 
   const { data: allPhases = [] } = useQuery(phasesQuery);
-  const { data: allSessions = [] } = useQuery(sessionsQuery);
+  const { data: phaseSessions = [] } = useQuery(sessionsByPhaseQuery(params?.phaseId || ''));
   const { data: templates = [] } = useQuery(exerciseTemplatesQuery);
   const updatePhase = useUpdatePhase();
   const createPhase = useCreatePhase();
   const createSession = useCreateSession();
   const updateSession = useUpdateSession();
+  const deleteSession = useDeleteSession();
 
   const existingPhase = allPhases.find((p: any) => p.id === params?.phaseId);
-  const phaseSessions = allSessions.filter((s: any) => s.phaseId === params?.phaseId);
 
   const [phaseName, setPhaseName] = useState("New Phase");
   const [goal, setGoal] = useState("");
@@ -78,6 +78,43 @@ export default function AdminPhaseBuilder() {
   const [localSessions, setLocalSessions] = useState<LocalSession[]>([]);
   const [initializedForPhase, setInitializedForPhase] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const isDirty = useMemo(() => {
+    if (!existingPhase && isNew) {
+      return phaseName !== "New Phase" || goal !== "" || durationWeeks !== "4" || localSessions.length > 1 || localSessions[0]?.sections.length > 1 || localSessions[0]?.sections[0]?.exercises.length > 0;
+    }
+    if (!existingPhase) return false;
+
+    const nameChanged = phaseName !== existingPhase.name;
+    const goalChanged = goal !== (existingPhase.goal || "");
+    const durationChanged = durationWeeks !== String(existingPhase.durationWeeks);
+
+    if (nameChanged || goalChanged || durationChanged) return true;
+
+    if (localSessions.length !== phaseSessions.length) return true;
+
+    for (let i = 0; i < localSessions.length; i++) {
+      const ls = localSessions[i];
+      const ps = phaseSessions.find((s: any) => s.id === ls.dbId);
+      if (!ps) return true;
+      if (ls.name !== ps.name) return true;
+      if (ls.description !== (ps.description || "")) return true;
+      if (JSON.stringify(ls.sections) !== JSON.stringify(ps.sections)) return true;
+    }
+
+    return false;
+  }, [phaseName, goal, durationWeeks, localSessions, existingPhase, phaseSessions, isNew]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
 
   const [addExerciseTarget, setAddExerciseTarget] = useState<{ sessionIdx: number; sectionIdx: number } | null>(null);
   const [exerciseSearch, setExerciseSearch] = useState("");
@@ -183,11 +220,13 @@ export default function AdminPhaseBuilder() {
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (saving || !phaseName.trim()) return;
     setSaving(true);
 
     try {
       const clientId = params?.clientId;
+      let targetPhaseId = params?.phaseId;
+      let sessionsCount = 0;
 
       if (isNew && clientId) {
         const phase = await createPhase.mutateAsync({
@@ -200,6 +239,7 @@ export default function AdminPhaseBuilder() {
           movementChecks: [],
           schedule: [],
         });
+        targetPhaseId = phase.id;
 
         for (const ls of localSessions) {
           await createSession.mutateAsync({
@@ -209,13 +249,21 @@ export default function AdminPhaseBuilder() {
             sections: ls.sections,
             completedInstances: [],
           });
+          sessionsCount++;
         }
 
-        toast({ title: "Phase Created", description: `Phase and ${localSessions.length} session(s) saved.` });
+        toast({ title: "Phase Created", description: `Phase and ${sessionsCount} session(s) saved.` });
         setInitializedForPhase(null);
         setLocation(`/app/admin/clients/${clientId}/builder/${phase.id}`);
       } else if (params?.phaseId) {
         const phaseId = params.phaseId;
+
+        // Delete removed sessions
+        const localDbIds = localSessions.map(ls => ls.dbId).filter(Boolean);
+        const sessionsToDelete = phaseSessions.filter((ps: any) => !localDbIds.includes(ps.id));
+        for (const s of sessionsToDelete) {
+          await deleteSession.mutateAsync(s.id);
+        }
 
         await updatePhase.mutateAsync({
           id: phaseId,
@@ -241,11 +289,24 @@ export default function AdminPhaseBuilder() {
               completedInstances: [],
             });
           }
+          sessionsCount++;
         }
 
-        toast({ title: "Phase Saved", description: `Phase and ${localSessions.length} session(s) saved.` });
+        // Update schedule mapping (simple 1-1 mapping for now as per requirements)
+        const updatedSessions = await (await fetch(`/api/sessions?phaseId=${phaseId}`)).json();
+        const schedule = updatedSessions.map((s: any, idx: number) => ({
+          day: idx + 1,
+          sessionId: s.id
+        }));
+        
+        await updatePhase.mutateAsync({
+          id: phaseId,
+          schedule
+        });
+
+        toast({ title: "Phase Saved", description: `Phase and ${sessionsCount} session(s) updated.` });
         setInitializedForPhase(null);
-        setLocation(`/app/admin/clients/${clientId}`);
+        // Don't redirect if updating, just refresh state via initializedForPhase(null)
       }
     } catch (err) {
       toast({ title: "Save Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
@@ -266,9 +327,20 @@ export default function AdminPhaseBuilder() {
             <Button variant="ghost" size="icon" className="rounded-full bg-white border border-slate-200" data-testid="button-back-client"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
           <div className="font-semibold text-slate-900">Phase Builder</div>
+          {isDirty && (
+            <Badge variant="outline" className="ml-2 border-amber-200 bg-amber-50 text-amber-700 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Unsaved changes
+            </Badge>
+          )}
         </div>
         <div className="flex gap-3">
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6" onClick={handleSave} disabled={saving} data-testid="button-save-phase">
+          <Button 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6" 
+            onClick={handleSave} 
+            disabled={saving || !phaseName.trim()} 
+            data-testid="button-save-phase"
+          >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {saving ? "Saving..." : "Save Phase"}
           </Button>
