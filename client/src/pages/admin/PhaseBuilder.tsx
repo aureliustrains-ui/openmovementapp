@@ -108,8 +108,6 @@ export default function AdminPhaseBuilder() {
   const [saving, setSaving] = useState(false);
   const [movementCheckGate, setMovementCheckGate] = useState("yes");
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -514,7 +512,6 @@ export default function AdminPhaseBuilder() {
   };
 
   const handleDeletePhase = async () => {
-    if (deleteConfirmText !== "DELETE") return;
     const phaseId = params?.phaseId;
     if (!phaseId || phaseId === 'new') return;
 
@@ -522,7 +519,6 @@ export default function AdminPhaseBuilder() {
     try {
       await deletePhase.mutateAsync(phaseId);
       toast({ title: "Phase Deleted", description: "Phase and all associated data have been permanently removed." });
-      setDeleteDialogOpen(false);
       setLocation(`/app/admin/clients/${params?.clientId}`);
     } catch (err) {
       toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
@@ -575,7 +571,7 @@ export default function AdminPhaseBuilder() {
             <Button
               variant="outline"
               className="rounded-full px-4 text-red-600 border-red-200 hover:bg-red-50"
-              onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+              onClick={handleDeletePhase}
               disabled={saving || publishing || deleting}
               data-testid="button-delete-phase"
             >
@@ -892,41 +888,6 @@ export default function AdminPhaseBuilder() {
               </button>
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-red-700">Delete Phase</DialogTitle>
-            <DialogDescription>
-              This will permanently delete <span className="font-semibold text-slate-900">"{phaseName}"</span> and all associated sessions, schedule, and workout logs. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-3">
-            <Label className="text-sm text-slate-600">Type <span className="font-mono font-bold text-red-600">DELETE</span> to confirm</Label>
-            <Input
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="DELETE"
-              className="border-red-200 focus-visible:ring-red-500"
-              data-testid="input-delete-confirm"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDeletePhase}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={deleting || deleteConfirmText !== "DELETE"}
-              data-testid="button-confirm-delete"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Delete Permanently
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

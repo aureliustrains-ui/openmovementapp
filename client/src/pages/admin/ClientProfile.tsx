@@ -41,9 +41,6 @@ export default function AdminClientProfile() {
   const [activeTab, setActiveTab] = useState("programming");
   const [chatMessage, setChatMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
@@ -160,20 +157,12 @@ export default function AdminClientProfile() {
     }
   };
 
-  const handleOpenDeletePhase = (phase: any) => {
-    setDeleteTargetPhase(phase);
-    setDeleteConfirmText("");
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeletePhase = async () => {
-    if (deleteConfirmText !== "DELETE" || !deleteTargetPhase) return;
+  const handleDeletePhase = async (phase: any) => {
+    if (deleting) return;
     setDeleting(true);
     try {
-      await deletePhase.mutateAsync(deleteTargetPhase.id);
-      toast({ title: "Phase Deleted", description: `"${deleteTargetPhase.name}" and all associated data removed.` });
-      setDeleteDialogOpen(false);
-      setDeleteTargetPhase(null);
+      await deletePhase.mutateAsync(phase.id);
+      toast({ title: "Phase Deleted", description: `"${phase.name}" and all associated data removed.` });
     } catch (err) {
       toast({ title: "Delete Failed", description: "Something went wrong.", variant: "destructive" });
     } finally {
@@ -273,7 +262,7 @@ export default function AdminClientProfile() {
                       <Button
                         variant="outline"
                         className="text-red-600 border-red-200 hover:bg-red-50"
-                        onClick={() => handleOpenDeletePhase(activePhase)}
+                        onClick={() => handleDeletePhase(activePhase)}
                         data-testid="button-delete-active-phase"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -351,7 +340,7 @@ export default function AdminClientProfile() {
                             variant="outline"
                             size="sm"
                             className="text-red-600 border-red-200 hover:bg-red-50"
-                            onClick={() => handleOpenDeletePhase(phase)}
+                            onClick={() => handleDeletePhase(phase)}
                             data-testid={`button-delete-draft-${phase.id}`}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -391,7 +380,7 @@ export default function AdminClientProfile() {
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleOpenDeletePhase(phase)}
+                            onClick={() => handleDeletePhase(phase)}
                             data-testid={`button-delete-past-${phase.id}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -606,40 +595,6 @@ export default function AdminClientProfile() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-red-700">Delete Phase</DialogTitle>
-            <DialogDescription>
-              This will permanently delete <span className="font-semibold text-slate-900">"{deleteTargetPhase?.name}"</span> and all associated sessions, schedule, and workout logs. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-3">
-            <Label className="text-sm text-slate-600">Type <span className="font-mono font-bold text-red-600">DELETE</span> to confirm</Label>
-            <Input
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="DELETE"
-              className="border-red-200 focus-visible:ring-red-500"
-              data-testid="input-delete-confirm"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDeletePhase}
-              className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={deleting || deleteConfirmText !== "DELETE"}
-              data-testid="button-confirm-delete-phase"
-            >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              Delete Permanently
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
