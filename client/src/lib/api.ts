@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query
 async function fetchApi(url: string, options?: RequestInit) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...options,
   });
   if (!res.ok) {
@@ -266,5 +267,22 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: (id: string) => fetchApi(`/api/sessions/${id}`, { method: "DELETE" }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["sessions"] }); },
+  });
+}
+
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      email: string;
+      password: string;
+      role: "Admin" | "Client";
+      status?: string;
+      avatar?: string | null;
+    }) => fetchApi("/api/users", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 }

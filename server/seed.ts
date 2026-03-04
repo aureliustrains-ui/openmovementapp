@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { users, phases, sessions, exerciseTemplates, workoutLogs, messages } from "@shared/schema";
+import { hashPassword } from "./auth";
 
 async function seed() {
   console.log("Seeding database...");
@@ -10,11 +11,12 @@ async function seed() {
     return;
   }
 
+  const demoPasswordHash = await hashPassword("password123");
   await db.insert(users).values([
-    { id: "admin_1", name: "Head Coach", email: "coach@example.com", role: "Admin", status: "Active", avatar: "https://i.pravatar.cc/150?u=coach" },
-    { id: "client_1", name: "Sarah Connor", email: "sarah@example.com", role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=sarah" },
-    { id: "client_2", name: "John Smith", email: "john@example.com", role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=john" },
-    { id: "client_3", name: "Jane Doe", email: "jane@example.com", role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=jane" },
+    { id: "admin_1", name: "Head Coach", email: "coach@example.com", passwordHash: demoPasswordHash, role: "Admin", status: "Active", avatar: "https://i.pravatar.cc/150?u=coach" },
+    { id: "client_1", name: "Sarah Connor", email: "sarah@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=sarah" },
+    { id: "client_2", name: "John Smith", email: "john@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=john" },
+    { id: "client_3", name: "Jane Doe", email: "jane@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=jane" },
   ]);
 
   await db.insert(exerciseTemplates).values([

@@ -1,18 +1,28 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery } from "@/lib/api";
+import { usersQuery, phasesQuery, useCreateUser } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, UserPlus, ChevronRight, Activity, AlertCircle, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+import { useToast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AdminClientsList() {
   const [search, setSearch] = useState("");
-  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [creatingRole, setCreatingRole] = useState<"Client" | "Admin">("Client");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const { toast } = useToast();
+  const createUser = useCreateUser();
   const { data: allUsers = [], isLoading: loadingUsers } = useQuery(usersQuery);
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
 
@@ -26,6 +36,41 @@ export default function AdminClientsList() {
     if (pendingPhase) return { label: 'Action Required', type: 'destructive', desc: 'Movement Check Pending' };
     if (activePhase) return { label: 'Active', type: 'default', desc: activePhase.name };
     return { label: 'No Active Phase', type: 'secondary', desc: 'Needs programming' };
+  };
+
+  const resetForm = () => {
+    setName("");
+    setEmail("");
+    setPassword("");
+    setAvatar("");
+    setCreatingRole("Client");
+  };
+
+  const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    try {
+      await createUser.mutateAsync({
+        name,
+        email,
+        password,
+        role: creatingRole,
+        avatar: avatar.trim() ? avatar.trim() : null,
+      });
+
+      toast({
+        title: creatingRole === "Admin" ? "Coach account created" : "Client account created",
+        description: `${name} can now sign in with ${email}.`,
+      });
+      setIsAddUserOpen(false);
+      resetForm();
+    } catch {
+      toast({
+        title: "Failed to create account",
+        description: "Check the email/password values and try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (loadingUsers || loadingPhases) {
@@ -46,18 +91,101 @@ export default function AdminClientsList() {
         <Button 
           className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" 
           data-testid="button-add-client"
-          onClick={() => setIsComingSoonOpen(true)}
+          onClick={() => setIsAddUserOpen(true)}
         >
-          <UserPlus className="mr-2 h-4 w-4" /> Add Client
+          <UserPlus className="mr-2 h-4 w-4" /> Add User
         </Button>
       </div>
 
-      <ComingSoonDialog 
-        open={isComingSoonOpen} 
-        onOpenChange={setIsComingSoonOpen} 
-        title="Add Client Coming Soon"
-        description="The ability to invite and add new clients to your roster is coming in the next update."
-      />
+      <Dialog
+        open={isAddUserOpen}
+        onOpenChange={(open) => {
+          setIsAddUserOpen(open);
+          if (!open) resetForm();
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Add User</DialogTitle>
+            <DialogDescription>Create a new client or coach account.</DialogDescription>
+          </DialogHeader>
+
+          <Tabs
+            value={creatingRole}
+            onValueChange={(value) => setCreatingRole(value as "Client" | "Admin")}
+          >
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="Client">Add Client</TabsTrigger>
+              <TabsTrigger value="Admin">Add Coach</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={creatingRole}>
+              <form className="space-y-4 mt-4" onSubmit={handleCreateUser}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-name">Full Name</Label>
+                    <Input
+                      id="new-user-name"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={creatingRole === "Admin" ? "Coach Name" : "Client Name"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-email">Email</Label>
+                    <Input
+                      id="new-user-email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-password">Temporary Password</Label>
+                    <Input
+                      id="new-user-password"
+                      type="password"
+                      minLength={8}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-user-avatar">Avatar URL (optional)</Label>
+                    <Input
+                      id="new-user-avatar"
+                      value={avatar}
+                      onChange={(e) => setAvatar(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createUser.isPending}>
+                    {createUser.isPending
+                      ? "Creating..."
+                      : creatingRole === "Admin"
+                        ? "Create Coach"
+                        : "Create Client"}
+                  </Button>
+                </div>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm max-w-md">
         <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />

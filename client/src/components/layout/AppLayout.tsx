@@ -56,6 +56,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const totalUnread = unreadData?.total || 0;
 
   const handleLogout = () => {
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
     logout();
     setLocation("/login");
   };
@@ -73,7 +74,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
               <Dumbbell className="h-4 w-4" />
             </div>
-            <span className="font-display font-bold text-slate-900 tracking-tight hidden sm:inline">Nexus</span>
+            <span className="font-display font-bold text-slate-900 tracking-tight hidden sm:inline">CoachingApp</span>
           </Link>
 
           <nav className="flex items-center gap-1">

@@ -10,7 +10,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-display font-bold text-xl text-primary">
             <Box className="h-6 w-6" />
-            <span>Nexus</span>
+            <span>CoachingApp</span>
           </Link>
           <nav className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground">
             <Link href="/#features" className="hover:text-foreground transition-colors">Features</Link>
@@ -32,7 +32,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
       </main>
       <footer className="border-t py-12 bg-slate-50">
         <div className="container mx-auto px-4 text-center text-slate-500 text-sm">
-          <p>© 2026 Nexus Platform. All rights reserved.</p>
+          <p>© 2026 CoachingApp. All rights reserved.</p>
         </div>
       </footer>
     </div>

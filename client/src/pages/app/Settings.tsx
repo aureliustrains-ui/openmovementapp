@@ -46,9 +46,9 @@ export default function Settings() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                 </div>
                 <div>
-                  <h4 className="font-semibold text-indigo-900 mb-1">External Auth (Memberstack later)</h4>
+                  <h4 className="font-semibold text-indigo-900 mb-1">Authentication Setup</h4>
                   <p className="text-sm text-indigo-800">
-                    The current login system uses demo accounts for testing and preview purposes. In a production environment, this will be swapped out for Memberstack to handle real user authentication, billing, and secure sessions. The demo auth will continue working end-to-end for now.
+                    This app now uses built-in email/password authentication with secure server sessions. Additional providers can be added later if needed.
                   </p>
                 </div>
               </CardContent>
@@ -92,13 +92,13 @@ export default function Settings() {
               <CardContent className="space-y-6">
                 <div className="space-y-2 max-w-md">
                   <Label htmlFor="ws-name">Workspace Name</Label>
-                  <Input id="ws-name" defaultValue="Nexus Training" />
+                  <Input id="ws-name" defaultValue="Coaching Workspace" />
                 </div>
                 <div className="space-y-2 max-w-md">
                   <Label htmlFor="ws-url">Workspace URL</Label>
                   <div className="flex">
                     <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm">
-                      nexus.app/
+                      coaching.app/
                     </span>
                     <Input id="ws-url" defaultValue="acme" className="rounded-l-none" />
                   </div>

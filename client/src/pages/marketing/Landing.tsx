@@ -16,7 +16,7 @@ export default function Landing() {
         <div className="container mx-auto px-4 text-center max-w-4xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-sm font-medium mb-6">
             <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
-            Nexus Platform v2.0 is live
+            CoachingApp is live
           </div>
           <h1 className="text-5xl md:text-7xl font-display font-bold text-slate-900 tracking-tight mb-6">
             The operating system for <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">modern teams</span>
