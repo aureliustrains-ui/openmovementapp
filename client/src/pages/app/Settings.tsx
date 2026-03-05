@@ -62,7 +62,7 @@ export default function Settings() {
               <CardContent className="space-y-6">
                 <div className="flex items-center gap-6">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={user.avatar} />
+                    <AvatarImage src={user.avatar || undefined} />
                     <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <Button variant="outline" onClick={() => handleComingSoon("Change Avatar Coming Soon")}>Change Avatar</Button>

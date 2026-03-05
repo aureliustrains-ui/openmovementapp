@@ -56,7 +56,7 @@ export const useDataStore = create<DataState>()(
               };
             })
           };
-        })
+        }) as DataState["phases"]
       })),
 
       addMessage: (clientId, sender, text, isClient) => set((state) => {

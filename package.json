@@ -8,8 +8,13 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
-    "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "check": "npm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint server shared script",
+    "format": "prettier --write \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
+    "format:check": "prettier --check \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
+    "test": "node --import tsx --test \"server/**/*.test.ts\"",
+    "db:push": "npx drizzle-kit@0.31.9 push"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -79,6 +84,7 @@
     "zustand": "^5.0.11"
   },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express": "^5.0.0",
@@ -91,12 +97,16 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
-    "drizzle-kit": "^0.31.4",
+    "drizzle-kit": "^0.31.9",
     "esbuild": "^0.25.0",
+    "eslint": "^9.22.0",
+    "globals": "^16.0.0",
     "postcss": "^8.5.6",
+    "prettier": "^3.5.3",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
+    "typescript-eslint": "^8.26.1",
     "vite": "^7.1.9"
   },
   "optionalDependencies": {

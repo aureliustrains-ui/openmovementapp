@@ -1,9 +1,17 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "./auth";
 import type { User } from "@shared/schema";
+import { createUserAccount } from "./modules/users/users.service";
+import { loginWithEmailPassword, requireAuthenticatedUser } from "./modules/auth/auth.service";
+import { AppError } from "./http/error-handler";
+import {
+  createMessageSchema,
+  createWorkoutLogSchema,
+  markChatReadSchema,
+} from "./http/request-schemas";
 
 const registerSchema = z.object({
   name: z.string().min(2).max(120),
@@ -26,7 +34,8 @@ const createUserSchema = z.object({
 });
 
 function toPublicUser(user: User) {
-  const { passwordHash: _passwordHash, ...safeUser } = user;
+  const { passwordHash, ...safeUser } = user;
+  void passwordHash;
   return safeUser;
 }
 
@@ -95,20 +104,28 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid registration payload" });
     }
 
-    const existing = await storage.getUserByEmail(parsed.data.email.toLowerCase());
-    if (existing) {
-      return res.status(409).json({ message: "Email already in use" });
+    let created;
+    try {
+      created = await createUserAccount(
+        {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          password: parsed.data.password,
+          role: "Client",
+          status: "Active",
+          avatar: null,
+        },
+        {
+          users: storage,
+          hashPassword,
+        },
+      );
+    } catch (error) {
+      if (error instanceof AppError && error.code === "EMAIL_IN_USE") {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+      throw error;
     }
-
-    const passwordHash = await hashPassword(parsed.data.password);
-    const created = await storage.createUser({
-      name: parsed.data.name,
-      email: parsed.data.email.toLowerCase(),
-      passwordHash,
-      role: "Client",
-      status: "Active",
-      avatar: null,
-    });
 
     req.session.userId = created.id;
     res.status(201).json({ user: toPublicUser(created) });
@@ -120,18 +137,17 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid login payload" });
     }
 
-    const user = await storage.getUserByEmail(parsed.data.email.toLowerCase());
-    if (!user) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    if (!user.passwordHash) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
-
-    const validPassword = await verifyPassword(parsed.data.password, user.passwordHash);
-    if (!validPassword) {
-      return res.status(401).json({ message: "Invalid email or password" });
+    let user;
+    try {
+      user = await loginWithEmailPassword(
+        { email: parsed.data.email, password: parsed.data.password },
+        { users: storage, verifyPassword },
+      );
+    } catch (error) {
+      if (error instanceof AppError && error.code === "INVALID_CREDENTIALS") {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      throw error;
     }
 
     req.session.userId = user.id;
@@ -146,17 +162,17 @@ export async function registerRoutes(
   });
 
   app.get("/api/auth/me", async (req, res) => {
-    const userId = req.session?.userId;
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = await storage.getUser(userId);
-    if (!user) {
-      req.session.destroy(() => {
-        res.status(401).json({ message: "Unauthorized" });
-      });
-      return;
+    let user;
+    try {
+      user = await requireAuthenticatedUser(req.session?.userId, { users: storage });
+    } catch (error) {
+      if (error instanceof AppError && error.code === "UNAUTHORIZED") {
+        req.session.destroy(() => {
+          res.status(401).json({ message: "Unauthorized" });
+        });
+        return;
+      }
+      throw error;
     }
 
     res.json({ user: toPublicUser(user) });
@@ -188,19 +204,29 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid user payload" });
     }
 
-    const existing = await storage.getUserByEmail(parsed.data.email.toLowerCase());
-    if (existing) {
-      return res.status(409).json({ message: "Email already in use" });
+    let user;
+    try {
+      user = await createUserAccount(
+        {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          password: parsed.data.password,
+          role: parsed.data.role ?? "Client",
+          status: parsed.data.status ?? "Active",
+          avatar: parsed.data.avatar ?? null,
+        },
+        {
+          users: storage,
+          hashPassword,
+        },
+      );
+    } catch (error) {
+      if (error instanceof AppError && error.code === "EMAIL_IN_USE") {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+      throw error;
     }
 
-    const user = await storage.createUser({
-      name: parsed.data.name,
-      email: parsed.data.email.toLowerCase(),
-      passwordHash: await hashPassword(parsed.data.password),
-      role: parsed.data.role ?? "Client",
-      status: parsed.data.status ?? "Active",
-      avatar: parsed.data.avatar ?? null,
-    });
     res.status(201).json(toPublicUser(user));
   });
 
@@ -421,16 +447,23 @@ export async function registerRoutes(
   app.post("/api/workout-logs", async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
-    if (!isAdmin(authUser) && req.body.clientId !== authUser.id) {
+    const parsed = createWorkoutLogSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid workout log payload" });
+    }
+    if (!isAdmin(authUser) && parsed.data.clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
     if (!isAdmin(authUser)) {
-      const phase = await storage.getPhase(req.body.phaseId);
+      const phase = await storage.getPhase(parsed.data.phaseId);
       if (!phase || phase.clientId !== authUser.id) {
         return res.status(403).json({ message: "Forbidden" });
       }
     }
-    const log = await storage.createWorkoutLog(req.body);
+    const log = await storage.createWorkoutLog({
+      ...parsed.data,
+      clientNotes: parsed.data.clientNotes ?? null,
+    });
     res.status(201).json(log);
   });
 
@@ -452,10 +485,20 @@ export async function registerRoutes(
   app.post("/api/messages", async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
-    if (!isAdmin(authUser) && req.body.clientId !== authUser.id) {
+    const parsed = createMessageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid message payload" });
+    }
+    if (!isAdmin(authUser) && parsed.data.clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const message = await storage.createMessage(req.body);
+    const message = await storage.createMessage({
+      clientId: parsed.data.clientId,
+      text: parsed.data.text,
+      sender: authUser.name,
+      isClient: authUser.role === "Client",
+      time: new Date().toISOString(),
+    });
     res.status(201).json(message);
   });
 
@@ -475,7 +518,7 @@ export async function registerRoutes(
       const unread = clientMessages.filter(m => m.time > lastReadAt).length;
       res.json({ total: unread, conversations: [{ clientId: userId, unread }] });
     } else {
-      const clientIds = [...new Set(allMessages.map(m => m.clientId))];
+      const clientIds = Array.from(new Set(allMessages.map(m => m.clientId)));
       let total = 0;
       const conversations: { clientId: string; unread: number }[] = [];
       for (const cid of clientIds) {
@@ -495,8 +538,11 @@ export async function registerRoutes(
   app.post("/api/chat/read", async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
-    const clientId = String(req.body?.clientId || "");
-    if (!clientId) return res.status(400).json({ message: "clientId required" });
+    const parsed = markChatReadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid read payload" });
+    }
+    const clientId = parsed.data.clientId;
     const userId = authUser.id;
     if (!isAdmin(authUser) && clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });

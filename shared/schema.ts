@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const users = pgTable("users", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash"),
@@ -14,7 +16,9 @@ export const users = pgTable("users", {
 });
 
 export const phases = pgTable("phases", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   clientId: varchar("client_id", { length: 64 }).notNull(),
   name: text("name").notNull(),
   goal: text("goal"),
@@ -27,7 +31,9 @@ export const phases = pgTable("phases", {
 });
 
 export const sessions = pgTable("sessions", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   phaseId: varchar("phase_id", { length: 64 }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
@@ -36,7 +42,9 @@ export const sessions = pgTable("sessions", {
 });
 
 export const exerciseTemplates = pgTable("exercise_templates", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   targetMuscle: text("target_muscle"),
   demoUrl: text("demo_url"),
@@ -52,21 +60,27 @@ export const exerciseTemplates = pgTable("exercise_templates", {
 });
 
 export const sectionTemplates = pgTable("section_templates", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
   exercises: jsonb("exercises").notNull().default([]),
 });
 
 export const sessionTemplates = pgTable("session_templates", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
   sections: jsonb("sections").notNull().default([]),
 });
 
 export const phaseTemplates = pgTable("phase_templates", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   goal: text("goal"),
   durationWeeks: integer("duration_weeks").notNull().default(4),
@@ -76,7 +90,9 @@ export const phaseTemplates = pgTable("phase_templates", {
 });
 
 export const workoutLogs = pgTable("workout_logs", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   clientId: varchar("client_id", { length: 64 }).notNull(),
   phaseId: varchar("phase_id", { length: 64 }).notNull(),
   instanceId: text("instance_id").notNull(),
@@ -87,7 +103,9 @@ export const workoutLogs = pgTable("workout_logs", {
 });
 
 export const messages = pgTable("messages", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   clientId: varchar("client_id", { length: 64 }).notNull(),
   sender: text("sender").notNull(),
   text: text("text").notNull(),
@@ -96,7 +114,9 @@ export const messages = pgTable("messages", {
 });
 
 export const chatReadStatus = pgTable("chat_read_status", {
-  id: varchar("id", { length: 64 }).primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   userId: varchar("user_id", { length: 64 }).notNull(),
   clientId: varchar("client_id", { length: 64 }).notNull(),
   lastReadAt: text("last_read_at").notNull(),
@@ -105,7 +125,9 @@ export const chatReadStatus = pgTable("chat_read_status", {
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertPhaseSchema = createInsertSchema(phases).omit({ id: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
-export const insertExerciseTemplateSchema = createInsertSchema(exerciseTemplates).omit({ id: true });
+export const insertExerciseTemplateSchema = createInsertSchema(exerciseTemplates).omit({
+  id: true,
+});
 export const insertSectionTemplateSchema = createInsertSchema(sectionTemplates).omit({ id: true });
 export const insertSessionTemplateSchema = createInsertSchema(sessionTemplates).omit({ id: true });
 export const insertPhaseTemplateSchema = createInsertSchema(phaseTemplates).omit({ id: true });

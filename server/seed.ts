@@ -1,29 +1,94 @@
 import { db } from "./db";
 import { users, phases, sessions, exerciseTemplates, workoutLogs, messages } from "@shared/schema";
 import { hashPassword } from "./auth";
+import { eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Seeding database...");
 
   const existingUsers = await db.select().from(users);
   if (existingUsers.length > 0) {
-    console.log("Database already seeded, skipping.");
+    const usersMissingPassword = existingUsers.filter((u) => !u.passwordHash);
+    if (usersMissingPassword.length > 0) {
+      const fallbackPasswordHash = await hashPassword("password123");
+      for (const user of usersMissingPassword) {
+        await db
+          .update(users)
+          .set({ passwordHash: fallbackPasswordHash })
+          .where(eq(users.id, user.id));
+      }
+      console.log(`Backfilled password for ${usersMissingPassword.length} existing user(s).`);
+    } else {
+      console.log("Database already seeded, skipping.");
+    }
     return;
   }
 
   const demoPasswordHash = await hashPassword("password123");
   await db.insert(users).values([
-    { id: "admin_1", name: "Head Coach", email: "coach@example.com", passwordHash: demoPasswordHash, role: "Admin", status: "Active", avatar: "https://i.pravatar.cc/150?u=coach" },
-    { id: "client_1", name: "Sarah Connor", email: "sarah@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=sarah" },
-    { id: "client_2", name: "John Smith", email: "john@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=john" },
-    { id: "client_3", name: "Jane Doe", email: "jane@example.com", passwordHash: demoPasswordHash, role: "Client", status: "Active", avatar: "https://i.pravatar.cc/150?u=jane" },
+    {
+      id: "admin_1",
+      name: "Head Coach",
+      email: "coach@example.com",
+      passwordHash: demoPasswordHash,
+      role: "Admin",
+      status: "Active",
+      avatar: "https://i.pravatar.cc/150?u=coach",
+    },
+    {
+      id: "client_1",
+      name: "Sarah Connor",
+      email: "sarah@example.com",
+      passwordHash: demoPasswordHash,
+      role: "Client",
+      status: "Active",
+      avatar: "https://i.pravatar.cc/150?u=sarah",
+    },
+    {
+      id: "client_2",
+      name: "John Smith",
+      email: "john@example.com",
+      passwordHash: demoPasswordHash,
+      role: "Client",
+      status: "Active",
+      avatar: "https://i.pravatar.cc/150?u=john",
+    },
+    {
+      id: "client_3",
+      name: "Jane Doe",
+      email: "jane@example.com",
+      passwordHash: demoPasswordHash,
+      role: "Client",
+      status: "Active",
+      avatar: "https://i.pravatar.cc/150?u=jane",
+    },
   ]);
 
   await db.insert(exerciseTemplates).values([
-    { id: "ex_t_1", name: "Barbell Back Squat", targetMuscle: "Quads", demoUrl: "https://example.com/squat.mp4" },
-    { id: "ex_t_2", name: "Dumbbell Romanian Deadlift", targetMuscle: "Hamstrings", demoUrl: "https://example.com/rdl.mp4" },
-    { id: "ex_t_3", name: "Pull-up", targetMuscle: "Lats", demoUrl: "https://example.com/pullup.mp4" },
-    { id: "ex_t_4", name: "Push-up", targetMuscle: "Chest", demoUrl: "https://example.com/pushup.mp4" },
+    {
+      id: "ex_t_1",
+      name: "Barbell Back Squat",
+      targetMuscle: "Quads",
+      demoUrl: "https://example.com/squat.mp4",
+    },
+    {
+      id: "ex_t_2",
+      name: "Dumbbell Romanian Deadlift",
+      targetMuscle: "Hamstrings",
+      demoUrl: "https://example.com/rdl.mp4",
+    },
+    {
+      id: "ex_t_3",
+      name: "Pull-up",
+      targetMuscle: "Lats",
+      demoUrl: "https://example.com/pullup.mp4",
+    },
+    {
+      id: "ex_t_4",
+      name: "Push-up",
+      targetMuscle: "Chest",
+      demoUrl: "https://example.com/pushup.mp4",
+    },
   ]);
 
   await db.insert(phases).values([
@@ -36,8 +101,20 @@ async function seed() {
       durationWeeks: 4,
       status: "Waiting for Movement Check",
       movementChecks: [
-        { exerciseId: "ex_1", name: "Barbell Back Squat", status: "Pending", videoUrl: null, feedback: null },
-        { exerciseId: "ex_2", name: "Dumbbell Romanian Deadlift", status: "Approved", videoUrl: "https://example.com/vid1.mp4", feedback: "Good hinge, keep lats tight." },
+        {
+          exerciseId: "ex_1",
+          name: "Barbell Back Squat",
+          status: "Pending",
+          videoUrl: null,
+          feedback: null,
+        },
+        {
+          exerciseId: "ex_2",
+          name: "Dumbbell Romanian Deadlift",
+          status: "Approved",
+          videoUrl: "https://example.com/vid1.mp4",
+          feedback: "Good hinge, keep lats tight.",
+        },
       ],
       schedule: [
         { week: 1, day: "Monday", sessionId: "sess_1" },
@@ -75,7 +152,18 @@ async function seed() {
           name: "A. Primary Movement",
           order: 1,
           exercises: [
-            { id: "ex_1", templateId: "ex_t_1", name: "Barbell Back Squat", sets: 4, reps: "8-10", load: "Auto", tempo: "3010", rest: "120s", rpe: "7-8", notes: "Deep range of motion" },
+            {
+              id: "ex_1",
+              templateId: "ex_t_1",
+              name: "Barbell Back Squat",
+              sets: 4,
+              reps: "8-10",
+              load: "Auto",
+              tempo: "3010",
+              rest: "120s",
+              rpe: "7-8",
+              notes: "Deep range of motion",
+            },
           ],
         },
         {
@@ -83,7 +171,18 @@ async function seed() {
           name: "B. Secondary Posterior",
           order: 2,
           exercises: [
-            { id: "ex_2", templateId: "ex_t_2", name: "Dumbbell Romanian Deadlift", sets: 3, reps: "10-12", load: "Auto", tempo: "3010", rest: "90s", rpe: "8", notes: "Slight knee bend" },
+            {
+              id: "ex_2",
+              templateId: "ex_t_2",
+              name: "Dumbbell Romanian Deadlift",
+              sets: 3,
+              reps: "10-12",
+              load: "Auto",
+              tempo: "3010",
+              rest: "90s",
+              rpe: "8",
+              notes: "Slight knee bend",
+            },
           ],
         },
       ],
@@ -100,7 +199,18 @@ async function seed() {
           name: "A. Vertical Pull",
           order: 1,
           exercises: [
-            { id: "ex_3", templateId: "ex_t_3", name: "Pull-up", sets: 4, reps: "AMRAP", load: "Bodyweight", tempo: "2010", rest: "90s", rpe: "9", notes: "Full extension at bottom" },
+            {
+              id: "ex_3",
+              templateId: "ex_t_3",
+              name: "Pull-up",
+              sets: 4,
+              reps: "AMRAP",
+              load: "Bodyweight",
+              tempo: "2010",
+              rest: "90s",
+              rpe: "9",
+              notes: "Full extension at bottom",
+            },
           ],
         },
       ],
@@ -117,7 +227,18 @@ async function seed() {
           name: "A. Squat Pattern",
           order: 1,
           exercises: [
-            { id: "ex_4", templateId: "ex_t_1", name: "Barbell Back Squat", sets: 5, reps: "5", load: "85% 1RM", tempo: "2010", rest: "180s", rpe: "8", notes: "" },
+            {
+              id: "ex_4",
+              templateId: "ex_t_1",
+              name: "Barbell Back Squat",
+              sets: 5,
+              reps: "5",
+              load: "85% 1RM",
+              tempo: "2010",
+              rest: "180s",
+              rpe: "8",
+              notes: "",
+            },
           ],
         },
       ],
@@ -144,8 +265,22 @@ async function seed() {
   ]);
 
   await db.insert(messages).values([
-    { id: "msg_1", clientId: "client_1", sender: "Head Coach", text: "Hey Sarah, your new phase is in draft. Waiting on that squat video.", time: "2026-02-28 10:00", isClient: false },
-    { id: "msg_2", clientId: "client_1", sender: "Sarah Connor", text: "Will upload it tomorrow during my session!", time: "2026-02-28 14:30", isClient: true },
+    {
+      id: "msg_1",
+      clientId: "client_1",
+      sender: "Head Coach",
+      text: "Hey Sarah, your new phase is in draft. Waiting on that squat video.",
+      time: "2026-02-28 10:00",
+      isClient: false,
+    },
+    {
+      id: "msg_2",
+      clientId: "client_1",
+      sender: "Sarah Connor",
+      text: "Will upload it tomorrow during my session!",
+      time: "2026-02-28 14:30",
+      isClient: true,
+    },
   ]);
 
   console.log("Database seeded successfully!");

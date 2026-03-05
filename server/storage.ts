@@ -1,17 +1,35 @@
 import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import {
-  users, phases, sessions, exerciseTemplates, sectionTemplates, sessionTemplates, phaseTemplates, workoutLogs, messages, chatReadStatus,
-  type User, type InsertUser,
-  type Phase, type InsertPhase,
-  type Session, type InsertSession,
-  type ExerciseTemplate, type InsertExerciseTemplate,
-  type SectionTemplate, type InsertSectionTemplate,
-  type SessionTemplate, type InsertSessionTemplate,
-  type PhaseTemplate, type InsertPhaseTemplate,
-  type WorkoutLog, type InsertWorkoutLog,
-  type Message, type InsertMessage,
-  type ChatReadStatus, type InsertChatReadStatus,
+  users,
+  phases,
+  sessions,
+  exerciseTemplates,
+  sectionTemplates,
+  sessionTemplates,
+  phaseTemplates,
+  workoutLogs,
+  messages,
+  chatReadStatus,
+  type User,
+  type InsertUser,
+  type Phase,
+  type InsertPhase,
+  type Session,
+  type InsertSession,
+  type ExerciseTemplate,
+  type InsertExerciseTemplate,
+  type SectionTemplate,
+  type InsertSectionTemplate,
+  type SessionTemplate,
+  type InsertSessionTemplate,
+  type PhaseTemplate,
+  type InsertPhaseTemplate,
+  type WorkoutLog,
+  type InsertWorkoutLog,
+  type Message,
+  type InsertMessage,
+  type ChatReadStatus,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -36,22 +54,34 @@ export interface IStorage {
 
   getExerciseTemplates(): Promise<ExerciseTemplate[]>;
   createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate>;
-  updateExerciseTemplate(id: string, data: Partial<InsertExerciseTemplate>): Promise<ExerciseTemplate | undefined>;
+  updateExerciseTemplate(
+    id: string,
+    data: Partial<InsertExerciseTemplate>,
+  ): Promise<ExerciseTemplate | undefined>;
   deleteExerciseTemplate(id: string): Promise<boolean>;
 
   getSectionTemplates(): Promise<SectionTemplate[]>;
   createSectionTemplate(template: InsertSectionTemplate): Promise<SectionTemplate>;
-  updateSectionTemplate(id: string, data: Partial<InsertSectionTemplate>): Promise<SectionTemplate | undefined>;
+  updateSectionTemplate(
+    id: string,
+    data: Partial<InsertSectionTemplate>,
+  ): Promise<SectionTemplate | undefined>;
   deleteSectionTemplate(id: string): Promise<boolean>;
 
   getSessionTemplates(): Promise<SessionTemplate[]>;
   createSessionTemplate(template: InsertSessionTemplate): Promise<SessionTemplate>;
-  updateSessionTemplate(id: string, data: Partial<InsertSessionTemplate>): Promise<SessionTemplate | undefined>;
+  updateSessionTemplate(
+    id: string,
+    data: Partial<InsertSessionTemplate>,
+  ): Promise<SessionTemplate | undefined>;
   deleteSessionTemplate(id: string): Promise<boolean>;
 
   getPhaseTemplates(): Promise<PhaseTemplate[]>;
   createPhaseTemplate(template: InsertPhaseTemplate): Promise<PhaseTemplate>;
-  updatePhaseTemplate(id: string, data: Partial<InsertPhaseTemplate>): Promise<PhaseTemplate | undefined>;
+  updatePhaseTemplate(
+    id: string,
+    data: Partial<InsertPhaseTemplate>,
+  ): Promise<PhaseTemplate | undefined>;
   deletePhaseTemplate(id: string): Promise<boolean>;
 
   getWorkoutLogs(): Promise<WorkoutLog[]>;
@@ -63,7 +93,11 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
 
   getChatReadStatus(userId: string, clientId: string): Promise<ChatReadStatus | undefined>;
-  upsertChatReadStatus(userId: string, clientId: string, lastReadAt: string): Promise<ChatReadStatus>;
+  upsertChatReadStatus(
+    userId: string,
+    clientId: string,
+    lastReadAt: string,
+  ): Promise<ChatReadStatus>;
   getChatReadStatusByUser(userId: string): Promise<ChatReadStatus[]>;
 }
 
@@ -154,13 +188,23 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateExerciseTemplate(id: string, data: Partial<InsertExerciseTemplate>): Promise<ExerciseTemplate | undefined> {
-    const [updated] = await db.update(exerciseTemplates).set(data).where(eq(exerciseTemplates.id, id)).returning();
+  async updateExerciseTemplate(
+    id: string,
+    data: Partial<InsertExerciseTemplate>,
+  ): Promise<ExerciseTemplate | undefined> {
+    const [updated] = await db
+      .update(exerciseTemplates)
+      .set(data)
+      .where(eq(exerciseTemplates.id, id))
+      .returning();
     return updated;
   }
 
   async deleteExerciseTemplate(id: string): Promise<boolean> {
-    const result = await db.delete(exerciseTemplates).where(eq(exerciseTemplates.id, id)).returning();
+    const result = await db
+      .delete(exerciseTemplates)
+      .where(eq(exerciseTemplates.id, id))
+      .returning();
     return result.length > 0;
   }
 
@@ -173,8 +217,15 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateSectionTemplate(id: string, data: Partial<InsertSectionTemplate>): Promise<SectionTemplate | undefined> {
-    const [updated] = await db.update(sectionTemplates).set(data).where(eq(sectionTemplates.id, id)).returning();
+  async updateSectionTemplate(
+    id: string,
+    data: Partial<InsertSectionTemplate>,
+  ): Promise<SectionTemplate | undefined> {
+    const [updated] = await db
+      .update(sectionTemplates)
+      .set(data)
+      .where(eq(sectionTemplates.id, id))
+      .returning();
     return updated;
   }
 
@@ -192,8 +243,15 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateSessionTemplate(id: string, data: Partial<InsertSessionTemplate>): Promise<SessionTemplate | undefined> {
-    const [updated] = await db.update(sessionTemplates).set(data).where(eq(sessionTemplates.id, id)).returning();
+  async updateSessionTemplate(
+    id: string,
+    data: Partial<InsertSessionTemplate>,
+  ): Promise<SessionTemplate | undefined> {
+    const [updated] = await db
+      .update(sessionTemplates)
+      .set(data)
+      .where(eq(sessionTemplates.id, id))
+      .returning();
     return updated;
   }
 
@@ -211,8 +269,15 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updatePhaseTemplate(id: string, data: Partial<InsertPhaseTemplate>): Promise<PhaseTemplate | undefined> {
-    const [updated] = await db.update(phaseTemplates).set(data).where(eq(phaseTemplates.id, id)).returning();
+  async updatePhaseTemplate(
+    id: string,
+    data: Partial<InsertPhaseTemplate>,
+  ): Promise<PhaseTemplate | undefined> {
+    const [updated] = await db
+      .update(phaseTemplates)
+      .set(data)
+      .where(eq(phaseTemplates.id, id))
+      .returning();
     return updated;
   }
 
@@ -248,22 +313,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChatReadStatus(userId: string, clientId: string): Promise<ChatReadStatus | undefined> {
-    const [status] = await db.select().from(chatReadStatus).where(
-      and(eq(chatReadStatus.userId, userId), eq(chatReadStatus.clientId, clientId))
-    );
+    const [status] = await db
+      .select()
+      .from(chatReadStatus)
+      .where(and(eq(chatReadStatus.userId, userId), eq(chatReadStatus.clientId, clientId)));
     return status;
   }
 
-  async upsertChatReadStatus(userId: string, clientId: string, lastReadAt: string): Promise<ChatReadStatus> {
+  async upsertChatReadStatus(
+    userId: string,
+    clientId: string,
+    lastReadAt: string,
+  ): Promise<ChatReadStatus> {
     const existing = await this.getChatReadStatus(userId, clientId);
     if (existing) {
-      const [updated] = await db.update(chatReadStatus)
+      const [updated] = await db
+        .update(chatReadStatus)
         .set({ lastReadAt })
         .where(eq(chatReadStatus.id, existing.id))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(chatReadStatus)
+    const [created] = await db
+      .insert(chatReadStatus)
       .values({ userId, clientId, lastReadAt })
       .returning();
     return created;
