@@ -6,14 +6,12 @@ import { chatUnreadQuery } from "@/lib/api";
 import { 
   Users, 
   Library, 
-  BarChart, 
   Settings, 
   Dumbbell, 
   MessageCircle, 
   Info,
   LogOut,
-  Repeat,
-  ClipboardCheck
+  Repeat
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,30 +27,28 @@ import {
 const getAdminNavItems = () => [
   { href: "/app/admin/clients", label: "Clients", icon: Users },
   { href: "/app/admin/templates", label: "Templates", icon: Library },
-  { href: "/app/admin/analytics", label: "Analytics", icon: BarChart },
-  { href: "/app/admin/qa", label: "QA", icon: ClipboardCheck },
-  { href: "/app/settings", label: "Settings", icon: Settings },
+  { href: "/app/settings", label: "My Profile", icon: Settings },
 ];
 
 const getClientNavItems = () => [
   { href: "/app/client/my-phase", label: "My Phases", icon: Dumbbell },
   { href: "/app/client/chat", label: "Chat", icon: MessageCircle },
-  { href: "/app/settings", label: "Settings", icon: Settings },
+  { href: "/app/settings", label: "My Profile", icon: Settings },
   { href: "/app/client/info", label: "Info", icon: Info },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
-  const { user, logout, impersonating, stopImpersonating } = useAuth();
+  const { user, sessionUser, logout, impersonating, stopImpersonating } = useAuth();
   
   const { data: unreadData } = useQuery({
-    ...chatUnreadQuery(user?.id || "", user?.role || "Client"),
-    enabled: !!user,
+    ...chatUnreadQuery(sessionUser?.id || "", sessionUser?.role || "Client"),
+    enabled: !!sessionUser,
   });
 
-  if (!user) return null;
+  if (!user || !sessionUser) return null;
 
-  const navItems = user.role === 'Admin' ? getAdminNavItems() : getClientNavItems();
+  const navItems = sessionUser.role === 'Admin' ? getAdminNavItems() : getClientNavItems();
   const totalUnread = unreadData?.total || 0;
 
   const handleLogout = () => {
@@ -70,7 +66,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
         <div className="flex items-center gap-8">
-          <Link href={user.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} className="flex items-center gap-2.5 shrink-0">
+          <Link href={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} className="flex items-center gap-2.5 shrink-0">
             <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
               <Dumbbell className="h-4 w-4" />
             </div>
@@ -133,7 +129,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/app/settings">Profile Settings</Link>
+                <Link href="/app/settings">My Profile</Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               

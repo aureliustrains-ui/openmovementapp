@@ -1,25 +1,88 @@
 import { useState } from "react";
 import { Link, useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { sessionsQuery, phasesQuery, useUpdatePhase, workoutLogsQuery, useCreateWorkoutLog } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  sessionsQuery,
+  phasesQuery,
+  useUpdatePhase,
+  workoutLogsQuery,
+  useCreateWorkoutLog,
+  sessionCheckinsMeQuery,
+} from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, CheckCircle2, Circle, PlayCircle, Loader2, ExternalLink, ChevronDown, ChevronUp, Video, NotebookPen } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Slider } from "@/components/ui/slider";
 
 type SetLog = { weight: string; reps: string };
+
+type VideoSource = { kind: "youtube" | "drive" | "link"; href: string; embedUrl?: string };
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("youtube.com")) {
+      const id = parsed.searchParams.get("v");
+      if (id) {
+        return `https://www.youtube.com/embed/${id}`;
+      }
+      const shortsMatch = parsed.pathname.match(/^\/shorts\/([^/]+)/);
+      if (shortsMatch?.[1]) {
+        return `https://www.youtube.com/embed/${shortsMatch[1]}`;
+      }
+    }
+    if (host.includes("youtu.be")) {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      if (id) {
+        return `https://www.youtube.com/embed/${id}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function getDriveEmbedUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.toLowerCase().includes("drive.google.com")) return null;
+    const fileMatch = parsed.pathname.match(/\/file\/d\/([^/]+)/);
+    const id = fileMatch?.[1] || parsed.searchParams.get("id");
+    if (!id) return null;
+    return `https://drive.google.com/file/d/${id}/preview`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeVideoSource(url: string): VideoSource | null {
+  try {
+    new URL(url);
+  } catch {
+    return null;
+  }
+  const youtubeEmbed = getYouTubeEmbedUrl(url);
+  if (youtubeEmbed) return { kind: "youtube", href: url, embedUrl: youtubeEmbed };
+  const driveEmbed = getDriveEmbedUrl(url);
+  if (driveEmbed) return { kind: "drive", href: url, embedUrl: driveEmbed };
+  return { kind: "link", href: url };
+}
 
 export default function ClientSessionView() {
   const [, params] = useRoute("/app/client/session/:sessionId");
   const [, setLocation] = useLocation();
   const sessionId = params?.sessionId;
-  const { user } = useAuth();
+  const { viewedUser, impersonating } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const searchParams = new URLSearchParams(window.location.search);
   const week = searchParams.get("week") || "1";
@@ -35,17 +98,23 @@ export default function ClientSessionView() {
   const phase = allPhases.find((p: any) => p.id === session?.phaseId);
 
   const { data: workoutLogs = [] } = useQuery({
-    ...workoutLogsQuery(user?.id || ''),
-    enabled: !!user?.id && !!phase,
+    ...workoutLogsQuery(viewedUser?.id || ''),
+    enabled: !!viewedUser?.id && !!phase,
   });
 
   const [completedExercises, setCompletedExercises] = useState<Record<string, boolean>>({});
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [setLogs, setSetLogs] = useState<Record<string, SetLog[]>>({});
-  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
-  const [videoDialogUrl, setVideoDialogUrl] = useState<string | null>(null);
+  const [expandedNotesAndLogs, setExpandedNotesAndLogs] = useState<Record<string, boolean>>({});
+  const [openVideoByExercise, setOpenVideoByExercise] = useState<Record<string, boolean>>({});
   const [finishing, setFinishing] = useState(false);
+  const [afterSessionOpen, setAfterSessionOpen] = useState(false);
+  const [afterSessionRpe, setAfterSessionRpe] = useState(6);
+  const [afterSessionFeltOff, setAfterSessionFeltOff] = useState(false);
+  const [afterSessionFeltOffNote, setAfterSessionFeltOffNote] = useState("");
+  const [savingAfterSession, setSavingAfterSession] = useState(false);
+  const isImpersonationReadOnly = impersonating;
 
   if (isLoading) {
     return (
@@ -62,7 +131,6 @@ export default function ClientSessionView() {
   const isSessionComplete = completedInstances.includes(instanceKey);
 
   const schedule: any[] = (phase?.schedule as any[]) || [];
-  const currentWeekNum = parseInt(week);
 
   const getExerciseHistory = (exerciseId: string) => {
     const pastLogs = (workoutLogs as any[]).filter(
@@ -118,7 +186,15 @@ export default function ClientSessionView() {
   };
 
   const handleFinish = async () => {
-    if (isSessionComplete || !phase || !user || finishing) return;
+    if (isImpersonationReadOnly) {
+      toast({
+        title: "Read-only in impersonation mode",
+        description: "Client session writes are disabled while impersonating.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isSessionComplete || !phase || !viewedUser || finishing) return;
     setFinishing(true);
 
     try {
@@ -136,7 +212,7 @@ export default function ClientSessionView() {
 
         if (hasData) {
           await createWorkoutLog.mutateAsync({
-            clientId: user.id,
+            clientId: viewedUser.id,
             phaseId: phase.id,
             instanceId: instanceKey,
             exerciseId: ex.id,
@@ -160,6 +236,10 @@ export default function ClientSessionView() {
         title: "Session Complete",
         description: "Your workout has been saved.",
       });
+      setAfterSessionRpe(6);
+      setAfterSessionFeltOff(false);
+      setAfterSessionFeltOffNote("");
+      setAfterSessionOpen(true);
     } catch (err) {
       toast({
         title: "Error",
@@ -169,8 +249,106 @@ export default function ClientSessionView() {
     } finally {
       setFinishing(false);
     }
+  };
 
-    setLocation("/app/client/my-phase");
+  const handleSubmitAfterSessionCheckin = async () => {
+    if (isImpersonationReadOnly) {
+      return;
+    }
+    if (!session || savingAfterSession) return;
+    const payload = {
+      sessionId: session.id,
+      rpeOverall: afterSessionRpe,
+      feltOff: afterSessionFeltOff,
+      feltOffNote: afterSessionFeltOff ? afterSessionFeltOffNote.trim() || null : null,
+    };
+    setSavingAfterSession(true);
+    try {
+      const authRes = await fetch("/api/auth/me", {
+        credentials: "include",
+      });
+      const authBodyText = await authRes.text();
+      const authContentType = authRes.headers.get("content-type") || "unknown";
+      if (!authRes.ok) {
+        throw new Error("Not authenticated in server session. Please sign in again.");
+      }
+      if (!authContentType.includes("application/json")) {
+        throw new Error(`Expected JSON from /api/auth/me but received ${authContentType}.`);
+      }
+
+      let authBody: { user?: { id?: string; role?: string } } | null = null;
+      try {
+        authBody = JSON.parse(authBodyText) as { user?: { id?: string; role?: string } };
+      } catch {
+        throw new Error("Invalid JSON returned by /api/auth/me.");
+      }
+
+      if (authBody?.user?.role !== "Client") {
+        throw new Error(
+          `Server session role is ${authBody?.user?.role || "unknown"}; after-session check-in is client-only. Stop impersonation and log in as the client account.`,
+        );
+      }
+      if (!authBody?.user?.id || authBody.user.id !== phase?.clientId) {
+        throw new Error("Server session user does not match this client phase.");
+      }
+
+      const res = await fetch("/api/session-checkins", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const contentType = res.headers.get("content-type") || "unknown";
+      const responseText = await res.text();
+
+      if (!res.ok) {
+        let message = `Request failed with status ${res.status}`;
+        if (contentType.includes("application/json")) {
+          try {
+            const body = JSON.parse(responseText) as { message?: string };
+            if (body.message) message = body.message;
+          } catch {
+            // keep status-based fallback
+          }
+        }
+        throw new Error(message);
+      }
+
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `Expected JSON from /api/session-checkins but received ${contentType}.`,
+        );
+      }
+
+      const created = JSON.parse(responseText) as { id?: string };
+      await queryClient.invalidateQueries({ queryKey: ["sessionCheckins"] });
+      await queryClient.invalidateQueries({ queryKey: ["clientCheckinsSummary"] });
+      await queryClient.invalidateQueries({ queryKey: ["clientCheckinsTrends"] });
+      await queryClient.invalidateQueries({ queryKey: ["clientCheckinsRecent"] });
+      const checkins = await queryClient.fetchQuery(sessionCheckinsMeQuery);
+      const confirmed = Array.isArray(checkins)
+        ? checkins.some((entry: any) => entry.id === created?.id || (entry.sessionId === session.id && entry.rpeOverall === afterSessionRpe))
+        : false;
+      if (!confirmed) {
+        throw new Error("Check-in write could not be verified");
+      }
+
+      toast({
+        title: "Check-in saved",
+        description: "Your after-session check-in was saved successfully.",
+      });
+      setAfterSessionOpen(false);
+      setLocation("/app/client/my-phase");
+    } catch (error: any) {
+      const message = error?.message || "Could not save check-in";
+      toast({
+        title: "Could not save check-in",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingAfterSession(false);
+    }
   };
 
   const isValidUrl = (url: string) => {
@@ -182,35 +360,17 @@ export default function ClientSessionView() {
     }
   };
 
-  const getYouTubeEmbedUrl = (url: string) => {
-    try {
-      const parsed = new URL(url);
-      if (parsed.hostname.includes("youtube.com")) {
-        const v = parsed.searchParams.get("v");
-        if (v) return `https://www.youtube.com/embed/${v}`;
-      }
-      if (parsed.hostname.includes("youtu.be")) {
-        return `https://www.youtube.com/embed${parsed.pathname}`;
-      }
-    } catch {}
-    return null;
-  };
-
   const formatOccurrenceLabel = (h: { week: number; day: string; slot: string }) => {
     return `Week ${h.week} • ${h.day} • ${h.slot}`;
   };
 
-  const formatSetsSummary = (sets: any[]) => {
-    if (!sets || sets.length === 0) return null;
-    return sets.map((s: any, i: number) => {
-      const w = s.weight || '--';
-      const r = s.reps || '--';
-      return `${w}lbs × ${r}`;
-    }).join(', ');
-  };
-
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-24 animate-in fade-in">
+      {isImpersonationReadOnly && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="banner-impersonation-read-only">
+          You are viewing this as an admin in impersonation mode. Client check-ins are read-only.
+        </div>
+      )}
       <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center gap-4">
         <Link href="/app/client/my-phase">
           <Button variant="ghost" size="icon" className="rounded-full bg-white border border-slate-200 shadow-sm" data-testid="button-back-phase">
@@ -232,9 +392,10 @@ export default function ClientSessionView() {
               const history = getExerciseHistory(ex.id);
               const hasHistory = history.length > 0;
               const isHistoryOpen = expandedHistory[ex.id] ?? false;
-              const lastSession = hasHistory ? history[0] : null;
               const totalSets = Number(ex.sets) || 3;
               const currentSetLog = getSetLog(ex.id, totalSets);
+              const inlineVideo = ex.demoUrl && isValidUrl(ex.demoUrl) ? normalizeVideoSource(ex.demoUrl) : null;
+              const isVideoOpen = !!openVideoByExercise[ex.id];
 
               return (
                 <Card key={ex.id} className={`border-2 transition-colors overflow-hidden rounded-2xl ${completedExercises[ex.id] ? 'border-green-500 bg-green-50/30' : 'border-slate-200 bg-white shadow-sm'}`} data-testid={`card-exercise-${ex.id}`}>
@@ -251,18 +412,54 @@ export default function ClientSessionView() {
                           <h3 className="text-xl font-bold text-slate-900 leading-tight">{ex.name}</h3>
                         </div>
                       </div>
-                      {ex.demoUrl && isValidUrl(ex.demoUrl) && (
+                      {inlineVideo && (
                         <Button 
                           variant="outline" 
                           size="sm"
                           className="text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 shrink-0"
-                          onClick={() => setVideoDialogUrl(ex.demoUrl)}
+                          onClick={() =>
+                            setOpenVideoByExercise((prev) => ({ ...prev, [ex.id]: !prev[ex.id] }))
+                          }
                           data-testid={`button-view-video-${ex.id}`}
                         >
-                          <PlayCircle className="h-4 w-4 mr-1.5" /> View Video
+                          <PlayCircle className="h-4 w-4 mr-1.5" /> {isVideoOpen ? "Hide Video" : "Watch Video"}
                         </Button>
                       )}
                     </div>
+
+                    {inlineVideo && (
+                      <Collapsible open={isVideoOpen} onOpenChange={(open) => setOpenVideoByExercise((prev) => ({ ...prev, [ex.id]: open }))}>
+                        <CollapsibleContent className="ml-11 mt-2">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            {inlineVideo.embedUrl ? (
+                              <div className="aspect-video overflow-hidden rounded-lg bg-black">
+                                <iframe
+                                  src={inlineVideo.embedUrl}
+                                  className="h-full w-full border-0"
+                                  sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+                                  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                  allowFullScreen
+                                  referrerPolicy="strict-origin-when-cross-origin"
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                                <div className="flex items-center gap-2 text-sm text-slate-700">
+                                  <Video className="h-4 w-4 text-slate-500" />
+                                  Video link available
+                                </div>
+                                <a href={inlineVideo.href} target="_blank" rel="noopener noreferrer">
+                                  <Button variant="outline" size="sm">
+                                    <ExternalLink className="h-4 w-4 mr-1.5" />
+                                    Open link
+                                  </Button>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
 
                     <div className="ml-11 grid grid-cols-3 gap-3">
                       <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
@@ -303,75 +500,40 @@ export default function ClientSessionView() {
                     )}
 
                     <div className="ml-11 space-y-3">
-                      {hasHistory && (
-                        <button
-                          className="flex items-center gap-2 w-full text-left py-2 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors"
-                          onClick={() => setExpandedHistory(prev => ({ ...prev, [ex.id]: !prev[ex.id] }))}
-                          data-testid={`button-past-notes-${ex.id}`}
-                        >
-                          <NotebookPen className="h-4 w-4 text-slate-500 shrink-0" />
-                          <span className="text-sm font-semibold text-slate-700 flex-1">Past Notes ({history.length})</span>
-                          {isHistoryOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                        </button>
-                      )}
-
-                      {isHistoryOpen && hasHistory && (
-                        <div className="border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 overflow-hidden">
-                          {history.map((h, hi) => (
-                            <div key={hi} className="px-4 py-3">
-                              <div className="mb-1.5">
-                                <span className="text-xs font-semibold text-slate-700">{formatOccurrenceLabel(h)}</span>
-                              </div>
-                              {h.sets && (h.sets as any[]).length > 0 && (
-                                <div className="flex gap-2 mt-1 flex-wrap">
-                                  {(h.sets as any[]).map((s: any, si: number) => (
-                                    <span key={si} className="text-[11px] bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5 text-slate-600 font-medium">
-                                      Set {si + 1}: {s.weight || '--'}lbs × {s.reps || '--'}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {h.notes && (
-                                <p className="text-xs text-slate-600 leading-relaxed mt-1">"{h.notes}"</p>
-                              )}
-                              {!h.notes && (!h.sets || (h.sets as any[]).length === 0) && (
-                                <p className="text-[11px] text-slate-400 italic mt-0.5">Completed, no details logged</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Notes & Logs</div>
-                        <Textarea
-                          placeholder="Add your notes for this exercise..."
-                          value={exerciseNotes[ex.id] || ""}
-                          onChange={(e) => setExerciseNotes(prev => ({ ...prev, [ex.id]: e.target.value }))}
-                          className="min-h-[80px] bg-slate-50 border-slate-200 text-sm resize-none rounded-xl"
-                          data-testid={`textarea-notes-${ex.id}`}
-                        />
-                      </div>
-
-                      {ex.enableStructuredLogging && (
-                        <>
+                      <Collapsible
+                        open={!!expandedNotesAndLogs[ex.id]}
+                        onOpenChange={(open) => setExpandedNotesAndLogs((prev) => ({ ...prev, [ex.id]: open }))}
+                      >
+                        <CollapsibleTrigger asChild>
                           <button
-                            className="text-xs font-medium text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition-colors"
-                            onClick={() => setExpandedLogs(prev => ({ ...prev, [ex.id]: !prev[ex.id] }))}
-                            data-testid={`button-toggle-logs-${ex.id}`}
+                            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            data-testid={`button-notes-logs-${ex.id}`}
                           >
-                            {expandedLogs[ex.id] ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                            {expandedLogs[ex.id] ? "Hide set log" : "Log sets"}
+                            <NotebookPen className="h-4 w-4 text-slate-500 shrink-0" />
+                            <span className="flex-1">Add note / log sets</span>
+                            {expandedNotesAndLogs[ex.id] ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                           </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-2 space-y-3">
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Notes & logs</div>
+                            <Textarea
+                              placeholder="Add your notes for this exercise..."
+                              value={exerciseNotes[ex.id] || ""}
+                              onChange={(e) => setExerciseNotes(prev => ({ ...prev, [ex.id]: e.target.value }))}
+                              className="min-h-[80px] bg-slate-50 border-slate-200 text-sm resize-none rounded-xl"
+                              data-testid={`textarea-notes-${ex.id}`}
+                            />
+                          </div>
 
-                          {expandedLogs[ex.id] && (
+                          {ex.enableStructuredLogging && (
                             <div className="space-y-2 pt-2 border-t border-slate-100">
                               <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
                                 <div className="col-span-2 text-center">Set</div>
                                 <div className="col-span-5 text-center">Weight (lbs)</div>
                                 <div className="col-span-5 text-center">Reps</div>
                               </div>
-                              
+
                               {Array.from({ length: totalSets }).map((_, i) => (
                                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                                   <div className="col-span-2 text-center font-medium text-slate-500 text-sm">{i + 1}</div>
@@ -381,17 +543,17 @@ export default function ClientSessionView() {
                                       placeholder="--"
                                       className="h-10 text-center bg-white border-slate-200 rounded-lg"
                                       value={currentSetLog[i]?.weight || ""}
-                                      onChange={(e) => updateSetLog(ex.id, i, 'weight', e.target.value, totalSets)}
+                                      onChange={(e) => updateSetLog(ex.id, i, "weight", e.target.value, totalSets)}
                                       data-testid={`input-weight-${ex.id}-${i}`}
                                     />
                                   </div>
                                   <div className="col-span-5">
                                     <Input
                                       type="number"
-                                      placeholder={String(ex.reps).split('-')[0] || "0"}
+                                      placeholder={String(ex.reps).split("-")[0] || "0"}
                                       className="h-10 text-center bg-white border-slate-200 rounded-lg"
                                       value={currentSetLog[i]?.reps || ""}
-                                      onChange={(e) => updateSetLog(ex.id, i, 'reps', e.target.value, totalSets)}
+                                      onChange={(e) => updateSetLog(ex.id, i, "reps", e.target.value, totalSets)}
                                       data-testid={`input-reps-${ex.id}-${i}`}
                                     />
                                   </div>
@@ -399,7 +561,51 @@ export default function ClientSessionView() {
                               ))}
                             </div>
                           )}
-                        </>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {hasHistory && (
+                        <Collapsible
+                          open={isHistoryOpen}
+                          onOpenChange={(open) => setExpandedHistory((prev) => ({ ...prev, [ex.id]: open }))}
+                        >
+                          <CollapsibleTrigger asChild>
+                            <button
+                              className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                              data-testid={`button-past-notes-${ex.id}`}
+                            >
+                              <NotebookPen className="h-4 w-4 text-slate-500 shrink-0" />
+                              <span className="flex-1">Past notes & logs ({history.length})</span>
+                              {isHistoryOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                            </button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2">
+                            <div className="border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 overflow-hidden">
+                              {history.map((h, hi) => (
+                                <div key={hi} className="px-4 py-3">
+                                  <div className="mb-1.5">
+                                    <span className="text-xs font-semibold text-slate-700">{formatOccurrenceLabel(h)}</span>
+                                  </div>
+                                  {h.sets && (h.sets as any[]).length > 0 && (
+                                    <div className="flex gap-2 mt-1 flex-wrap">
+                                      {(h.sets as any[]).map((s: any, si: number) => (
+                                        <span key={si} className="text-[11px] bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5 text-slate-600 font-medium">
+                                          Set {si + 1}: {s.weight || "--"}lbs × {s.reps || "--"}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {h.notes && (
+                                    <p className="text-xs text-slate-600 leading-relaxed mt-1">"{h.notes}"</p>
+                                  )}
+                                  {!h.notes && (!h.sets || (h.sets as any[]).length === 0) && (
+                                    <p className="text-[11px] text-slate-400 italic mt-0.5">Completed, no details logged</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
                       )}
                     </div>
                   </div>
@@ -414,7 +620,7 @@ export default function ClientSessionView() {
         <Button
           onClick={handleFinish}
           className={`w-full h-14 text-base font-semibold rounded-2xl ${isSessionComplete ? "bg-slate-400 text-white" : "bg-green-600 hover:bg-green-700 text-white shadow-lg"}`}
-          disabled={isSessionComplete || finishing}
+          disabled={isSessionComplete || finishing || isImpersonationReadOnly}
           data-testid="button-finish-session"
         >
           {finishing ? (
@@ -427,33 +633,88 @@ export default function ClientSessionView() {
         </Button>
       </div>
 
-      <Dialog open={videoDialogUrl !== null} onOpenChange={(open) => { if (!open) setVideoDialogUrl(null); }}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden">
-          <DialogHeader className="p-4 pb-0">
-            <DialogTitle>Exercise Demo</DialogTitle>
+      <Dialog
+        open={afterSessionOpen}
+        onOpenChange={(open) => {
+          if (savingAfterSession) return;
+          setAfterSessionOpen(open);
+          if (!open) {
+            setLocation("/app/client/my-phase");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Quick session check-in</DialogTitle>
+            <DialogDescription>This takes about 10–20 seconds.</DialogDescription>
           </DialogHeader>
-          <div className="p-4">
-            {videoDialogUrl && getYouTubeEmbedUrl(videoDialogUrl) ? (
-              <div className="aspect-video rounded-xl overflow-hidden bg-black">
-                <iframe
-                  src={getYouTubeEmbedUrl(videoDialogUrl)!}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-slate-900">How hard was this session overall?</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-baseline justify-between">
+                  <span className="text-xs uppercase tracking-wider text-slate-500">Session RPE</span>
+                  <span className="text-2xl font-bold text-slate-900">{afterSessionRpe}</span>
+                </div>
+                <Slider
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={[afterSessionRpe]}
+                  onValueChange={(value) => setAfterSessionRpe(value[0] ?? 6)}
                 />
+                <div className="mt-3 grid grid-cols-5 text-[10px] text-slate-500">
+                  <span>0 Rest</span>
+                  <span>2 Very easy</span>
+                  <span>4 Moderate</span>
+                  <span>6 Hard</span>
+                  <span className="text-right">10 Max</span>
+                </div>
               </div>
-            ) : videoDialogUrl ? (
-              <div className="text-center py-8">
-                <Video className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-600 mb-4">Demo video available</p>
-                <a href={videoDialogUrl} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" className="border-indigo-200 text-indigo-700">
-                    <ExternalLink className="h-4 w-4 mr-2" /> Open Video
-                  </Button>
-                </a>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-slate-900">Did anything feel off today?</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAfterSessionFeltOff(false)}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
+                    !afterSessionFeltOff
+                      ? "border-green-300 bg-green-50 text-green-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAfterSessionFeltOff(true)}
+                  className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
+                    afterSessionFeltOff
+                      ? "border-amber-300 bg-amber-50 text-amber-700"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Yes
+                </button>
               </div>
-            ) : null}
+              {afterSessionFeltOff && (
+                <Textarea
+                  value={afterSessionFeltOffNote}
+                  onChange={(event) => setAfterSessionFeltOffNote(event.target.value)}
+                  placeholder="What felt off?"
+                  className="min-h-[80px]"
+                />
+              )}
+            </div>
           </div>
+          <DialogFooter>
+            <Button onClick={handleSubmitAfterSessionCheckin} disabled={savingAfterSession || isImpersonationReadOnly}>
+              {savingAfterSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save check-in
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

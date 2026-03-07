@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 function formatTime(t: string) {
   if (t.includes("T") || t.includes("Z")) {
@@ -40,10 +40,7 @@ export default function ClientChat() {
     
     sendMessage.mutate({
       clientId: user.id,
-      sender: user.name,
       text: message,
-      time: new Date().toISOString(),
-      isClient: true,
     });
     setMessage("");
   };
@@ -71,6 +68,7 @@ export default function ClientChat() {
             chatMessages.map((msg: any) => (
               <div key={msg.id} className={`flex gap-4 ${msg.isClient ? 'flex-row-reverse' : ''}`}>
                 <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                  <AvatarImage src={msg.senderAvatar || undefined} alt={msg.senderName || msg.sender || undefined} />
                   <AvatarFallback className={msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
                     {msg.sender.charAt(0)}
                   </AvatarFallback>

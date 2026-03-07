@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Search, UserPlus, ChevronRight, Activity, AlertCircle, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +23,7 @@ export default function AdminClientsList() {
   const [password, setPassword] = useState("");
   const [avatar, setAvatar] = useState("");
   const { toast } = useToast();
+  const { sessionUser } = useAuth();
   const createUser = useCreateUser();
   const { data: allUsers = [], isLoading: loadingUsers } = useQuery(usersQuery);
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
@@ -48,26 +50,54 @@ export default function AdminClientsList() {
 
   const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!sessionUser || sessionUser.role !== "Admin") {
+      toast({
+        title: "Unauthorized",
+        description: "Only admins can create new accounts.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+    const normalizedAvatar = avatar.trim();
+
+    if (!normalizedName || !normalizedEmail || !normalizedPassword) {
+      toast({
+        title: "Missing required fields",
+        description: "Name, email, and password are required.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       await createUser.mutateAsync({
-        name,
-        email,
-        password,
+        name: normalizedName,
+        email: normalizedEmail,
+        password: normalizedPassword,
         role: creatingRole,
-        avatar: avatar.trim() ? avatar.trim() : null,
+        avatar: normalizedAvatar ? normalizedAvatar : null,
       });
 
       toast({
         title: creatingRole === "Admin" ? "Coach account created" : "Client account created",
-        description: `${name} can now sign in with ${email}.`,
+        description: `${normalizedName} can now sign in with ${normalizedEmail}.`,
       });
       setIsAddUserOpen(false);
       resetForm();
-    } catch {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message.includes(": ")
+            ? error.message.split(": ").slice(-1)[0]
+            : error.message
+          : "Unexpected error while creating the account.";
       toast({
         title: "Failed to create account",
-        description: "Check the email/password values and try again.",
+        description: message,
         variant: "destructive",
       });
     }

@@ -1,5 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { phasesQuery, sessionsQuery, useUpdatePhase } from "@/lib/api";
+import {
+  phasesQuery,
+  sessionsQuery,
+  useUpdatePhase,
+  weeklyCheckinsCurrentOrDueQuery,
+  useCreateWeeklyCheckin,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,8 +25,9 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 export default function ClientMyPhase() {
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
-  const { user } = useAuth();
+  const { viewedUser, sessionUser, impersonating } = useAuth();
   const updatePhase = useUpdatePhase();
+  const createWeeklyCheckin = useCreateWeeklyCheckin();
   const { toast } = useToast();
   
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -31,11 +38,24 @@ export default function ClientMyPhase() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [weeklyCheckinOpen, setWeeklyCheckinOpen] = useState(false);
+  const [weeklyCheckinStep, setWeeklyCheckinStep] = useState<1 | 2>(1);
+  const [weeklySleep, setWeeklySleep] = useState(3);
+  const [weeklyEnergy, setWeeklyEnergy] = useState(3);
+  const [weeklyInjuryAffected, setWeeklyInjuryAffected] = useState(false);
+  const [weeklyInjuryImpact, setWeeklyInjuryImpact] = useState(0);
+  const [weeklyNote, setWeeklyNote] = useState("");
+  const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
 
-  if (!user) return null;
+  const { data: weeklyCheckinStatus } = useQuery({
+    ...weeklyCheckinsCurrentOrDueQuery,
+    enabled: !!sessionUser && !impersonating,
+  });
+
+  if (!viewedUser) return null;
 
   const visiblePhases = allPhases.filter((p: any) =>
-    p.clientId === user.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check')
+    p.clientId === viewedUser.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check')
   );
 
   useEffect(() => {
@@ -98,6 +118,54 @@ export default function ClientMyPhase() {
     }
   };
 
+  const openWeeklyCheckin = () => {
+    if (impersonating) {
+      return;
+    }
+    setWeeklyCheckinStep(1);
+    setWeeklySleep(3);
+    setWeeklyEnergy(3);
+    setWeeklyInjuryAffected(false);
+    setWeeklyInjuryImpact(0);
+    setWeeklyNote("");
+    setWeeklyCheckinOpen(true);
+  };
+
+  const handleSubmitWeeklyCheckin = async () => {
+    if (impersonating) {
+      toast({
+        title: "Read-only in impersonation mode",
+        description: "Client check-ins cannot be submitted while impersonating.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (submittingWeeklyCheckin) return;
+    setSubmittingWeeklyCheckin(true);
+    try {
+      await createWeeklyCheckin.mutateAsync({
+        sleepWeek: weeklySleep,
+        energyWeek: weeklyEnergy,
+        injuryAffectedTraining: weeklyInjuryAffected,
+        injuryImpact: weeklyInjuryAffected ? weeklyInjuryImpact : null,
+        coachNoteFromClient: weeklyNote.trim() || null,
+      });
+      toast({
+        title: "Weekly check-in submitted",
+        description: "Thanks, your coach can now review your weekly trends.",
+      });
+      setWeeklyCheckinOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Could not submit weekly check-in",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingWeeklyCheckin(false);
+    }
+  };
+
   if (loadingPhases) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -121,6 +189,8 @@ export default function ClientMyPhase() {
   if (!currentPhase) return null;
 
   const isMovementCheckPhase = currentPhase.status === 'Waiting for Movement Check';
+  const weeklyCheckinDue = Boolean(weeklyCheckinStatus?.due);
+  const currentWeeklyCheckin = weeklyCheckinStatus?.current;
   const movementChecks = (currentPhase.movementChecks as any[]) || [];
   const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id);
   const schedule = (currentPhase.schedule as any[]) || [];
@@ -137,14 +207,41 @@ export default function ClientMyPhase() {
     return `/app/client/session/${sessionId}?week=${selectedWeek}&day=${encodeURIComponent(day)}&slot=${encodeURIComponent(slotVal)}`;
   };
 
-  const getStatusBadge = (status: string) => {
-    if (status === 'Active') return <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] ml-auto shrink-0">Active</Badge>;
-    if (status === 'Waiting for Movement Check') return <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px] ml-auto shrink-0">Pending</Badge>;
+  const sortedWeekEntries = weekSchedule
+    .map((entry: any) => {
+      const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
+      return {
+        entry,
+        session,
+        dayIndex: WEEKDAYS.indexOf(entry.day),
+        slotOrder: (entry.slot || "AM") === "AM" ? 0 : 1,
+      };
+    })
+    .filter((item: any) => item.session && item.dayIndex >= 0)
+    .sort((a: any, b: any) => a.dayIndex - b.dayIndex || a.slotOrder - b.slotOrder);
+
+  const nextScheduleItem = (() => {
+    const nextIncomplete = sortedWeekEntries.find((item: any) => !isEntryCompleted(item.entry, item.session));
+    if (nextIncomplete) return nextIncomplete;
+    if (sortedWeekEntries[0]) return sortedWeekEntries[0];
+    if (phaseSessions[0]) {
+      return {
+        entry: { day: WEEKDAYS[0], slot: "AM" },
+        session: phaseSessions[0],
+      };
+    }
     return null;
-  };
+  })();
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
+      {impersonating && (
+        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-2xl" data-testid="card-impersonation-read-only">
+          <CardContent className="p-4 text-sm text-amber-800">
+            You are viewing this as an admin in impersonation mode. Client check-ins are read-only.
+          </CardContent>
+        </Card>
+      )}
       {visiblePhases.length > 1 && (
         <div className="flex items-center gap-3">
           <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">My Phases</Label>
@@ -165,6 +262,29 @@ export default function ClientMyPhase() {
             </SelectContent>
           </Select>
         </div>
+      )}
+
+      {(weeklyCheckinDue || currentWeeklyCheckin) && (
+        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white" data-testid="card-weekly-checkin">
+          <CardContent className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Weekly check-in</p>
+              <h2 className="text-xl font-bold text-slate-900 mt-1">Readiness check</h2>
+              <p className="text-slate-600 mt-1">
+                {weeklyCheckinDue
+                  ? "Takes about 1 minute."
+                  : "Completed this week. Thanks for the update."}
+              </p>
+            </div>
+            {weeklyCheckinDue ? (
+              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl" onClick={openWeeklyCheckin} data-testid="button-open-weekly-checkin" disabled={impersonating}>
+                Start weekly check-in
+              </Button>
+            ) : (
+              <Badge className="bg-green-100 text-green-700 border-green-200">Submitted</Badge>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {isMovementCheckPhase ? (
@@ -249,6 +369,27 @@ export default function ClientMyPhase() {
               <p className="text-slate-300 text-lg max-w-xl leading-relaxed">{currentPhase.goal}</p>
             </div>
           </div>
+
+          {nextScheduleItem && (
+            <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 shadow-sm rounded-2xl" data-testid="card-start-next-session">
+              <CardContent className="p-5 md:p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-1">Today first</div>
+                    <h2 className="text-xl font-bold text-slate-900">Start next session</h2>
+                    <p className="text-slate-600 mt-1">
+                      {nextScheduleItem.session.name} · {nextScheduleItem.entry.day} {nextScheduleItem.entry.slot || "AM"}
+                    </p>
+                  </div>
+                  <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl w-full md:w-auto" data-testid="button-start-next-session">
+                      Start session <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-6">
@@ -374,6 +515,141 @@ export default function ClientMyPhase() {
           </div>
         </>
       )}
+
+      <Dialog open={weeklyCheckinOpen} onOpenChange={setWeeklyCheckinOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Weekly check-in</DialogTitle>
+            <DialogDescription>
+              Step {weeklyCheckinStep}/2
+            </DialogDescription>
+          </DialogHeader>
+
+          {weeklyCheckinStep === 1 ? (
+            <div className="space-y-5 py-2">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-900">How was your sleep this week?</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={`sleep-${value}`}
+                      type="button"
+                      onClick={() => setWeeklySleep(value)}
+                      className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
+                        weeklySleep === value
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">1 Very poor · 2 Poor · 3 OK · 4 Good · 5 Excellent</p>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-900">How was your energy this week?</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={`energy-${value}`}
+                      type="button"
+                      onClick={() => setWeeklyEnergy(value)}
+                      className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
+                        weeklyEnergy === value
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">1 Very low · 2 Low · 3 OK · 4 Good · 5 Very high</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5 py-2">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-900">Did any injury or pain affect your training this week?</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setWeeklyInjuryAffected(false)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                      !weeklyInjuryAffected
+                        ? "border-green-300 bg-green-50 text-green-700"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWeeklyInjuryAffected(true)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
+                      weeklyInjuryAffected
+                        ? "border-amber-300 bg-amber-50 text-amber-700"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                </div>
+              </div>
+
+              {weeklyInjuryAffected && (
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-900">How much did it affect your training?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[0, 1, 2, 3].map((value) => (
+                      <button
+                        key={`impact-${value}`}
+                        type="button"
+                        onClick={() => setWeeklyInjuryImpact(value)}
+                        className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
+                          weeklyInjuryImpact === value
+                            ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                            : "border-slate-200 bg-white text-slate-700"
+                        }`}
+                      >
+                        {value === 0 ? "0 None" : value === 1 ? "1 Slightly reduced" : value === 2 ? "2 Moderately reduced" : "3 Could not train normally"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="weekly-note">Anything to tell your coach? (optional)</Label>
+                <Textarea
+                  id="weekly-note"
+                  value={weeklyNote}
+                  onChange={(event) => setWeeklyNote(event.target.value)}
+                  className="min-h-[90px]"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            {weeklyCheckinStep === 2 && (
+              <Button variant="outline" onClick={() => setWeeklyCheckinStep(1)} disabled={submittingWeeklyCheckin}>
+                Back
+              </Button>
+            )}
+            {weeklyCheckinStep === 1 ? (
+              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={impersonating}>Continue</Button>
+            ) : (
+              <Button onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || impersonating}>
+                {submittingWeeklyCheckin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Submit weekly check-in
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="sm:max-w-[425px]">

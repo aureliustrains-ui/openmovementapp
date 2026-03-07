@@ -21,8 +21,10 @@ import AdminClientsList from "@/pages/admin/ClientsList";
 import AdminClientProfile from "@/pages/admin/ClientProfile";
 import AdminPhaseBuilder from "@/pages/admin/PhaseBuilder";
 import AdminTemplates from "@/pages/admin/Templates";
-import AdminAnalytics from "@/pages/admin/Analytics";
-import AdminQAChecklist from "@/pages/admin/QAChecklist";
+import AdminTemplateBuilder from "@/pages/admin/TemplateBuilder";
+import SessionTemplateEditor from "@/pages/admin/SessionTemplateEditor";
+import SectionTemplateEditor from "@/pages/admin/SectionTemplateEditor";
+import ExerciseTemplateEditor from "@/pages/admin/ExerciseTemplateEditor";
 
 // Client
 import ClientMyPhase from "@/pages/client/MyPhase";
@@ -31,21 +33,22 @@ import ClientChat from "@/pages/client/Chat";
 import ClientInfo from "@/pages/client/Info";
 
 function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
-  const { user } = useAuth();
+  const { sessionUser, impersonating } = useAuth();
   
-  if (!user) {
+  if (!sessionUser) {
     return <Redirect to="/login" />;
   }
   
-  if (allowedRole && user.role !== allowedRole) {
-    return <Redirect to={user.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />;
+  const canAccessAsImpersonatedClient = allowedRole === "Client" && impersonating && sessionUser.role === "Admin";
+  if (allowedRole && sessionUser.role !== allowedRole && !canAccessAsImpersonatedClient) {
+    return <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />;
   }
   
   return <Component {...rest} />;
 }
 
 function Router() {
-  const { user, initialized, initialize } = useAuth();
+  const { user, sessionUser, initialized, initialize } = useAuth();
 
   useEffect(() => {
     initialize();
@@ -62,24 +65,24 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        {user ? (
-          <Redirect to={user.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+        {sessionUser ? (
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
         ) : (
           <Redirect to="/login" />
         )}
       </Route>
 
       <Route path="/login">
-        {user ? (
-          <Redirect to={user.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+        {sessionUser ? (
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
         ) : (
           <Login />
         )}
       </Route>
 
       <Route path="/signup">
-        {user ? (
-          <Redirect to={user.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+        {sessionUser ? (
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
         ) : (
           <SignUp />
         )}
@@ -88,7 +91,7 @@ function Router() {
       {/* App Shell routing */}
       <Route path="/app/*">
         {() => {
-          if (!user) return <Redirect to="/login" />;
+          if (!sessionUser) return <Redirect to="/login" />;
           
           return (
             <AppLayout>
@@ -103,14 +106,20 @@ function Router() {
                 <Route path="/app/admin/clients/:clientId/builder/:phaseId">
                   {() => <ProtectedRoute component={AdminPhaseBuilder} allowedRole="Admin" />}
                 </Route>
+                <Route path="/app/admin/templates/phases/:phaseTemplateId">
+                  {() => <ProtectedRoute component={AdminTemplateBuilder} allowedRole="Admin" />}
+                </Route>
+                <Route path="/app/admin/templates/sessions/:sessionTemplateId">
+                  {() => <ProtectedRoute component={SessionTemplateEditor} allowedRole="Admin" />}
+                </Route>
+                <Route path="/app/admin/templates/sections/:sectionTemplateId">
+                  {() => <ProtectedRoute component={SectionTemplateEditor} allowedRole="Admin" />}
+                </Route>
+                <Route path="/app/admin/templates/exercises/:exerciseTemplateId">
+                  {() => <ProtectedRoute component={ExerciseTemplateEditor} allowedRole="Admin" />}
+                </Route>
                 <Route path="/app/admin/templates">
                   {() => <ProtectedRoute component={AdminTemplates} allowedRole="Admin" />}
-                </Route>
-                <Route path="/app/admin/analytics">
-                  {() => <ProtectedRoute component={AdminAnalytics} allowedRole="Admin" />}
-                </Route>
-                <Route path="/app/admin/qa">
-                  {() => <ProtectedRoute component={AdminQAChecklist} allowedRole="Admin" />}
                 </Route>
                 
                 {/* Client Routes */}

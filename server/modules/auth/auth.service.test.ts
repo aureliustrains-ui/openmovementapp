@@ -13,6 +13,14 @@ function buildUser(overrides: Partial<User> = {}): User {
     role: "Client",
     status: "Active",
     avatar: null,
+    bio: null,
+    height: null,
+    weight: null,
+    goals: null,
+    infos: null,
+    specifics: null,
+    specificsUpdatedAt: null,
+    specificsUpdatedBy: null,
     ...overrides,
   };
 }

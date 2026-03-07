@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -13,6 +13,14 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("Client"),
   status: text("status").notNull().default("Active"),
   avatar: text("avatar"),
+  bio: text("bio"),
+  height: text("height"),
+  weight: text("weight"),
+  goals: text("goals"),
+  infos: text("infos"),
+  specifics: text("specifics"),
+  specificsUpdatedAt: text("specifics_updated_at"),
+  specificsUpdatedBy: text("specifics_updated_by"),
 });
 
 export const phases = pgTable("phases", {
@@ -97,16 +105,56 @@ export const workoutLogs = pgTable("workout_logs", {
   phaseId: varchar("phase_id", { length: 64 }).notNull(),
   instanceId: text("instance_id").notNull(),
   exerciseId: text("exercise_id").notNull(),
+  exerciseName: text("exercise_name"),
   date: text("date").notNull(),
   sets: jsonb("sets").notNull().default([]),
   clientNotes: text("client_notes"),
 });
+
+export const sessionCheckins = pgTable("session_checkins", {
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id", { length: 64 }).notNull(),
+  sessionId: varchar("session_id", { length: 64 }).notNull(),
+  submittedAt: text("submitted_at").notNull(),
+  rpeOverall: integer("rpe_overall").notNull(),
+  feltOff: boolean("felt_off").notNull().default(false),
+  feltOffNote: text("felt_off_note"),
+});
+
+export const weeklyCheckins = pgTable(
+  "weekly_checkins",
+  {
+    id: varchar("id", { length: 64 })
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    clientId: varchar("client_id", { length: 64 }).notNull(),
+    phaseId: varchar("phase_id", { length: 64 }),
+    phaseWeekNumber: integer("phase_week_number"),
+    weekStartDate: text("week_start_date").notNull(),
+    submittedAt: text("submitted_at").notNull(),
+    sleepWeek: integer("sleep_week").notNull(),
+    energyWeek: integer("energy_week").notNull(),
+    injuryAffectedTraining: boolean("injury_affected_training").notNull().default(false),
+    injuryImpact: integer("injury_impact"),
+    coachNoteFromClient: text("coach_note_from_client"),
+  },
+  (table) => ({
+    weeklyCheckinsClientPhaseWeekUnique: uniqueIndex("weekly_checkins_client_phase_week_unique").on(
+      table.clientId,
+      table.phaseId,
+      table.phaseWeekNumber,
+    ),
+  }),
+);
 
 export const messages = pgTable("messages", {
   id: varchar("id", { length: 64 })
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   clientId: varchar("client_id", { length: 64 }).notNull(),
+  senderUserId: varchar("sender_user_id", { length: 64 }),
   sender: text("sender").notNull(),
   text: text("text").notNull(),
   time: text("time").notNull(),
@@ -132,6 +180,8 @@ export const insertSectionTemplateSchema = createInsertSchema(sectionTemplates).
 export const insertSessionTemplateSchema = createInsertSchema(sessionTemplates).omit({ id: true });
 export const insertPhaseTemplateSchema = createInsertSchema(phaseTemplates).omit({ id: true });
 export const insertWorkoutLogSchema = createInsertSchema(workoutLogs).omit({ id: true });
+export const insertSessionCheckinSchema = createInsertSchema(sessionCheckins).omit({ id: true });
+export const insertWeeklyCheckinSchema = createInsertSchema(weeklyCheckins).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
 export const insertChatReadStatusSchema = createInsertSchema(chatReadStatus).omit({ id: true });
 
@@ -151,6 +201,10 @@ export type InsertPhaseTemplate = z.infer<typeof insertPhaseTemplateSchema>;
 export type PhaseTemplate = typeof phaseTemplates.$inferSelect;
 export type InsertWorkoutLog = z.infer<typeof insertWorkoutLogSchema>;
 export type WorkoutLog = typeof workoutLogs.$inferSelect;
+export type InsertSessionCheckin = z.infer<typeof insertSessionCheckinSchema>;
+export type SessionCheckin = typeof sessionCheckins.$inferSelect;
+export type InsertWeeklyCheckin = z.infer<typeof insertWeeklyCheckinSchema>;
+export type WeeklyCheckin = typeof weeklyCheckins.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertChatReadStatus = z.infer<typeof insertChatReadStatusSchema>;

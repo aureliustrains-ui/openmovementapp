@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMessageSchema, createWorkoutLogSchema, markChatReadSchema } from "./request-schemas";
+import {
+  createMessageSchema,
+  createWorkoutLogSchema,
+  markChatReadSchema,
+  createSessionCheckinSchema,
+  createWeeklyCheckinSchema,
+} from "./request-schemas";
 
 test("createMessageSchema rejects unknown fields used for identity spoofing", () => {
   const parsed = createMessageSchema.safeParse({
@@ -31,3 +37,37 @@ test("markChatReadSchema requires clientId", () => {
   assert.equal(parsed.success, false);
 });
 
+test("createSessionCheckinSchema requires rpe within 0-10", () => {
+  const valid = createSessionCheckinSchema.safeParse({
+    sessionId: "session_1",
+    rpeOverall: 7,
+    feltOff: true,
+    feltOffNote: "Left knee felt unstable",
+  });
+  assert.equal(valid.success, true);
+
+  const invalid = createSessionCheckinSchema.safeParse({
+    sessionId: "session_1",
+    rpeOverall: 11,
+  });
+  assert.equal(invalid.success, false);
+});
+
+test("createWeeklyCheckinSchema enforces injury impact bounds", () => {
+  const valid = createWeeklyCheckinSchema.safeParse({
+    sleepWeek: 4,
+    energyWeek: 3,
+    injuryAffectedTraining: true,
+    injuryImpact: 2,
+    coachNoteFromClient: "Tight lower back after deadlifts",
+  });
+  assert.equal(valid.success, true);
+
+  const invalid = createWeeklyCheckinSchema.safeParse({
+    sleepWeek: 4,
+    energyWeek: 3,
+    injuryAffectedTraining: true,
+    injuryImpact: 5,
+  });
+  assert.equal(invalid.success, false);
+});

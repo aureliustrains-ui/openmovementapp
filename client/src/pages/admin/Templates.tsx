@@ -1,449 +1,409 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
-  exerciseTemplatesQuery, useCreateExerciseTemplate, useUpdateExerciseTemplate, useDeleteExerciseTemplate,
-  sectionTemplatesQuery, useCreateSectionTemplate, useUpdateSectionTemplate, useDeleteSectionTemplate,
-  sessionTemplatesQuery, useCreateSessionTemplate, useUpdateSessionTemplate, useDeleteSessionTemplate,
-  phaseTemplatesQuery, useCreatePhaseTemplate, useUpdatePhaseTemplate, useDeletePhaseTemplate,
+  exerciseTemplatesQuery,
+  phaseTemplatesQuery,
+  sectionTemplatesQuery,
+  sessionTemplatesQuery,
+  useCreateExerciseTemplate,
+  useCreatePhaseTemplate,
+  useCreateSectionTemplate,
+  useCreateSessionTemplate,
+  useDeleteExerciseTemplate,
+  useDeletePhaseTemplate,
+  useDeleteSectionTemplate,
+  useDeleteSessionTemplate,
 } from "@/lib/api";
+import {
+  clonePhaseTemplate,
+  cloneSectionFromTemplate,
+  cloneSessionFromTemplate,
+} from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Plus, Dumbbell, Folder, List, LayoutTemplate, MoreHorizontal, Loader2, Edit2, Copy, Trash2, ChevronDown, ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Copy, Plus, Search, Trash2 } from "lucide-react";
 
-function TemplateList({ items, search, icon: Icon, label, onEdit, onDuplicate, onDelete, renderBadges }: any) {
-  const filtered = useMemo(() => items.filter((t: any) =>
-    t.name.toLowerCase().includes(search.toLowerCase())
-  ), [items, search]);
+function makeDefaultPhaseTemplatePayload() {
+  return {
+    name: "New Phase Template",
+    goal: null,
+    durationWeeks: 4,
+    movementCheckEnabled: false,
+    sessions: [
+      {
+        id: crypto.randomUUID(),
+        name: "Session 1",
+        description: "",
+        sections: [{ id: crypto.randomUUID(), name: "A. Main", exercises: [] }],
+      },
+    ],
+    schedule: [],
+  };
+}
 
-  if (filtered.length === 0) {
-    return (
-      <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
-        <Icon className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-slate-900">No {label.toLowerCase()} found</h3>
-        <p className="text-slate-500 mt-1 max-w-sm mx-auto">
-          {search ? "Try adjusting your search terms." : `Create your first ${label.toLowerCase().slice(0, -1)} to get started.`}
-        </p>
-      </div>
-    );
-  }
+function makeDefaultSessionTemplate() {
+  return {
+    name: "New Session Template",
+    description: null,
+    sections: [{ id: crypto.randomUUID(), name: "Section 1", exercises: [] }],
+  };
+}
 
+function makeDefaultSectionTemplate() {
+  return {
+    name: "New Section Template",
+    description: null,
+    exercises: [],
+  };
+}
+
+function makeDefaultExerciseTemplate() {
+  return {
+    name: "New Exercise Template",
+    targetMuscle: null,
+    demoUrl: null,
+    sets: "3",
+    reps: "10",
+    load: "Auto",
+    tempo: "3010",
+    notes: null,
+    goal: null,
+    additionalInstructions: null,
+    requiresMovementCheck: false,
+    enableStructuredLogging: false,
+  };
+}
+
+function ListSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {filtered.map((item: any) => (
-        <Card key={item.id} className="border-slate-200 shadow-sm hover:border-slate-300 transition-colors bg-white rounded-xl" data-testid={`card-template-${item.id}`}>
-          <CardContent className="p-4 flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-slate-900 text-lg mb-1 truncate">{item.name}</h3>
-              <div className="flex items-center gap-2 flex-wrap">
-                {renderBadges?.(item)}
-              </div>
-              {item.description && (
-                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.description}</p>
-              )}
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 shrink-0" data-testid={`button-template-actions-${item.id}`}>
-                  <MoreHorizontal className="h-5 w-5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={() => onEdit(item)}><Edit2 className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDuplicate(item)}><Copy className="mr-2 h-4 w-4" /> Duplicate</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onDelete(item)} className="text-red-600 focus:text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 max-w-md w-full">
+      <Search className="h-4 w-4 text-slate-400 ml-2" />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="border-none shadow-none focus-visible:ring-0" />
     </div>
   );
 }
 
-export default function AdminTemplates() {
+export default function AdminTemplatesPage() {
   const { toast } = useToast();
-
-  const { data: exerciseTemps = [], isLoading: loadingEx } = useQuery(exerciseTemplatesQuery);
-  const { data: sectionTemps = [], isLoading: loadingSec } = useQuery(sectionTemplatesQuery);
-  const { data: sessionTemps = [], isLoading: loadingSess } = useQuery(sessionTemplatesQuery);
-  const { data: phaseTemps = [], isLoading: loadingPh } = useQuery(phaseTemplatesQuery);
-
-  const createEx = useCreateExerciseTemplate();
-  const updateEx = useUpdateExerciseTemplate();
-  const deleteEx = useDeleteExerciseTemplate();
-  const createSec = useCreateSectionTemplate();
-  const updateSec = useUpdateSectionTemplate();
-  const deleteSec = useDeleteSectionTemplate();
-  const createSess = useCreateSessionTemplate();
-  const updateSess = useUpdateSessionTemplate();
-  const deleteSess = useDeleteSessionTemplate();
-  const createPh = useCreatePhaseTemplate();
-  const updatePh = useUpdatePhaseTemplate();
-  const deletePh = useDeletePhaseTemplate();
-
   const [search, setSearch] = useState("");
-  const [dialogType, setDialogType] = useState<"exercise" | "section" | "session" | "phase" | null>(null);
-  const [editing, setEditing] = useState<any>(null);
-  const [deleting, setDeleting] = useState<any>(null);
-  const [deletingType, setDeletingType] = useState<string>("");
 
-  const [formName, setFormName] = useState("");
-  const [formTargetMuscle, setFormTargetMuscle] = useState("");
-  const [formDemoUrl, setFormDemoUrl] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formSets, setFormSets] = useState("");
-  const [formReps, setFormReps] = useState("");
-  const [formLoad, setFormLoad] = useState("");
-  const [formTempo, setFormTempo] = useState("");
-  const [formGoal, setFormGoal] = useState("");
-  const [formDuration, setFormDuration] = useState("4");
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const phaseTemplatesState = useQuery(phaseTemplatesQuery);
+  const sessionTemplatesState = useQuery(sessionTemplatesQuery);
+  const sectionTemplatesState = useQuery(sectionTemplatesQuery);
+  const exerciseTemplatesState = useQuery(exerciseTemplatesQuery);
+  const phaseTemplates = phaseTemplatesState.data || [];
+  const sessionTemplates = sessionTemplatesState.data || [];
+  const sectionTemplates = sectionTemplatesState.data || [];
+  const exerciseTemplates = exerciseTemplatesState.data || [];
+  const getErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && error.message ? error.message : fallback;
 
-  const openCreate = (type: "exercise" | "section" | "session" | "phase") => {
-    setEditing(null);
-    setFormName("");
-    setFormTargetMuscle("");
-    setFormDemoUrl("");
-    setFormDescription("");
-    setFormSets("3");
-    setFormReps("10");
-    setFormLoad("Auto");
-    setFormTempo("3010");
-    setFormGoal("");
-    setFormDuration("4");
-    setDialogType(type);
-  };
+  const loadErrors = [
+    phaseTemplatesState.error,
+    sessionTemplatesState.error,
+    sectionTemplatesState.error,
+    exerciseTemplatesState.error,
+  ]
+    .filter(Boolean)
+    .map((error) => getErrorMessage(error, "Unknown templates API error"));
 
-  const openEdit = (type: "exercise" | "section" | "session" | "phase", item: any) => {
-    setEditing(item);
-    setFormName(item.name || "");
-    setFormTargetMuscle(item.targetMuscle || "");
-    setFormDemoUrl(item.demoUrl || "");
-    setFormDescription(item.description || item.goal || "");
-    setFormSets(item.sets || "3");
-    setFormReps(item.reps || "10");
-    setFormLoad(item.load || "Auto");
-    setFormTempo(item.tempo || "3010");
-    setFormGoal(item.goal || "");
-    setFormDuration(String(item.durationWeeks || 4));
-    setDialogType(type);
-  };
+  const createPhaseTemplate = useCreatePhaseTemplate();
+  const deletePhaseTemplate = useDeletePhaseTemplate();
+  const createSessionTemplate = useCreateSessionTemplate();
+  const deleteSessionTemplate = useDeleteSessionTemplate();
+  const createSectionTemplate = useCreateSectionTemplate();
+  const deleteSectionTemplate = useDeleteSectionTemplate();
+  const createExerciseTemplate = useCreateExerciseTemplate();
+  const deleteExerciseTemplate = useDeleteExerciseTemplate();
 
-  const handleSave = async () => {
-    if (!formName.trim() || !dialogType) return;
+  const filteredPhases = useMemo(
+    () => phaseTemplates.filter((item: any) => item.name.toLowerCase().includes(search.toLowerCase())),
+    [phaseTemplates, search],
+  );
+  const filteredSessions = useMemo(
+    () => sessionTemplates.filter((item: any) => item.name.toLowerCase().includes(search.toLowerCase())),
+    [sessionTemplates, search],
+  );
+  const filteredSections = useMemo(
+    () => sectionTemplates.filter((item: any) => item.name.toLowerCase().includes(search.toLowerCase())),
+    [sectionTemplates, search],
+  );
+  const filteredExercises = useMemo(
+    () => exerciseTemplates.filter((item: any) => item.name.toLowerCase().includes(search.toLowerCase())),
+    [exerciseTemplates, search],
+  );
+
+  const createPhase = async () => {
     try {
-      if (dialogType === "exercise") {
-        const data = { name: formName, targetMuscle: formTargetMuscle || null, demoUrl: formDemoUrl || null, sets: formSets || null, reps: formReps || null, load: formLoad || null, tempo: formTempo || null, goal: formGoal || null };
-        if (editing) await updateEx.mutateAsync({ id: editing.id, ...data });
-        else await createEx.mutateAsync(data);
-      } else if (dialogType === "section") {
-        const data = { name: formName, description: formDescription || null, exercises: editing?.exercises || [] };
-        if (editing) await updateSec.mutateAsync({ id: editing.id, ...data });
-        else await createSec.mutateAsync(data);
-      } else if (dialogType === "session") {
-        const data = { name: formName, description: formDescription || null, sections: editing?.sections || [] };
-        if (editing) await updateSess.mutateAsync({ id: editing.id, ...data });
-        else await createSess.mutateAsync(data);
-      } else if (dialogType === "phase") {
-        const data = { name: formName, goal: formGoal || null, durationWeeks: parseInt(formDuration) || 4, sessions: editing?.sessions || [], schedule: editing?.schedule || [] };
-        if (editing) await updatePh.mutateAsync({ id: editing.id, ...data });
-        else await createPh.mutateAsync(data);
-      }
-      toast({ title: editing ? "Template updated" : "Template created" });
-      setDialogType(null);
-    } catch {
-      toast({ title: "Error saving template", variant: "destructive" });
+      const created = await createPhaseTemplate.mutateAsync(makeDefaultPhaseTemplatePayload());
+      window.location.href = `/app/admin/templates/phases/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not create phase template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
     }
   };
 
-  const handleDuplicate = async (type: string, item: any) => {
+  const duplicatePhase = async (item: any) => {
     try {
-      const copy = { ...item, name: `${item.name} (Copy)` };
-      delete copy.id;
-      if (type === "exercise") await createEx.mutateAsync(copy);
-      else if (type === "section") await createSec.mutateAsync(copy);
-      else if (type === "session") await createSess.mutateAsync(copy);
-      else if (type === "phase") await createPh.mutateAsync(copy);
-      toast({ title: "Template duplicated" });
-    } catch {
-      toast({ title: "Error duplicating", variant: "destructive" });
+      const cloned = clonePhaseTemplate({
+        sessions: (item.sessions || []) as any[],
+        schedule: (item.schedule || []) as any[],
+      });
+      const created = await createPhaseTemplate.mutateAsync({
+        name: `${item.name} (Copy)`,
+        goal: item.goal ?? null,
+        durationWeeks: item.durationWeeks ?? 4,
+        movementCheckEnabled: Boolean(item.movementCheckEnabled),
+        sessions: cloned.sessions,
+        schedule: cloned.schedule,
+      });
+      window.location.href = `/app/admin/templates/phases/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not duplicate phase template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleting) return;
+  const removePhase = async (id: string) => {
+    if (!window.confirm("Delete this phase template?")) return;
     try {
-      if (deletingType === "exercise") await deleteEx.mutateAsync(deleting.id);
-      else if (deletingType === "section") await deleteSec.mutateAsync(deleting.id);
-      else if (deletingType === "session") await deleteSess.mutateAsync(deleting.id);
-      else if (deletingType === "phase") await deletePh.mutateAsync(deleting.id);
-      toast({ title: "Template deleted" });
-      setDeleting(null);
-    } catch {
-      toast({ title: "Error deleting", variant: "destructive" });
+      await deletePhaseTemplate.mutateAsync(id);
+      toast({ title: "Phase template deleted" });
+    } catch (error) {
+      toast({ title: "Could not delete phase template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
     }
   };
 
-  const startDelete = (type: string, item: any) => {
-    setDeletingType(type);
-    setDeleting(item);
+  const createSession = async () => {
+    try {
+      const created = await createSessionTemplate.mutateAsync(makeDefaultSessionTemplate());
+      window.location.href = `/app/admin/templates/sessions/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not create session template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
   };
 
-  const countExercises = (item: any) => {
-    if (item.exercises) return (item.exercises as any[]).length;
-    if (item.sections) return (item.sections as any[]).reduce((sum: number, s: any) => sum + (s.exercises?.length || 0), 0);
-    if (item.sessions) return (item.sessions as any[]).reduce((sum: number, sess: any) => sum + (sess.sections || []).reduce((ss: number, sec: any) => ss + (sec.exercises?.length || 0), 0), 0);
-    return 0;
+  const duplicateSession = async (item: any) => {
+    try {
+      const cloned = cloneSessionFromTemplate(item);
+      const created = await createSessionTemplate.mutateAsync({
+        name: `${item.name} (Copy)`,
+        description: item.description || null,
+        sections: cloned.sections,
+      });
+      window.location.href = `/app/admin/templates/sessions/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not duplicate session template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
   };
 
-  const isLoading = loadingEx || loadingSec || loadingSess || loadingPh;
+  const removeSession = async (id: string) => {
+    if (!window.confirm("Delete this session template?")) return;
+    try {
+      await deleteSessionTemplate.mutateAsync(id);
+      toast({ title: "Session template deleted" });
+    } catch (error) {
+      toast({ title: "Could not delete session template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const createSection = async () => {
+    try {
+      const created = await createSectionTemplate.mutateAsync(makeDefaultSectionTemplate());
+      window.location.href = `/app/admin/templates/sections/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not create section template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const duplicateSection = async (item: any) => {
+    try {
+      const cloned = cloneSectionFromTemplate(item);
+      const created = await createSectionTemplate.mutateAsync({
+        name: `${item.name} (Copy)`,
+        description: item.description || null,
+        exercises: cloned.exercises,
+      });
+      window.location.href = `/app/admin/templates/sections/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not duplicate section template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const removeSection = async (id: string) => {
+    if (!window.confirm("Delete this section template?")) return;
+    try {
+      await deleteSectionTemplate.mutateAsync(id);
+      toast({ title: "Section template deleted" });
+    } catch (error) {
+      toast({ title: "Could not delete section template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const createExercise = async () => {
+    try {
+      const created = await createExerciseTemplate.mutateAsync(makeDefaultExerciseTemplate());
+      window.location.href = `/app/admin/templates/exercises/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not create exercise template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const duplicateExercise = async (item: any) => {
+    try {
+      const created = await createExerciseTemplate.mutateAsync({
+        name: `${item.name} (Copy)`,
+        targetMuscle: item.targetMuscle || null,
+        demoUrl: item.demoUrl || null,
+        sets: item.sets || null,
+        reps: item.reps || null,
+        load: item.load || null,
+        tempo: item.tempo || null,
+        notes: item.notes || null,
+        goal: item.goal || null,
+        additionalInstructions: item.additionalInstructions || null,
+        requiresMovementCheck: Boolean(item.requiresMovementCheck),
+        enableStructuredLogging: Boolean(item.enableStructuredLogging),
+      });
+      window.location.href = `/app/admin/templates/exercises/${created.id}`;
+    } catch (error) {
+      toast({ title: "Could not duplicate exercise template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
+
+  const removeExercise = async (id: string) => {
+    if (!window.confirm("Delete this exercise template?")) return;
+    try {
+      await deleteExerciseTemplate.mutateAsync(id);
+      toast({ title: "Exercise template deleted" });
+    } catch (error) {
+      toast({ title: "Could not delete exercise template", description: getErrorMessage(error, "Unknown error"), variant: "destructive" });
+    }
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-templates-title">Template Library</h1>
-        <p className="text-slate-500 mt-1">Manage reusable components for faster programming.</p>
+    <div className="space-y-6 max-w-6xl mx-auto pb-16">
+      <div className="bg-slate-900 text-white rounded-2xl p-6">
+        <h1 className="text-3xl font-display font-bold">Templates</h1>
+        <p className="text-slate-300 mt-1">Manage all template types in one place.</p>
       </div>
 
-      <Tabs defaultValue="exercises" className="w-full">
-        <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start overflow-x-auto h-12">
-          <TabsTrigger value="phases" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6">
-            <LayoutTemplate className="w-4 h-4 mr-2" /> Phases
-            {phaseTemps.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] h-5">{phaseTemps.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="sessions" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6">
-            <Folder className="w-4 h-4 mr-2" /> Sessions
-            {sessionTemps.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] h-5">{sessionTemps.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="sections" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6">
-            <List className="w-4 h-4 mr-2" /> Sections
-            {sectionTemps.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] h-5">{sectionTemps.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="exercises" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6">
-            <Dumbbell className="w-4 h-4 mr-2" /> Exercises
-            {exerciseTemps.length > 0 && <Badge variant="secondary" className="ml-2 text-[10px] h-5">{exerciseTemps.length}</Badge>}
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="mt-8">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-indigo-600" /></div>
-          ) : (
-            <>
-              <TabsContent value="exercises" className="space-y-6 m-0 outline-none">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-full max-w-md">
-                    <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />
-                    <Input type="search" placeholder="Search exercises..." className="border-none shadow-none focus-visible:ring-0 px-0 h-10 bg-transparent" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="input-search-exercises" />
-                  </div>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" onClick={() => openCreate("exercise")} data-testid="button-new-exercise"><Plus className="mr-2 h-4 w-4" /> New Exercise</Button>
-                </div>
-                <TemplateList
-                  items={exerciseTemps}
-                  search={search}
-                  icon={Dumbbell}
-                  label="Exercises"
-                  onEdit={(item: any) => openEdit("exercise", item)}
-                  onDuplicate={(item: any) => handleDuplicate("exercise", item)}
-                  onDelete={(item: any) => startDelete("exercise", item)}
-                  renderBadges={(ex: any) => (
-                    <>
-                      {ex.targetMuscle && <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{ex.targetMuscle}</Badge>}
-                      {ex.demoUrl && <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 font-normal text-xs">Has Video</Badge>}
-                      {ex.sets && <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{ex.sets}x{ex.reps}</Badge>}
-                    </>
-                  )}
-                />
-              </TabsContent>
-
-              <TabsContent value="sections" className="space-y-6 m-0 outline-none">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-full max-w-md">
-                    <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />
-                    <Input type="search" placeholder="Search sections..." className="border-none shadow-none focus-visible:ring-0 px-0 h-10 bg-transparent" value={search} onChange={(e) => setSearch(e.target.value)} />
-                  </div>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" onClick={() => openCreate("section")}><Plus className="mr-2 h-4 w-4" /> New Section</Button>
-                </div>
-                <TemplateList
-                  items={sectionTemps}
-                  search={search}
-                  icon={List}
-                  label="Sections"
-                  onEdit={(item: any) => openEdit("section", item)}
-                  onDuplicate={(item: any) => handleDuplicate("section", item)}
-                  onDelete={(item: any) => startDelete("section", item)}
-                  renderBadges={(s: any) => (
-                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{countExercises(s)} exercises</Badge>
-                  )}
-                />
-              </TabsContent>
-
-              <TabsContent value="sessions" className="space-y-6 m-0 outline-none">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-full max-w-md">
-                    <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />
-                    <Input type="search" placeholder="Search sessions..." className="border-none shadow-none focus-visible:ring-0 px-0 h-10 bg-transparent" value={search} onChange={(e) => setSearch(e.target.value)} />
-                  </div>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" onClick={() => openCreate("session")}><Plus className="mr-2 h-4 w-4" /> New Session</Button>
-                </div>
-                <TemplateList
-                  items={sessionTemps}
-                  search={search}
-                  icon={Folder}
-                  label="Sessions"
-                  onEdit={(item: any) => openEdit("session", item)}
-                  onDuplicate={(item: any) => handleDuplicate("session", item)}
-                  onDelete={(item: any) => startDelete("session", item)}
-                  renderBadges={(s: any) => (
-                    <>
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{(s.sections as any[])?.length || 0} sections</Badge>
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{countExercises(s)} exercises</Badge>
-                    </>
-                  )}
-                />
-              </TabsContent>
-
-              <TabsContent value="phases" className="space-y-6 m-0 outline-none">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm w-full max-w-md">
-                    <Search className="h-5 w-5 text-slate-400 ml-3 shrink-0" />
-                    <Input type="search" placeholder="Search phases..." className="border-none shadow-none focus-visible:ring-0 px-0 h-10 bg-transparent" value={search} onChange={(e) => setSearch(e.target.value)} />
-                  </div>
-                  <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full" onClick={() => openCreate("phase")}><Plus className="mr-2 h-4 w-4" /> New Phase</Button>
-                </div>
-                <TemplateList
-                  items={phaseTemps}
-                  search={search}
-                  icon={LayoutTemplate}
-                  label="Phases"
-                  onEdit={(item: any) => openEdit("phase", item)}
-                  onDuplicate={(item: any) => handleDuplicate("phase", item)}
-                  onDelete={(item: any) => startDelete("phase", item)}
-                  renderBadges={(p: any) => (
-                    <>
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{p.durationWeeks}w</Badge>
-                      <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-normal text-xs">{(p.sessions as any[])?.length || 0} sessions</Badge>
-                      {p.goal && <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 font-normal text-xs truncate max-w-[150px]">{p.goal}</Badge>}
-                    </>
-                  )}
-                />
-              </TabsContent>
-            </>
-          )}
-        </div>
-      </Tabs>
-
-      <Dialog open={!!dialogType} onOpenChange={(open) => !open && setDialogType(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit" : "New"} {dialogType === "exercise" ? "Exercise" : dialogType === "section" ? "Section" : dialogType === "session" ? "Session" : "Phase"} Template</DialogTitle>
-            <DialogDescription>
-              {editing ? "Update this template's details." : "Create a new reusable template."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={formName} onChange={e => setFormName(e.target.value)} placeholder="Template name" data-testid="input-template-name" />
+      <Card className="border-slate-200 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-6">
+          {loadErrors.length > 0 && (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="templates-load-error">
+              <div className="font-semibold">Could not load templates from API</div>
+              <div className="mt-1 break-words">{loadErrors[0]}</div>
             </div>
+          )}
+          <Tabs defaultValue="phases" className="w-full" onValueChange={() => setSearch("") }>
+            <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start overflow-x-auto h-12">
+              <TabsTrigger value="phases" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-5">Phase Templates</TabsTrigger>
+              <TabsTrigger value="sessions" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-5">Session Templates</TabsTrigger>
+              <TabsTrigger value="sections" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-5">Section Templates</TabsTrigger>
+              <TabsTrigger value="exercises" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-5">Exercise Templates</TabsTrigger>
+            </TabsList>
 
-            {dialogType === "exercise" && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Target Muscle</Label>
-                    <Input value={formTargetMuscle} onChange={e => setFormTargetMuscle(e.target.value)} placeholder="e.g. Quads" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Demo URL</Label>
-                    <Input value={formDemoUrl} onChange={e => setFormDemoUrl(e.target.value)} placeholder="https://..." />
-                  </div>
-                </div>
-                <div className="grid grid-cols-4 gap-3">
-                  <div className="space-y-2">
-                    <Label>Sets</Label>
-                    <Input value={formSets} onChange={e => setFormSets(e.target.value)} placeholder="3" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Reps</Label>
-                    <Input value={formReps} onChange={e => setFormReps(e.target.value)} placeholder="10" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Load</Label>
-                    <Input value={formLoad} onChange={e => setFormLoad(e.target.value)} placeholder="Auto" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tempo</Label>
-                    <Input value={formTempo} onChange={e => setFormTempo(e.target.value)} placeholder="3010" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Goal</Label>
-                  <Input value={formGoal} onChange={e => setFormGoal(e.target.value)} placeholder="e.g. Progressive overload" />
-                </div>
-              </>
-            )}
-
-            {(dialogType === "section" || dialogType === "session") && (
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input value={formDescription} onChange={e => setFormDescription(e.target.value)} placeholder="Brief description" />
+            <TabsContent value="phases" className="m-0 pt-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <ListSearch value={search} onChange={setSearch} placeholder="Search phase templates..." />
+                <Button onClick={createPhase}><Plus className="h-4 w-4 mr-2" /> New Phase Template</Button>
               </div>
-            )}
-
-            {dialogType === "phase" && (
-              <>
-                <div className="space-y-2">
-                  <Label>Goal</Label>
-                  <Input value={formGoal} onChange={e => setFormGoal(e.target.value)} placeholder="Phase goal" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Duration (weeks)</Label>
-                  <Input type="number" value={formDuration} onChange={e => setFormDuration(e.target.value)} min="1" max="52" />
-                </div>
-              </>
-            )}
-
-            {editing && (dialogType === "section" || dialogType === "session" || dialogType === "phase") && (
-              <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-                <p className="text-xs text-slate-500 font-medium mb-1">
-                  {dialogType === "section" && `Contains ${countExercises(editing)} exercise(s)`}
-                  {dialogType === "session" && `Contains ${(editing.sections as any[])?.length || 0} section(s), ${countExercises(editing)} exercise(s)`}
-                  {dialogType === "phase" && `Contains ${(editing.sessions as any[])?.length || 0} session(s)`}
-                </p>
-                <p className="text-[10px] text-slate-400">Structure is preserved from the original save. Edit in the Phase Builder for detailed changes.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredPhases.map((item: any) => (
+                  <Card key={item.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{item.name}</h3>
+                        <p className="text-sm text-slate-500 mt-1">{(item.sessions || []).length} session(s), {item.durationWeeks || 4} week(s)</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/app/admin/templates/phases/${item.id}`}><Button size="sm" variant="outline">Open</Button></Link>
+                        <Button size="sm" variant="outline" onClick={() => duplicatePhase(item)}><Copy className="h-4 w-4 mr-2" /> Duplicate</Button>
+                        <Button size="sm" variant="outline" className="text-red-600" onClick={() => removePhase(item.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogType(null)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!formName.trim()} data-testid="button-save-template">{editing ? "Save Changes" : "Create"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </TabsContent>
 
-      <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Template?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{deleting?.name}". This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <TabsContent value="sessions" className="m-0 pt-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <ListSearch value={search} onChange={setSearch} placeholder="Search session templates..." />
+                <Button onClick={createSession}><Plus className="h-4 w-4 mr-2" /> New Session Template</Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredSessions.map((item: any) => (
+                  <Card key={item.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{item.name}</h3>
+                        <p className="text-sm text-slate-500 mt-1">{(item.sections || []).length} section(s)</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/app/admin/templates/sessions/${item.id}`}><Button size="sm" variant="outline">Open</Button></Link>
+                        <Button size="sm" variant="outline" onClick={() => duplicateSession(item)}><Copy className="h-4 w-4 mr-2" /> Duplicate</Button>
+                        <Button size="sm" variant="outline" className="text-red-600" onClick={() => removeSession(item.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="sections" className="m-0 pt-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <ListSearch value={search} onChange={setSearch} placeholder="Search section templates..." />
+                <Button onClick={createSection}><Plus className="h-4 w-4 mr-2" /> New Section Template</Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredSections.map((item: any) => (
+                  <Card key={item.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{item.name}</h3>
+                        <p className="text-sm text-slate-500 mt-1">{(item.exercises || []).length} exercise(s)</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/app/admin/templates/sections/${item.id}`}><Button size="sm" variant="outline">Open</Button></Link>
+                        <Button size="sm" variant="outline" onClick={() => duplicateSection(item)}><Copy className="h-4 w-4 mr-2" /> Duplicate</Button>
+                        <Button size="sm" variant="outline" className="text-red-600" onClick={() => removeSection(item.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="exercises" className="m-0 pt-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <ListSearch value={search} onChange={setSearch} placeholder="Search exercise templates..." />
+                <Button onClick={createExercise}><Plus className="h-4 w-4 mr-2" /> New Exercise Template</Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredExercises.map((item: any) => (
+                  <Card key={item.id}>
+                    <CardContent className="p-4 space-y-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{item.name}</h3>
+                        <p className="text-sm text-slate-500 mt-1">{item.targetMuscle || "No target effect"}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/app/admin/templates/exercises/${item.id}`}><Button size="sm" variant="outline">Open</Button></Link>
+                        <Button size="sm" variant="outline" onClick={() => duplicateExercise(item)}><Copy className="h-4 w-4 mr-2" /> Duplicate</Button>
+                        <Button size="sm" variant="outline" className="text-red-600" onClick={() => removeExercise(item.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

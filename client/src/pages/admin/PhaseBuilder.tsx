@@ -2,18 +2,19 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, sectionTemplatesQuery, sessionTemplatesQuery, phaseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase, useCreateExerciseTemplate, useCreateSectionTemplate, useCreateSessionTemplate, useCreatePhaseTemplate } from "@/lib/api";
+import { cloneExerciseFromTemplate, clonePhaseTemplate, cloneSectionFromTemplate, cloneSessionFromTemplate, toBlueprintExercise } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus, GripVertical, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy, Video, ChevronDown, ChevronRight, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
+import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal";
+import { SessionEditorCard } from "@/components/admin/builder/SessionEditorCard";
 
 function generateId() {
   return crypto.randomUUID();
@@ -102,6 +103,9 @@ export default function AdminPhaseBuilder() {
   const { data: allPhases = [], isFetching: fetchingPhases } = useQuery(phasesQuery);
   const { data: phaseSessions = [], isLoading: loadingSessions, isFetching: fetchingSessions } = useQuery(sessionsByPhaseQuery(params?.phaseId || ''));
   const { data: templates = [] } = useQuery(exerciseTemplatesQuery);
+  const { data: sectionTemplates = [] } = useQuery(sectionTemplatesQuery);
+  const { data: sessionTemplates = [] } = useQuery(sessionTemplatesQuery);
+  const { data: phaseTemplates = [] } = useQuery(phaseTemplatesQuery);
   const updatePhase = useUpdatePhase();
   const createPhase = useCreatePhase();
   const createSession = useCreateSession();
@@ -126,12 +130,7 @@ export default function AdminPhaseBuilder() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [assignSessionTarget, setAssignSessionTarget] = useState<{ day: string; slot: string } | null>(null);
-  const [collapsedSessions, setCollapsedSessions] = useState<Record<string, boolean>>({});
   const justSavedRef = useRef(false);
-
-  const toggleSessionCollapse = (sessionId: string) => {
-    setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
-  };
 
   const isDirty = useMemo(() => {
     if ((fetchingSessions || fetchingPhases) && lastSavedAt) return false;
@@ -176,8 +175,21 @@ export default function AdminPhaseBuilder() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
-  const [addExerciseTarget, setAddExerciseTarget] = useState<{ sessionIdx: number; sectionIdx: number } | null>(null);
-  const [exerciseSearch, setExerciseSearch] = useState("");
+  const [addSessionModalOpen, setAddSessionModalOpen] = useState(false);
+  const [insertTemplateOpen, setInsertTemplateOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedTemplateSessionId, setSelectedTemplateSessionId] = useState<string>("");
+  const [selectedTemplateSectionId, setSelectedTemplateSectionId] = useState<string>("");
+  const [selectedTargetSessionId, setSelectedTargetSessionId] = useState<string>("");
+
+  useEffect(() => {
+    setSelectedTemplateSessionId("");
+    setSelectedTemplateSectionId("");
+  }, [selectedTemplateId]);
+
+  useEffect(() => {
+    setSelectedTemplateSectionId("");
+  }, [selectedTemplateSessionId]);
 
   const currentPhaseId = params?.phaseId || 'new';
 
@@ -280,79 +292,16 @@ export default function AdminPhaseBuilder() {
     setLocalSessions(prev => [...prev, makeSession(`Session ${prev.length + 1}`)]);
   };
 
+  const addSessionFromTemplate = (template: any) => {
+    const cloned = cloneSessionFromTemplate(template);
+    setLocalSessions((prev) => [...prev, { ...cloned, dbId: undefined, isNew: true }]);
+  };
+
   const removeSession = (idx: number) => {
     const removedSession = localSessions[idx];
     const removedId = removedSession.dbId || removedSession.id;
     setLocalSessions(prev => prev.filter((_, i) => i !== idx));
     setLocalSchedule(prev => prev.filter(e => e.sessionId !== removedId));
-  };
-
-  const addSection = (sessionIdx: number) => {
-    const letters = "ABCDEFGHIJKLMNOP";
-    updateLocalSession(sessionIdx, s => {
-      const letter = letters[s.sections.length] || String(s.sections.length + 1);
-      return { ...s, sections: [...s.sections, makeSection(`${letter}.`)] };
-    });
-  };
-
-  const removeSection = (sessionIdx: number, sectionIdx: number) => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.filter((_, i) => i !== sectionIdx),
-    }));
-  };
-
-  const updateSectionName = (sessionIdx: number, sectionIdx: number, name: string) => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.map((sec, i) => i === sectionIdx ? { ...sec, name } : sec),
-    }));
-  };
-
-  const addExercise = (sessionIdx: number, sectionIdx: number, name: string) => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.map((sec, i) =>
-        i === sectionIdx ? { ...sec, exercises: [...sec.exercises, makeExercise(name)] } : sec
-      ),
-    }));
-  };
-
-  const removeExercise = (sessionIdx: number, sectionIdx: number, exerciseIdx: number) => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.map((sec, si) =>
-        si === sectionIdx ? { ...sec, exercises: sec.exercises.filter((_, ei) => ei !== exerciseIdx) } : sec
-      ),
-    }));
-  };
-
-  const moveExercise = (sessionIdx: number, sectionIdx: number, exerciseIdx: number, direction: 'up' | 'down') => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.map((sec, si) => {
-        if (si !== sectionIdx) return sec;
-        const exercises = [...sec.exercises];
-        const targetIdx = direction === 'up' ? exerciseIdx - 1 : exerciseIdx + 1;
-        if (targetIdx < 0 || targetIdx >= exercises.length) return sec;
-        [exercises[exerciseIdx], exercises[targetIdx]] = [exercises[targetIdx], exercises[exerciseIdx]];
-        return { ...sec, exercises };
-      }),
-    }));
-  };
-
-  const updateExerciseField = (sessionIdx: number, sectionIdx: number, exerciseIdx: number, field: keyof Exercise, value: any) => {
-    updateLocalSession(sessionIdx, s => ({
-      ...s,
-      sections: s.sections.map((sec, si) =>
-        si === sectionIdx ? {
-          ...sec,
-          exercises: sec.exercises.map((ex, ei) =>
-            ei === exerciseIdx ? { ...ex, [field]: value } : ex
-          ),
-        } : sec
-      ),
-    }));
   };
 
   const addScheduleEntry = (day: string, slot: string, sessionId: string) => {
@@ -601,10 +550,6 @@ export default function AdminPhaseBuilder() {
     }
   };
 
-  const filteredTemplates = templates.filter((t: any) =>
-    t.name.toLowerCase().includes(exerciseSearch.toLowerCase())
-  );
-
   const phaseStatus = existingPhase?.status || 'Draft';
   const isPublished = phaseStatus === 'Active' || phaseStatus === 'Waiting for Movement Check';
 
@@ -616,6 +561,61 @@ export default function AdminPhaseBuilder() {
   const numWeeks = parseInt(durationWeeks) || 4;
 
   const totalExercises = localSessions.reduce((sum, s) => sum + s.sections.reduce((sSum, sec) => sSum + sec.exercises.length, 0), 0);
+
+  const selectedTemplate = phaseTemplates.find((template: any) => template.id === selectedTemplateId);
+  const selectedTemplateSessions = ((selectedTemplate?.sessions as any[]) || []);
+  const selectedTemplateSession = selectedTemplateSessions.find((session: any) => session.id === selectedTemplateSessionId);
+  const selectedTemplateSections = ((selectedTemplateSession?.sections as any[]) || []);
+
+  const applyWholeTemplate = () => {
+    if (!selectedTemplate) return;
+    const hasContent = localSchedule.length > 0 || localSessions.some((session) =>
+      session.name.trim() !== "" ||
+      session.description.trim() !== "" ||
+      session.sections.some((section) => section.exercises.length > 0),
+    );
+    if (hasContent && !window.confirm("Apply template and replace current phase builder content?")) return;
+
+    const cloned = clonePhaseTemplate({
+      sessions: (selectedTemplate.sessions || []) as any[],
+      schedule: (selectedTemplate.schedule || []) as any[],
+    });
+    const nextSessions: LocalSession[] = cloned.sessions.map((session) => ({
+      ...session,
+      dbId: undefined,
+      isNew: true,
+    }));
+    setLocalSessions(nextSessions.length > 0 ? nextSessions : [makeSession("Session 1")]);
+    setLocalSchedule(cloned.schedule);
+    if (selectedTemplate.goal) setGoal(selectedTemplate.goal);
+    if (selectedTemplate.durationWeeks) setDurationWeeks(String(selectedTemplate.durationWeeks));
+    setMovementCheckEnabled(Boolean(selectedTemplate.movementCheckEnabled));
+    setInsertTemplateOpen(false);
+    toast({ title: "Template applied", description: "Phase blueprint was replaced with template content." });
+  };
+
+  const insertSessionFromTemplate = () => {
+    const sourceSession = selectedTemplateSessions.find((session: any) => session.id === selectedTemplateSessionId);
+    if (!sourceSession) return;
+    const cloned = cloneSessionFromTemplate(sourceSession as any);
+    const nextSession: LocalSession = { ...cloned, dbId: undefined, isNew: true };
+    setLocalSessions((prev) => [...prev, nextSession]);
+    setInsertTemplateOpen(false);
+    toast({ title: "Session inserted", description: "Template session was inserted into this phase." });
+  };
+
+  const insertSectionFromTemplate = () => {
+    const sourceSection = selectedTemplateSections.find((section: any) => section.id === selectedTemplateSectionId);
+    if (!sourceSection || !selectedTargetSessionId) return;
+    const clonedSection = cloneSectionFromTemplate(sourceSection as any);
+    setLocalSessions((prev) => prev.map((session) => {
+      const sessionId = session.dbId || session.id;
+      if (sessionId !== selectedTargetSessionId) return session;
+      return { ...session, sections: [...session.sections, clonedSection] };
+    }));
+    setInsertTemplateOpen(false);
+    toast({ title: "Section inserted", description: "Template section was inserted into the selected session." });
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in">
@@ -643,6 +643,14 @@ export default function AdminPhaseBuilder() {
           )}
         </div>
         <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="rounded-full px-4"
+            onClick={() => setInsertTemplateOpen(true)}
+            data-testid="button-insert-template"
+          >
+            <Copy className="mr-2 h-4 w-4" /> Insert from Templates
+          </Button>
           {!isNew && (
             <Button
               variant="outline"
@@ -804,220 +812,31 @@ export default function AdminPhaseBuilder() {
         </Card>
       )}
 
-      {localSessions.map((session, sessionIdx) => {
-        const isCollapsed = collapsedSessions[session.id] ?? false;
-        const exerciseCount = session.sections.reduce((sum, sec) => sum + sec.exercises.length, 0);
-
-        return (
-          <Card key={session.id} className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid={`card-session-${sessionIdx}`}>
-            <div
-              className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3 cursor-pointer select-none"
-              onClick={() => toggleSessionCollapse(session.id)}
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {isCollapsed ? <ChevronRight className="h-5 w-5 text-slate-400 shrink-0" /> : <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" />}
-                <Badge variant="secondary" className="bg-indigo-600 text-white border-none shrink-0 text-xs">S{sessionIdx + 1}</Badge>
-                <Input
-                  value={session.name}
-                  onChange={(e) => updateLocalSession(sessionIdx, s => ({ ...s, name: e.target.value }))}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-lg font-display font-bold text-white border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-400 px-2 h-auto bg-transparent placeholder:text-slate-400"
-                  placeholder="Session name..."
-                  data-testid={`input-session-name-${sessionIdx}`}
-                />
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-slate-400">
-                  {session.sections.length} section{session.sections.length !== 1 ? 's' : ''} / {exerciseCount} exercise{exerciseCount !== 1 ? 's' : ''}
-                </span>
-                {localSessions.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                    onClick={(e) => { e.stopPropagation(); removeSession(sessionIdx); }}
-                    data-testid={`button-remove-session-${sessionIdx}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {!isCollapsed && (
-              <div className="p-6 space-y-4">
-                {session.sections.map((section, sectionIdx) => (
-                  <div key={section.id} className="border-2 border-slate-200 rounded-2xl bg-slate-50/50 p-4 relative" data-testid={`section-${sessionIdx}-${sectionIdx}`}>
-                    <div className="flex items-center gap-2 mb-4">
-                      <Input
-                        value={section.name}
-                        onChange={(e) => updateSectionName(sessionIdx, sectionIdx, e.target.value)}
-                        className="text-sm font-bold uppercase tracking-wider text-slate-700 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-2 h-8 bg-transparent max-w-[200px]"
-                        data-testid={`input-section-name-${sessionIdx}-${sectionIdx}`}
-                      />
-                      <div className="flex-1" />
-                      {session.sections.length > 1 && (
-                        <Button variant="ghost" size="sm" className="h-7 text-slate-400 hover:text-rose-600" onClick={() => removeSection(sessionIdx, sectionIdx)} data-testid={`button-remove-section-${sessionIdx}-${sectionIdx}`}>
-                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
-                        </Button>
-                      )}
-                    </div>
-
-                    <div>
-                      {section.exercises.map((ex, exIdx) => (
-                        <div key={ex.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-3 shadow-sm group" data-testid={`exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}>
-                          <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              <div className="flex flex-col gap-0.5 shrink-0">
-                                <button
-                                  onClick={() => moveExercise(sessionIdx, sectionIdx, exIdx, 'up')}
-                                  disabled={exIdx === 0}
-                                  className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed p-0.5"
-                                  data-testid={`button-move-up-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                                >
-                                  <ArrowUp className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => moveExercise(sessionIdx, sectionIdx, exIdx, 'down')}
-                                  disabled={exIdx === section.exercises.length - 1}
-                                  className="text-slate-400 hover:text-indigo-600 disabled:opacity-20 disabled:cursor-not-allowed p-0.5"
-                                  data-testid={`button-move-down-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                                >
-                                  <ArrowDown className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                              <Input
-                                value={ex.name}
-                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "name", e.target.value)}
-                                className="font-semibold text-slate-900 border-none shadow-none focus-visible:ring-1 focus-visible:ring-indigo-300 px-1 h-8 bg-transparent"
-                                data-testid={`input-exercise-name-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              />
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {movementCheckEnabled && (
-                                <div className="flex items-center gap-1.5 mr-2" onClick={(e) => e.stopPropagation()}>
-                                  <Checkbox
-                                    checked={ex.requiresMovementCheck}
-                                    onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "requiresMovementCheck", !!checked)}
-                                    data-testid={`checkbox-movement-check-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                                  />
-                                  <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold whitespace-nowrap">Video check</span>
-                                </div>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-slate-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => removeExercise(sessionIdx, sectionIdx, exIdx)}
-                                data-testid={`button-remove-exercise-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {([
-                              { key: "sets", label: "Sets" },
-                              { key: "reps", label: "Reps" },
-                              { key: "load", label: "Load" },
-                              { key: "tempo", label: "Tempo" },
-                            ] as const).map(({ key, label }) => (
-                              <div key={key} className="space-y-1.5">
-                                <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">{label}</Label>
-                                <Input
-                                  value={ex[key]}
-                                  onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, key, e.target.value)}
-                                  className="h-9 bg-slate-50 border-slate-200 font-medium"
-                                  data-testid={`input-${key}-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                                />
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/50 space-y-3">
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Goal</Label>
-                              <Input
-                                value={ex.goal}
-                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "goal", e.target.value)}
-                                placeholder="e.g. Hit 3x10 at RPE 7, increase load by 2.5kg next week"
-                                className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                                data-testid={`input-goal-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Additional Instructions</Label>
-                              <Textarea
-                                value={ex.additionalInstructions}
-                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "additionalInstructions", e.target.value)}
-                                placeholder="Cues, form tips, modifications..."
-                                className="min-h-[60px] text-sm bg-white border-slate-200 text-slate-600 resize-none"
-                                data-testid={`input-instructions-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              />
-                            </div>
-                            <Input
-                              value={ex.notes}
-                              onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "notes", e.target.value)}
-                              placeholder="Coaching notes..."
-                              className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                              data-testid={`input-notes-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                            />
-                            <div className="flex items-center gap-2">
-                              <Video className="h-4 w-4 text-slate-400 shrink-0" />
-                              <Input
-                                value={ex.demoUrl || ""}
-                                onChange={(e) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "demoUrl", e.target.value)}
-                                placeholder="Demo video URL (YouTube, Vimeo, etc.)"
-                                className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                                data-testid={`input-demo-url-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                              <Label className="text-xs text-slate-500">Enable structured set logging for client</Label>
-                              <Switch
-                                checked={ex.enableStructuredLogging}
-                                onCheckedChange={(checked) => updateExerciseField(sessionIdx, sectionIdx, exIdx, "enableStructuredLogging", checked)}
-                                data-testid={`switch-structured-logging-${sessionIdx}-${sectionIdx}-${exIdx}`}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      className="w-full mt-2 border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300"
-                      onClick={() => {
-                        setAddExerciseTarget({ sessionIdx, sectionIdx });
-                        setExerciseSearch("");
-                      }}
-                      data-testid={`button-add-exercise-${sessionIdx}-${sectionIdx}`}
-                    >
-                      <Plus className="mr-2 h-4 w-4" /> Add Exercise
-                    </Button>
-                  </div>
-                ))}
-
-                <Button
-                  variant="outline"
-                  className="w-full border-dashed border-slate-300 bg-white text-slate-500 hover:text-indigo-600 hover:border-indigo-300 rounded-xl"
-                  onClick={() => addSection(sessionIdx)}
-                  data-testid={`button-add-section-${sessionIdx}`}
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Add Section
-                </Button>
-              </div>
-            )}
-          </Card>
-        );
-      })}
+      {localSessions.map((session, sessionIdx) => (
+        <SessionEditorCard
+          key={session.id}
+          session={session as any}
+          sessionIdx={sessionIdx}
+          totalSessions={localSessions.length}
+          movementCheckEnabled={movementCheckEnabled}
+          sectionTemplates={sectionTemplates as any[]}
+          exerciseTemplates={templates as any[]}
+          onSessionChange={(updater) => updateLocalSession(sessionIdx, updater as any)}
+          onRemoveSession={() => removeSession(sessionIdx)}
+          onCreateSection={() => {
+            const letters = "ABCDEFGHIJKLMNOP";
+            const letter = letters[session.sections.length] || String(session.sections.length + 1);
+            return makeSection(`${letter}.`);
+          }}
+          onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
+          onCloneExerciseTemplate={(templateExercise) => cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))}
+        />
+      ))}
 
       <div className="flex justify-center mt-8">
         <Button
           className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-8 py-6 text-base shadow-lg"
-          onClick={addSession}
+          onClick={() => setAddSessionModalOpen(true)}
           data-testid="button-add-session"
         >
           <Plus className="mr-2 h-5 w-5" /> Add Session
@@ -1049,6 +868,110 @@ export default function AdminPhaseBuilder() {
                 <span className="font-medium text-slate-900 group-hover:text-indigo-700 transition-colors">{session.name}</span>
               </button>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={insertTemplateOpen} onOpenChange={setInsertTemplateOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Insert From Templates</DialogTitle>
+            <DialogDescription>
+              Apply a full phase template, or insert a session/section into the current phase builder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label>Phase Template</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a phase template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {phaseTemplates.map((template: any) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="border rounded-lg p-3 bg-slate-50">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium text-slate-900">Apply whole phase template</p>
+                  <p className="text-xs text-slate-500">Replaces current sessions and schedule.</p>
+                </div>
+                <Button onClick={applyWholeTemplate} disabled={!selectedTemplateId}>
+                  Apply
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="font-medium text-slate-900">Insert session</p>
+                <Select value={selectedTemplateSessionId} onValueChange={setSelectedTemplateSessionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose template session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedTemplateSessions.map((session: any) => (
+                      <SelectItem key={session.id} value={session.id}>
+                        {session.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button className="w-full" onClick={insertSessionFromTemplate} disabled={!selectedTemplateSessionId}>
+                  Insert Session
+                </Button>
+              </div>
+
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="font-medium text-slate-900">Insert section</p>
+                <Select value={selectedTemplateSessionId} onValueChange={setSelectedTemplateSessionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Template session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedTemplateSessions.map((session: any) => (
+                      <SelectItem key={session.id} value={session.id}>
+                        {session.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedTemplateSectionId} onValueChange={setSelectedTemplateSectionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Template section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedTemplateSections.map((section: any) => (
+                      <SelectItem key={section.id} value={section.id}>
+                        {section.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedTargetSessionId} onValueChange={setSelectedTargetSessionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Target current session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {localSessions.map((session, idx) => (
+                      <SelectItem key={session.id} value={session.dbId || session.id}>
+                        S{idx + 1}: {session.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button className="w-full" onClick={insertSectionFromTemplate} disabled={!selectedTemplateSectionId || !selectedTargetSessionId}>
+                  Insert Section
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1134,64 +1057,21 @@ export default function AdminPhaseBuilder() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addExerciseTarget !== null} onOpenChange={(open) => { if (!open) setAddExerciseTarget(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Exercise</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              placeholder="Search exercises or type a custom name..."
-              value={exerciseSearch}
-              onChange={(e) => setExerciseSearch(e.target.value)}
-              autoFocus
-              data-testid="input-exercise-search"
-            />
+      <AddFromTemplatesModal
+        open={addSessionModalOpen}
+        onOpenChange={setAddSessionModalOpen}
+        title="Add Session"
+        description="Create a new session or insert one from Session Templates."
+        createLabel="Create new session"
+        searchPlaceholder="Search session templates..."
+        templates={sessionTemplates as any[]}
+        getTemplateId={(item: any) => item.id}
+        getTemplateName={(item: any) => item.name}
+        getTemplateMeta={(item: any) => `${(item.sections || []).length} section(s)`}
+        onCreateNew={addSession}
+        onInsertTemplate={(item: any) => addSessionFromTemplate(item)}
+      />
 
-            {exerciseSearch.trim() && (
-              <Button
-                variant="outline"
-                className="w-full justify-start text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100"
-                onClick={() => {
-                  if (addExerciseTarget) {
-                    addExercise(addExerciseTarget.sessionIdx, addExerciseTarget.sectionIdx, exerciseSearch.trim());
-                    setAddExerciseTarget(null);
-                  }
-                }}
-                data-testid="button-add-custom-exercise"
-              >
-                <Plus className="mr-2 h-4 w-4" /> Add "{exerciseSearch.trim()}" as custom exercise
-              </Button>
-            )}
-
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              {filteredTemplates.length > 0 ? (
-                filteredTemplates.map((t: any) => (
-                  <button
-                    key={t.id}
-                    className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-100 transition-colors flex items-center justify-between group"
-                    onClick={() => {
-                      if (addExerciseTarget) {
-                        addExercise(addExerciseTarget.sessionIdx, addExerciseTarget.sectionIdx, t.name);
-                        setAddExerciseTarget(null);
-                      }
-                    }}
-                    data-testid={`button-template-${t.id}`}
-                  >
-                    <div>
-                      <div className="font-medium text-slate-900">{t.name}</div>
-                      {t.targetMuscle && <div className="text-xs text-slate-500">{t.targetMuscle}</div>}
-                    </div>
-                    <Plus className="h-4 w-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                ))
-              ) : (
-                !exerciseSearch.trim() && <div className="text-center py-6 text-slate-400 text-sm">Start typing to search your exercise library</div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -38,6 +38,24 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+if (config.NODE_ENV === "development") {
+  app.use((req, res, next) => {
+    const origin = req.get("origin");
+    if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      if (req.method.toUpperCase() === "OPTIONS") {
+        return res.status(204).end();
+      }
+    }
+    next();
+  });
+}
+
 app.use(enforceSameOriginForApi);
 
 const PgSession = connectPgSimple(session);
@@ -104,6 +122,10 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  app.use("/api/{*path}", (_req, res) => {
+    res.status(404).json({ message: "API route not found" });
+  });
 
   app.use(errorHandler);
 

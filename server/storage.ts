@@ -9,6 +9,8 @@ import {
   sessionTemplates,
   phaseTemplates,
   workoutLogs,
+  sessionCheckins,
+  weeklyCheckins,
   messages,
   chatReadStatus,
   type User,
@@ -27,6 +29,10 @@ import {
   type InsertPhaseTemplate,
   type WorkoutLog,
   type InsertWorkoutLog,
+  type SessionCheckin,
+  type InsertSessionCheckin,
+  type WeeklyCheckin,
+  type InsertWeeklyCheckin,
   type Message,
   type InsertMessage,
   type ChatReadStatus,
@@ -37,6 +43,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
 
   getPhases(): Promise<Phase[]>;
   getPhasesByClient(clientId: string): Promise<Phase[]>;
@@ -77,6 +84,7 @@ export interface IStorage {
   deleteSessionTemplate(id: string): Promise<boolean>;
 
   getPhaseTemplates(): Promise<PhaseTemplate[]>;
+  getPhaseTemplate(id: string): Promise<PhaseTemplate | undefined>;
   createPhaseTemplate(template: InsertPhaseTemplate): Promise<PhaseTemplate>;
   updatePhaseTemplate(
     id: string,
@@ -87,6 +95,23 @@ export interface IStorage {
   getWorkoutLogs(): Promise<WorkoutLog[]>;
   getLogsByClient(clientId: string): Promise<WorkoutLog[]>;
   createWorkoutLog(log: InsertWorkoutLog): Promise<WorkoutLog>;
+  getSessionCheckinsByClient(clientId: string): Promise<SessionCheckin[]>;
+  createSessionCheckin(checkin: InsertSessionCheckin): Promise<SessionCheckin>;
+  getWeeklyCheckinsByClient(clientId: string): Promise<WeeklyCheckin[]>;
+  getWeeklyCheckinByClientAndPhaseWeek(
+    clientId: string,
+    phaseId: string,
+    phaseWeekNumber: number,
+  ): Promise<WeeklyCheckin | undefined>;
+  createWeeklyCheckin(checkin: InsertWeeklyCheckin): Promise<WeeklyCheckin>;
+  getWeeklyCheckinByClientAndWeek(
+    clientId: string,
+    weekStartDate: string,
+  ): Promise<WeeklyCheckin | undefined>;
+  updateWeeklyCheckinIdentity(
+    id: string,
+    data: Pick<InsertWeeklyCheckin, "phaseId" | "phaseWeekNumber" | "weekStartDate">,
+  ): Promise<WeeklyCheckin | undefined>;
 
   getMessages(): Promise<Message[]>;
   getMessagesByClient(clientId: string): Promise<Message[]>;
@@ -119,6 +144,11 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser): Promise<User> {
     const [created] = await db.insert(users).values(user).returning();
     return created;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [updated] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return updated;
   }
 
   async getPhases(): Promise<Phase[]> {
@@ -264,6 +294,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(phaseTemplates);
   }
 
+  async getPhaseTemplate(id: string): Promise<PhaseTemplate | undefined> {
+    const [template] = await db.select().from(phaseTemplates).where(eq(phaseTemplates.id, id));
+    return template;
+  }
+
   async createPhaseTemplate(template: InsertPhaseTemplate): Promise<PhaseTemplate> {
     const [created] = await db.insert(phaseTemplates).values(template).returning();
     return created;
@@ -297,6 +332,61 @@ export class DatabaseStorage implements IStorage {
   async createWorkoutLog(log: InsertWorkoutLog): Promise<WorkoutLog> {
     const [created] = await db.insert(workoutLogs).values(log).returning();
     return created;
+  }
+
+  async getSessionCheckinsByClient(clientId: string): Promise<SessionCheckin[]> {
+    return db.select().from(sessionCheckins).where(eq(sessionCheckins.clientId, clientId));
+  }
+
+  async createSessionCheckin(checkin: InsertSessionCheckin): Promise<SessionCheckin> {
+    const [created] = await db.insert(sessionCheckins).values(checkin).returning();
+    return created;
+  }
+
+  async getWeeklyCheckinsByClient(clientId: string): Promise<WeeklyCheckin[]> {
+    return db.select().from(weeklyCheckins).where(eq(weeklyCheckins.clientId, clientId));
+  }
+
+  async getWeeklyCheckinByClientAndPhaseWeek(
+    clientId: string,
+    phaseId: string,
+    phaseWeekNumber: number,
+  ): Promise<WeeklyCheckin | undefined> {
+    const [existing] = await db
+      .select()
+      .from(weeklyCheckins)
+      .where(
+        and(
+          eq(weeklyCheckins.clientId, clientId),
+          eq(weeklyCheckins.phaseId, phaseId),
+          eq(weeklyCheckins.phaseWeekNumber, phaseWeekNumber),
+        ),
+      );
+    return existing;
+  }
+
+  async getWeeklyCheckinByClientAndWeek(
+    clientId: string,
+    weekStartDate: string,
+  ): Promise<WeeklyCheckin | undefined> {
+    const [existing] = await db
+      .select()
+      .from(weeklyCheckins)
+      .where(and(eq(weeklyCheckins.clientId, clientId), eq(weeklyCheckins.weekStartDate, weekStartDate)));
+    return existing;
+  }
+
+  async createWeeklyCheckin(checkin: InsertWeeklyCheckin): Promise<WeeklyCheckin> {
+    const [created] = await db.insert(weeklyCheckins).values(checkin).returning();
+    return created;
+  }
+
+  async updateWeeklyCheckinIdentity(
+    id: string,
+    data: Pick<InsertWeeklyCheckin, "phaseId" | "phaseWeekNumber" | "weekStartDate">,
+  ): Promise<WeeklyCheckin | undefined> {
+    const [updated] = await db.update(weeklyCheckins).set(data).where(eq(weeklyCheckins.id, id)).returning();
+    return updated;
   }
 
   async getMessages(): Promise<Message[]> {

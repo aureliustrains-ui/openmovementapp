@@ -1,176 +1,232 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { myProfileQuery, useUpdateMyProfile, useUploadMyAvatar } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Switch } from "@/components/ui/switch";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ComingSoonDialog } from "@/components/ComingSoonDialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Loader2, Save, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
 
-export default function Settings() {
-  const { user } = useAuth();
+type ProfileForm = {
+  name: string;
+  email: string;
+  avatar: string;
+  bio: string;
+  height: string;
+  weight: string;
+  goals: string;
+  infos: string;
+};
+
+function emptyForm(): ProfileForm {
+  return {
+    name: "",
+    email: "",
+    avatar: "",
+    bio: "",
+    height: "",
+    weight: "",
+    goals: "",
+    infos: "",
+  };
+}
+
+export default function MyProfilePage() {
+  const { sessionUser, impersonating, syncSessionUser } = useAuth();
   const { toast } = useToast();
-  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
-  const [comingSoonTitle, setComingSoonTitle] = useState("Coming Soon");
-  
-  if (!user) return null;
+  const { data: profile } = useQuery({ ...myProfileQuery, enabled: !!sessionUser });
+  const updateProfile = useUpdateMyProfile();
+  const uploadAvatar = useUploadMyAvatar();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleComingSoon = (title: string) => {
-    setComingSoonTitle(title);
-    setIsComingSoonOpen(true);
+  const [form, setForm] = useState<ProfileForm>(emptyForm());
+
+  useEffect(() => {
+    if (!profile) return;
+    setForm({
+      name: profile.name || "",
+      email: profile.email || "",
+      avatar: profile.avatar || "",
+      bio: profile.bio || "",
+      height: profile.height || "",
+      weight: profile.weight || "",
+      goals: profile.goals || "",
+      infos: profile.infos || "",
+    });
+  }, [profile]);
+
+  if (!sessionUser) return null;
+
+  const save = async () => {
+    try {
+      const updatedProfile = await updateProfile.mutateAsync({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        avatar: form.avatar.trim() || null,
+        bio: form.bio.trim() || null,
+        height: form.height.trim() || null,
+        weight: form.weight.trim() || null,
+        goals: form.goals.trim() || null,
+        infos: form.infos.trim() || null,
+      });
+      syncSessionUser({
+        id: updatedProfile.id || sessionUser.id,
+        name: updatedProfile.name || form.name.trim(),
+        email: updatedProfile.email || form.email.trim(),
+        role: sessionUser.role,
+        status: sessionUser.status,
+        avatar: updatedProfile.avatar || null,
+      });
+      setForm((prev) => ({ ...prev, avatar: updatedProfile.avatar || "" }));
+      toast({ title: "Profile saved" });
+    } catch (error: any) {
+      const message = error?.message?.includes("409")
+        ? "Email already in use"
+        : "Could not save profile";
+      toast({ title: message, variant: "destructive" });
+    }
+  };
+
+  const onUploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (impersonating) {
+      event.target.value = "";
+      return;
+    }
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast({ title: "Invalid file type. Use png, jpg, or webp.", variant: "destructive" });
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Avatar is too large (max 5MB)", variant: "destructive" });
+      event.target.value = "";
+      return;
+    }
+    try {
+      const result = await uploadAvatar.mutateAsync(file);
+      const avatarPath = result?.avatar || result?.user?.avatar || "";
+      setForm((prev) => ({ ...prev, avatar: avatarPath }));
+      syncSessionUser({
+        id: sessionUser.id,
+        name: form.name.trim() || sessionUser.name,
+        email: form.email.trim() || sessionUser.email,
+        role: sessionUser.role,
+        status: sessionUser.status,
+        avatar: avatarPath || null,
+      });
+      toast({ title: "Profile photo updated" });
+    } catch {
+      toast({ title: "Could not upload profile photo", variant: "destructive" });
+    } finally {
+      event.target.value = "";
+    }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-500">Manage your profile and workspace preferences.</p>
+        <h1 className="text-3xl font-display font-bold text-slate-900">My Profile</h1>
+        <p className="text-slate-500">Manage your profile details.</p>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="bg-slate-100 p-1 rounded-lg w-full justify-start overflow-x-auto">
-          <TabsTrigger value="profile" className="rounded-md">My Profile</TabsTrigger>
-          <TabsTrigger value="workspace" className="rounded-md">Workspace</TabsTrigger>
-          <TabsTrigger value="notifications" className="rounded-md">Notifications</TabsTrigger>
-          <TabsTrigger value="billing" className="rounded-md">Billing & Plan</TabsTrigger>
-        </TabsList>
-        
-        <div className="mt-6">
-          <TabsContent value="profile" className="space-y-6 m-0">
-            <Card className="border-none shadow-sm mb-6 bg-indigo-50 border-indigo-100">
-              <CardContent className="p-4 flex items-start gap-4">
-                <div className="bg-indigo-100 p-2 rounded-full text-indigo-600 mt-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-indigo-900 mb-1">Authentication Setup</h4>
-                  <p className="text-sm text-indigo-800">
-                    This app now uses built-in email/password authentication with secure server sessions. Additional providers can be added later if needed.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle>Profile</CardTitle>
+          <CardDescription>These details are saved to your account.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+            <Label>Name</Label>
+              <Input value={form.name} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} disabled={impersonating} />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} disabled={impersonating} />
+            </div>
+            <div className="space-y-2">
+              <Label>Height</Label>
+              <Input value={form.height} onChange={(e) => setForm((prev) => ({ ...prev, height: e.target.value }))} placeholder="e.g. 182 cm" disabled={impersonating} />
+            </div>
+            <div className="space-y-2">
+              <Label>Weight</Label>
+              <Input value={form.weight} onChange={(e) => setForm((prev) => ({ ...prev, weight: e.target.value }))} placeholder="e.g. 79 kg" disabled={impersonating} />
+            </div>
+          </div>
 
-            <Card className="border-none shadow-sm">
-              <CardHeader>
-                <CardTitle>Profile Information</CardTitle>
-                <CardDescription>Update your personal details here.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src={user.avatar || undefined} />
-                    <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <Button variant="outline" onClick={() => handleComingSoon("Change Avatar Coming Soon")}>Change Avatar</Button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" defaultValue={user.name || ""} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" defaultValue={user.email} disabled />
-                  </div>
-                </div>
-                <Button onClick={() => toast({ title: "Settings saved", description: "Your profile changes have been saved." })}>Save Changes</Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="workspace" className="space-y-6 m-0">
-            <Card className="border-none shadow-sm">
-              <CardHeader>
-                <CardTitle>Workspace Settings</CardTitle>
-                <CardDescription>Manage the active workspace.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2 max-w-md">
-                  <Label htmlFor="ws-name">Workspace Name</Label>
-                  <Input id="ws-name" defaultValue="Coaching Workspace" />
-                </div>
-                <div className="space-y-2 max-w-md">
-                  <Label htmlFor="ws-url">Workspace URL</Label>
-                  <div className="flex">
-                    <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-slate-200 bg-slate-50 text-slate-500 sm:text-sm">
-                      coaching.app/
-                    </span>
-                    <Input id="ws-url" defaultValue="acme" className="rounded-l-none" />
-                  </div>
-                </div>
-                <Button onClick={() => toast({ title: "Workspace saved", description: "Workspace settings have been updated." })}>Save Workspace</Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="notifications" className="space-y-6 m-0">
-            <Card className="border-none shadow-sm">
-              <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-                <CardDescription>Choose what we update you about.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  {[
-                    { title: "Email Notifications", desc: "Receive daily summaries of your tasks." },
-                    { title: "Push Notifications", desc: "Get instantly alerted for direct messages." },
-                    { title: "Marketing Emails", desc: "Hear about new features and updates." }
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-slate-100 bg-slate-50/50">
-                      <div>
-                        <div className="font-medium text-slate-900">{item.title}</div>
-                        <div className="text-sm text-slate-500">{item.desc}</div>
-                      </div>
-                      <Switch defaultChecked={i !== 2} />
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="billing" className="space-y-6 m-0">
-            <Card className="border-none shadow-sm overflow-hidden">
-              <div className="bg-indigo-600 p-8 text-white">
-                <h3 className="text-2xl font-display font-bold mb-2">Pro Plan</h3>
-                <p className="text-indigo-100 mb-6">You are currently on the Pro plan.</p>
-                <div className="text-4xl font-bold mb-1">$29<span className="text-lg font-normal text-indigo-200">/user/mo</span></div>
+          <div className="space-y-3">
+            <Label>Profile Picture</Label>
+            <div className="flex items-center gap-4">
+              <img
+                src={form.avatar || "https://placehold.co/80x80?text=Avatar"}
+                alt="Profile avatar"
+                className="h-16 w-16 rounded-full border border-slate-200 object-cover bg-slate-100"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={onUploadAvatar}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadAvatar.isPending || impersonating}
+                >
+                  {uploadAvatar.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Upload photo
+                </Button>
+                {form.avatar && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setForm((prev) => ({ ...prev, avatar: "" }))}
+                    disabled={impersonating}
+                  >
+                    Remove
+                  </Button>
+                )}
               </div>
-              <CardContent className="p-8">
-                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-6">
-                  <div>
-                    <div className="font-medium text-slate-900">Next billing date</div>
-                    <div className="text-sm text-slate-500">April 1, 2026</div>
-                  </div>
-                  <Button variant="outline" onClick={() => handleComingSoon("Subscription Management Coming Soon")}>Manage Subscription</Button>
-                </div>
-                <div>
-                  <h4 className="font-medium text-slate-900 mb-4">Payment Method</h4>
-                  <div className="flex items-center gap-4 p-4 rounded-lg border border-slate-200">
-                    <div className="h-8 w-12 bg-slate-100 rounded border flex items-center justify-center font-bold text-xs">VISA</div>
-                    <div className="flex-1">
-                      <div className="font-medium">Visa ending in 4242</div>
-                      <div className="text-xs text-slate-500">Expires 12/28</div>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => handleComingSoon("Edit Payment Coming Soon")}>Edit</Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </div>
-      </Tabs>
+            </div>
+          </div>
 
-      <ComingSoonDialog 
-        open={isComingSoonOpen} 
-        onOpenChange={setIsComingSoonOpen}
-        title={comingSoonTitle}
-      />
+          <div className="space-y-2">
+            <Label>Bio</Label>
+            <Textarea value={form.bio} onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))} className="min-h-[96px]" disabled={impersonating} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Goals</Label>
+            <Textarea value={form.goals} onChange={(e) => setForm((prev) => ({ ...prev, goals: e.target.value }))} className="min-h-[96px]" disabled={impersonating} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Infos</Label>
+            <Textarea value={form.infos} onChange={(e) => setForm((prev) => ({ ...prev, infos: e.target.value }))} className="min-h-[96px]" disabled={impersonating} />
+          </div>
+
+          {impersonating && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              You are impersonating a client. Profile edits are disabled to prevent changing the wrong account.
+            </div>
+          )}
+
+          <div className="pt-2">
+            <Button onClick={save} disabled={updateProfile.isPending || impersonating}>
+              {updateProfile.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Save Profile
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

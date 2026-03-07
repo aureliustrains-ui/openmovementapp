@@ -18,6 +18,15 @@ function getOriginHost(origin: string): string | null {
   }
 }
 
+function getHostName(host: string): string {
+  return host.split(":")[0]?.toLowerCase() || host.toLowerCase();
+}
+
+function isLocalDevHost(host: string): boolean {
+  const hostname = getHostName(host);
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
 export function enforceSameOriginForApi(req: Request, res: Response, next: NextFunction) {
   if (!req.path.startsWith("/api")) {
     return next();
@@ -34,10 +43,18 @@ export function enforceSameOriginForApi(req: Request, res: Response, next: NextF
 
   const requestHost = getRequestHost(req);
   const originHost = getOriginHost(origin);
+  if (
+    process.env.NODE_ENV === "development" &&
+    requestHost &&
+    originHost &&
+    isLocalDevHost(requestHost) &&
+    isLocalDevHost(originHost)
+  ) {
+    return next();
+  }
   if (!requestHost || !originHost || requestHost !== originHost) {
     return res.status(403).json({ message: "Forbidden origin" });
   }
 
   next();
 }
-

@@ -1,13 +1,28 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery, sessionsQuery, useUpdatePhase, useDeletePhase, messagesQuery, useSendMessage, useMarkChatRead } from "@/lib/api";
+import {
+  usersQuery,
+  phasesQuery,
+  sessionsQuery,
+  workoutLogsQuery,
+  clientSpecificsQuery,
+  useUpdateClientSpecifics,
+  useUpdatePhase,
+  useDeletePhase,
+  messagesQuery,
+  useSendMessage,
+  useMarkChatRead,
+  clientCheckinsSummaryQuery,
+  clientCheckinsTrendsQuery,
+  clientCheckinsRecentQuery,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, Settings, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive, Zap } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, PlayCircle, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive, Zap, Save } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -15,8 +30,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ComingSoonDialog } from "@/components/ComingSoonDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -50,13 +74,12 @@ export default function AdminClientProfile() {
   const { data: allUsers = [] } = useQuery(usersQuery);
   const { data: allPhases = [] } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
-  const { user, impersonate } = useAuth();
+  const { sessionUser, impersonate } = useAuth();
   const updatePhase = useUpdatePhase();
   const deletePhase = useDeletePhase();
 
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
-  const [isComingSoonOpen, setIsComingSoonOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
@@ -72,6 +95,19 @@ export default function AdminClientProfile() {
   const [activateTargetPhase, setActivateTargetPhase] = useState<any>(null);
   const [activating, setActivating] = useState(false);
   const [movementCheckPhaseId, setMovementCheckPhaseId] = useState<string | null>(null);
+  const [specificsDraft, setSpecificsDraft] = useState("");
+  const [savingSpecifics, setSavingSpecifics] = useState(false);
+  const [structuredLogsFilter, setStructuredLogsFilter] = useState("all");
+  const [checkinsRange, setCheckinsRange] = useState("8w");
+  const [sessionMetrics, setSessionMetrics] = useState({
+    rpeOverall: true,
+    feltOffEvents: true,
+  });
+  const [weeklyMetrics, setWeeklyMetrics] = useState({
+    sleepWeek: true,
+    energyWeek: true,
+    injuryImpact: true,
+  });
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -80,6 +116,30 @@ export default function AdminClientProfile() {
   });
   const sendMessage = useSendMessage();
   const markRead = useMarkChatRead();
+  const updateClientSpecifics = useUpdateClientSpecifics();
+  const { data: workoutLogs = [] } = useQuery(workoutLogsQuery(clientId || ""));
+  const { data: specificsData } = useQuery({
+    ...clientSpecificsQuery(clientId || ""),
+    enabled: !!clientId,
+  });
+  const { data: checkinsSummary } = useQuery({
+    ...clientCheckinsSummaryQuery(clientId || ""),
+    enabled: !!clientId && activeTab === "checkins",
+  });
+  const { data: checkinsTrends } = useQuery({
+    ...clientCheckinsTrendsQuery(clientId || "", checkinsRange),
+    enabled: !!clientId && activeTab === "checkins",
+  });
+  const { data: checkinsRecent } = useQuery({
+    ...clientCheckinsRecentQuery(clientId || ""),
+    enabled: !!clientId && activeTab === "checkins",
+  });
+
+  useEffect(() => {
+    if (typeof specificsData?.specifics === "string") {
+      setSpecificsDraft(specificsData.specifics);
+    }
+  }, [specificsData?.specifics]);
 
   useEffect(() => {
     if (activeTab === "chat") {
@@ -88,10 +148,10 @@ export default function AdminClientProfile() {
   }, [chatMessages, activeTab]);
 
   useEffect(() => {
-    if (activeTab === "chat" && user && clientId && chatMessages.length > 0) {
-      markRead.mutate({ userId: user.id, clientId });
+    if (activeTab === "chat" && sessionUser && clientId && chatMessages.length > 0) {
+      markRead.mutate({ userId: sessionUser.id, clientId });
     }
-  }, [activeTab, user?.id, clientId, chatMessages.length]);
+  }, [activeTab, sessionUser?.id, clientId, chatMessages.length]);
 
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
@@ -125,10 +185,7 @@ export default function AdminClientProfile() {
 
     sendMessage.mutate({
       clientId: clientId,
-      sender: "Head Coach",
       text: chatMessage,
-      time: new Date().toISOString(),
-      isClient: false,
     });
     setChatMessage("");
   };
@@ -290,9 +347,94 @@ export default function AdminClientProfile() {
     }
   };
 
+  const handleSaveSpecifics = async () => {
+    if (!clientId || savingSpecifics) return;
+    setSavingSpecifics(true);
+    try {
+      await updateClientSpecifics.mutateAsync({
+        clientId,
+        specifics: specificsDraft.trim() || null,
+      });
+      toast({ title: "Specifics saved" });
+    } catch {
+      toast({ title: "Could not save specifics", variant: "destructive" });
+    } finally {
+      setSavingSpecifics(false);
+    }
+  };
+
   const getSessionCount = (phaseId: string) => {
     return allSessions.filter((s: any) => s.phaseId === phaseId).length;
   };
+
+  const exerciseNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    allSessions.forEach((session: any) => {
+      const sections = (session.sections as any[]) || [];
+      sections.forEach((section: any) => {
+        const exercises = section?.exercises || [];
+        exercises.forEach((exercise: any) => {
+          if (exercise?.id && exercise?.name) {
+            map.set(exercise.id, String(exercise.name));
+          }
+        });
+      });
+    });
+    return map;
+  }, [allSessions]);
+
+  const structuredLogs = useMemo(
+    () =>
+      workoutLogs.map((log: any) => ({
+        ...log,
+        exerciseDisplayName:
+          log.exerciseName ||
+          exerciseNameById.get(log.exerciseId) ||
+          "Unknown exercise",
+      })),
+    [workoutLogs, exerciseNameById],
+  );
+
+  const exerciseFilterOptions = useMemo(
+    () => {
+      const names: string[] = [];
+      structuredLogs.forEach((log: any) => {
+        const name = typeof log.exerciseDisplayName === "string" ? log.exerciseDisplayName : "";
+        if (name.length > 0 && !names.includes(name)) {
+          names.push(name);
+        }
+      });
+      return names.sort((a, b) => a.localeCompare(b));
+    },
+    [structuredLogs],
+  );
+
+  const filteredStructuredLogs = useMemo(
+    () =>
+      structuredLogs.filter(
+        (log: any) => structuredLogsFilter === "all" || log.exerciseDisplayName === structuredLogsFilter,
+      ),
+    [structuredLogs, structuredLogsFilter],
+  );
+
+  const sessionCheckinTrendData = useMemo(
+    () =>
+      ((checkinsTrends as any)?.sessions || []).map((entry: any) => ({
+        ...entry,
+        dateLabel: new Date(entry.date).toLocaleDateString(),
+        feltOffEvents: entry.feltOff ? 10 : null,
+      })),
+    [checkinsTrends],
+  );
+
+  const weeklyCheckinTrendData = useMemo(
+    () =>
+      ((checkinsTrends as any)?.weeks || []).map((entry: any) => ({
+        ...entry,
+        dateLabel: entry.weekStartDate,
+      })),
+    [checkinsTrends],
+  );
 
   const renderPhaseCard = (phase: any) => {
     const displayStatus = getPhaseDisplayStatus(phase);
@@ -444,23 +586,17 @@ export default function AdminClientProfile() {
             <Repeat className="mr-2 h-4 w-4" /> Impersonate
           </Button>
           <Button variant="outline" className="bg-white" data-testid="button-message-client" onClick={() => setActiveTab("chat")}><MessageCircle className="mr-2 h-4 w-4" /> Message</Button>
-          <Button variant="outline" className="bg-white" data-testid="button-edit-profile" onClick={() => setIsComingSoonOpen(true)}><Settings className="mr-2 h-4 w-4" /> Edit Profile</Button>
         </div>
       </div>
-
-      <ComingSoonDialog 
-        open={isComingSoonOpen} 
-        onOpenChange={setIsComingSoonOpen}
-        title="Edit Profile Coming Soon"
-        description="The ability to manage client profile details directly is coming soon."
-      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start overflow-x-auto h-12">
           <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Programming</TabsTrigger>
           <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">Movement Checks</TabsTrigger>
           <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">Chat</TabsTrigger>
-          <TabsTrigger value="logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-logs">Logs & History</TabsTrigger>
+          <TabsTrigger value="specifics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-specifics">Specifics</TabsTrigger>
+          <TabsTrigger value="structured-logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-structured-logs">Notes &amp; Logs</TabsTrigger>
+          <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Readiness &amp; Check-ins</TabsTrigger>
         </TabsList>
         
         <div className="mt-8">
@@ -711,6 +847,7 @@ export default function AdminClientProfile() {
                   chatMessages.map((msg: any) => (
                     <div key={msg.id} className={`flex gap-4 ${!msg.isClient ? 'flex-row-reverse' : ''}`}>
                       <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                        <AvatarImage src={msg.senderAvatar || undefined} alt={msg.senderName || msg.sender || undefined} />
                         <AvatarFallback className={!msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
                           {msg.sender.charAt(0)}
                         </AvatarFallback>
@@ -757,12 +894,296 @@ export default function AdminClientProfile() {
             </Card>
           </TabsContent>
           
-          <TabsContent value="logs" className="m-0 outline-none">
-            <div className="text-center py-20 text-slate-500 bg-white rounded-2xl border border-slate-200">
-              <BarChart className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-slate-900">Workout Logs</h3>
-              <p className="mt-1">Detailed session logs will appear here once the client starts tracking.</p>
+          <TabsContent value="specifics" className="m-0 outline-none">
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <CardTitle>Specifics</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                {(specificsData?.specificsUpdatedAt || specificsData?.specificsUpdatedBy) && (
+                  <div className="text-xs text-slate-500">
+                    Last updated {specificsData?.specificsUpdatedAt ? new Date(specificsData.specificsUpdatedAt).toLocaleString() : "-"}
+                    {specificsData?.specificsUpdatedBy ? ` by ${specificsData.specificsUpdatedBy}` : ""}
+                  </div>
+                )}
+                <Textarea
+                  value={specificsDraft}
+                  onChange={(e) => setSpecificsDraft(e.target.value)}
+                  placeholder="Coaching specifics for this client..."
+                  className="min-h-[180px]"
+                  data-testid="input-client-specifics"
+                />
+                <div>
+                  <Button onClick={handleSaveSpecifics} disabled={savingSpecifics} data-testid="button-save-client-specifics">
+                    {savingSpecifics ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Specifics
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="structured-logs" className="m-0 outline-none">
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>Notes &amp; Logs</CardTitle>
+                  <div className="w-[260px]">
+                    <Select value={structuredLogsFilter} onValueChange={setStructuredLogsFilter}>
+                      <SelectTrigger className="bg-white" data-testid="select-structured-logs-exercise-filter">
+                        <SelectValue placeholder="Filter by exercise" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All exercises</SelectItem>
+                        {exerciseFilterOptions.map((exerciseName) => (
+                          <SelectItem key={exerciseName} value={exerciseName}>
+                            {exerciseName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">{filteredStructuredLogs.length} entr{filteredStructuredLogs.length === 1 ? "y" : "ies"}</p>
+              </CardHeader>
+              <CardContent className="p-0">
+                {structuredLogs.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500">
+                    <BarChart className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                    <p>No structured logs yet.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filteredStructuredLogs.map((log: any) => (
+                      <div key={log.id} className="p-4 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-900">{log.exerciseDisplayName}</div>
+                          <div className="text-xs text-slate-500">{new Date(log.date).toLocaleDateString()}</div>
+                        </div>
+                        <div className="text-xs text-slate-600">Exercise entry: {log.instanceId}</div>
+                        <div className="text-xs text-slate-600">Sets logged: {(log.sets || []).length}</div>
+                        {log.clientNotes && (
+                          <div className="text-sm bg-blue-50 text-blue-900 border border-blue-100 rounded-md p-2 whitespace-pre-wrap">
+                            <span className="font-semibold">Client note for {log.exerciseDisplayName}:</span> {log.clientNotes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="checkins" className="m-0 outline-none space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Sleep</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgWeeklySleep ?? "-"}</div>
+                  <div className="text-xs text-slate-500">last weeks</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Energy</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgWeeklyEnergy ?? "-"}</div>
+                  <div className="text-xs text-slate-500">last weeks</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Session RPE</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgSessionRpe ?? "-"}</div>
+                  <div className="text-xs text-slate-500">micro load</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">Felt Off Flags</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.feltOffFlags ?? 0}</div>
+                  <div className="text-xs text-slate-500">session alerts</div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">Injury Weeks</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.injuryAffectedWeeks ?? 0}</div>
+                  <div className="text-xs text-slate-500">weekly impact</div>
+                </CardContent>
+              </Card>
             </div>
+
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <CardTitle>Trend Explorer</CardTitle>
+                  <Select value={checkinsRange} onValueChange={setCheckinsRange}>
+                    <SelectTrigger className="w-[160px] bg-white" data-testid="select-checkins-range">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2w">2 weeks</SelectItem>
+                      <SelectItem value="4w">4 weeks</SelectItem>
+                      <SelectItem value="8w">8 weeks</SelectItem>
+                      <SelectItem value="12w">12 weeks</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 space-y-6">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700">Session metrics</span>
+                    <Button
+                      size="sm"
+                      variant={sessionMetrics.rpeOverall ? "default" : "outline"}
+                      onClick={() => setSessionMetrics((prev) => ({ ...prev, rpeOverall: !prev.rpeOverall }))}
+                    >
+                      Session RPE
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={sessionMetrics.feltOffEvents ? "default" : "outline"}
+                      onClick={() => setSessionMetrics((prev) => ({ ...prev, feltOffEvents: !prev.feltOffEvents }))}
+                    >
+                      Felt-off events
+                    </Button>
+                  </div>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer>
+                      <LineChart data={sessionCheckinTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
+                        <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const point = payload[0]?.payload as any;
+                            return (
+                              <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                                <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
+                                <div className="text-slate-600">{point?.dateLabel}</div>
+                                <div className="text-slate-700 mt-1">RPE: {point?.rpeOverall}</div>
+                                {point?.feltOff ? <div className="text-amber-700">Felt off: yes</div> : null}
+                                {point?.feltOffNote ? <div className="text-slate-700 mt-1">Note: {point.feltOffNote}</div> : null}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Legend />
+                        {sessionMetrics.rpeOverall && (
+                          <Line type="monotone" dataKey="rpeOverall" name="Session RPE" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {sessionMetrics.feltOffEvents && (
+                          <Line type="monotone" dataKey="feltOffEvents" name="Felt-off events" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700">Weekly metrics</span>
+                    <Button
+                      size="sm"
+                      variant={weeklyMetrics.sleepWeek ? "default" : "outline"}
+                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, sleepWeek: !prev.sleepWeek }))}
+                    >
+                      Sleep
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={weeklyMetrics.energyWeek ? "default" : "outline"}
+                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, energyWeek: !prev.energyWeek }))}
+                    >
+                      Energy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={weeklyMetrics.injuryImpact ? "default" : "outline"}
+                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, injuryImpact: !prev.injuryImpact }))}
+                    >
+                      Injury impact
+                    </Button>
+                  </div>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer>
+                      <LineChart data={weeklyCheckinTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
+                        <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const point = payload[0]?.payload as any;
+                            return (
+                              <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                                <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
+                                <div className="text-slate-700 mt-1">Sleep: {point?.sleepWeek}</div>
+                                <div className="text-slate-700">Energy: {point?.energyWeek}</div>
+                                <div className="text-slate-700">Injury impact: {point?.injuryImpact ?? 0}</div>
+                                {point?.coachNoteFromClient ? <div className="text-slate-700 mt-1">Note: {point.coachNoteFromClient}</div> : null}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Legend />
+                        {weeklyMetrics.sleepWeek && (
+                          <Line type="monotone" dataKey="sleepWeek" name="Sleep" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {weeklyMetrics.energyWeek && (
+                          <Line type="monotone" dataKey="energyWeek" name="Energy" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {weeklyMetrics.injuryImpact && (
+                          <Line type="monotone" dataKey="injuryImpact" name="Injury impact" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <CardTitle>Recent Check-ins</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-700">Recent session check-ins</h3>
+                  {((checkinsRecent as any)?.sessions || []).length === 0 ? (
+                    <p className="text-sm text-slate-500">No session check-ins yet.</p>
+                  ) : (
+                    (checkinsRecent as any).sessions.map((entry: any) => (
+                      <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
+                        <div className="text-sm font-semibold text-slate-900">{entry.sessionName}</div>
+                        <div className="text-xs text-slate-500">{new Date(entry.submittedAt).toLocaleString()}</div>
+                        <div className="text-xs text-slate-700 mt-1">RPE {entry.rpeOverall}{entry.feltOff ? " · felt off" : ""}</div>
+                        {entry.feltOffNote ? <div className="text-xs text-slate-700 mt-1">Note: {entry.feltOffNote}</div> : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-700">Recent weekly check-ins</h3>
+                  {((checkinsRecent as any)?.weeks || []).length === 0 ? (
+                    <p className="text-sm text-slate-500">No weekly check-ins yet.</p>
+                  ) : (
+                    (checkinsRecent as any).weeks.map((entry: any) => (
+                      <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
+                        <div className="text-sm font-semibold text-slate-900">Week of {entry.weekStartDate}</div>
+                        <div className="text-xs text-slate-700 mt-1">Sleep {entry.sleepWeek} · Energy {entry.energyWeek}</div>
+                        <div className="text-xs text-slate-700">Injury impact {entry.injuryImpact ?? 0}</div>
+                        {entry.coachNoteFromClient ? <div className="text-xs text-slate-700 mt-1">Note: {entry.coachNoteFromClient}</div> : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </div>
       </Tabs>
