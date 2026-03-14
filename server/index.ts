@@ -56,6 +56,11 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+if (config.NODE_ENV === "production") {
+  // Railway terminates TLS at the proxy; trust X-Forwarded-* so secure cookies can be set.
+  app.set("trust proxy", 1);
+}
+
 if (config.NODE_ENV === "development") {
   app.use((req, res, next) => {
     const origin = req.get("origin");
