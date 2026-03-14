@@ -8,6 +8,7 @@ export default tseslint.config(
       "dist/**",
       "node_modules/**",
       ".local/**",
+      "script/**/*.cjs",
       "*.config.js",
       "*.config.ts",
       "vite-plugin-meta-images.ts",
