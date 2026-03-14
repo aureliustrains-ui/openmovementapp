@@ -1,14 +1,6 @@
 const { randomUUID, randomBytes, scryptSync } = require("node:crypto");
 const { Client } = require("pg");
 
-function getRequiredEnv(name) {
-  const value = process.env[name] ? process.env[name].trim() : "";
-  if (!value) {
-    throw new Error(`${name} is required`);
-  }
-  return value;
-}
-
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const derived = scryptSync(password, salt, 64);
@@ -16,9 +8,21 @@ function hashPassword(password) {
 }
 
 async function run() {
-  const databaseUrl = getRequiredEnv("DATABASE_URL");
-  const email = getRequiredEnv("BOOTSTRAP_ADMIN_EMAIL").toLowerCase();
-  const password = getRequiredEnv("BOOTSTRAP_ADMIN_PASSWORD");
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim()?.toLowerCase() || "";
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || "";
+
+  if (!email || !password) {
+    console.log(
+      "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are not both set.",
+    );
+    return;
+  }
+
+  const databaseUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : "";
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required");
+  }
+
   const name = (process.env.BOOTSTRAP_ADMIN_NAME || "Admin").trim();
 
   if (password.length < 8) {
