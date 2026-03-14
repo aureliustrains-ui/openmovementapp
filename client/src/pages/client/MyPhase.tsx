@@ -3,8 +3,11 @@ import {
   phasesQuery,
   sessionsQuery,
   useUpdatePhase,
-  weeklyCheckinsCurrentOrDueQuery,
+  weeklyCheckinsMeQuery,
   useCreateWeeklyCheckin,
+  myActivePhaseProgressReportsQuery,
+  useCreateClientVideoUploadTarget,
+  uploadClientVideoToObjectStorage,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Link } from "wouter";
@@ -12,28 +15,123 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays, ChevronDown } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  getTrainingWeekLifecycle,
+  type TrainingScheduleEntry,
+} from "@/lib/trainingWeek";
+import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
+import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
+import { buildActionRequiredItems, pickLatestProgressReportForPhase } from "@/lib/actionRequired";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-matroska",
+  "video/3gpp",
+]);
+const MAX_CLIENT_VIDEO_BYTES = 250 * 1024 * 1024;
+
+function parsePhaseStartDateForSort(value: unknown): number {
+  if (typeof value !== "string" || value.trim().length === 0) return Number.NEGATIVE_INFINITY;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function pickDefaultVisiblePhase(phases: any[]): any | null {
+  if (phases.length === 0) return null;
+
+  const activePhases = phases.filter((phase: any) => phase.status === "Active");
+  if (activePhases.length > 0) {
+    const orderedActivePhases = [...activePhases].sort((a: any, b: any) => {
+      const startDateDelta =
+        parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate);
+      if (startDateDelta !== 0) return startDateDelta;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return orderedActivePhases[0];
+  }
+
+  const pendingPhase = phases.find((phase: any) => phase.status === "Waiting for Movement Check");
+  return pendingPhase || phases[0];
+}
+
+function getProgressReportStatusMeta(status: string): {
+  label: string;
+  tone: "info" | "success" | "neutral" | "warning";
+  ctaLabel: string;
+  description: string;
+} {
+  if (status === "resubmission_requested") {
+    return {
+      label: "Resubmission requested",
+      tone: "warning",
+      ctaLabel: "Update progress report",
+      description: "Coach requested an updated submission. Please resubmit with improvements.",
+    };
+  }
+  if (status === "submitted") {
+    return {
+      label: "Submitted",
+      tone: "success",
+      ctaLabel: "View progress report",
+      description: "Your submission is in. Keep training while your coach reviews it.",
+    };
+  }
+  if (status === "approved") {
+    return {
+      label: "Approved",
+      tone: "success",
+      ctaLabel: "View progress report",
+      description: "Coach approved this progress report for your active phase.",
+    };
+  }
+  if (status === "reviewed") {
+    return {
+      label: "Reviewed",
+      tone: "neutral",
+      ctaLabel: "View progress report",
+      description: "Coach review is completed for this phase report.",
+    };
+  }
+  return {
+    label: "Requested",
+    tone: "info",
+    ctaLabel: "Open progress report",
+    description: "Submit quick links for selected exercises while continuing normal training.",
+  };
+}
 
 export default function ClientMyPhase() {
+  const { viewedUser, sessionUser, impersonating } = useAuth();
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
-  const { viewedUser, sessionUser, impersonating } = useAuth();
+  const { data: weeklyCheckins = [] } = useQuery({
+    ...weeklyCheckinsMeQuery,
+    enabled: !!sessionUser && !impersonating,
+  });
+  const { data: activePhaseProgressReports = [] } = useQuery({
+    ...myActivePhaseProgressReportsQuery,
+    enabled: !!sessionUser && !impersonating && sessionUser.role === "Client",
+  });
   const updatePhase = useUpdatePhase();
   const createWeeklyCheckin = useCreateWeeklyCheckin();
+  const createClientVideoUploadTarget = useCreateClientVideoUploadTarget();
   const { toast } = useToast();
   
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [uploadPhaseId, setUploadPhaseId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState("");
+  const [movementUploadFile, setMovementUploadFile] = useState<File | null>(null);
   const [clientNote, setClientNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState(1);
@@ -46,35 +144,92 @@ export default function ClientMyPhase() {
   const [weeklyInjuryImpact, setWeeklyInjuryImpact] = useState(0);
   const [weeklyNote, setWeeklyNote] = useState("");
   const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
-
-  const { data: weeklyCheckinStatus } = useQuery({
-    ...weeklyCheckinsCurrentOrDueQuery,
-    enabled: !!sessionUser && !impersonating,
-  });
+  const previousRecommendedWeekRef = useRef<number | null>(null);
+  const isClientSession = sessionUser?.role === "Client";
+  const isClientContextMatch = Boolean(
+    sessionUser?.id && viewedUser?.id && sessionUser.id === viewedUser.id,
+  );
+  const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;
 
   if (!viewedUser) return null;
 
   const visiblePhases = allPhases.filter((p: any) =>
     p.clientId === viewedUser.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check')
   );
+  const visiblePhaseSignature = visiblePhases
+    .map((phase: any) => `${phase.id}:${phase.status}:${phase.startDate || ""}`)
+    .join(",");
 
   useEffect(() => {
-    if (visiblePhases.length > 0 && !selectedPhaseId) {
-      const pending = visiblePhases.find((p: any) => p.status === 'Waiting for Movement Check');
-      setSelectedPhaseId(pending?.id || visiblePhases[0].id);
+    const defaultVisiblePhase = pickDefaultVisiblePhase(visiblePhases);
+    if (defaultVisiblePhase && !selectedPhaseId) {
+      setSelectedPhaseId(defaultVisiblePhase.id);
     }
     if (selectedPhaseId && !visiblePhases.find((p: any) => p.id === selectedPhaseId)) {
-      const pending = visiblePhases.find((p: any) => p.status === 'Waiting for Movement Check');
-      setSelectedPhaseId(pending?.id || visiblePhases[0]?.id || null);
+      setSelectedPhaseId(defaultVisiblePhase?.id || null);
     }
-  }, [visiblePhases.map((p: any) => p.id).join(',')]);
+  }, [visiblePhaseSignature, selectedPhaseId]);
 
-  const currentPhase = visiblePhases.find((p: any) => p.id === selectedPhaseId) || visiblePhases[0];
+  const currentPhase =
+    visiblePhases.find((p: any) => p.id === selectedPhaseId) || pickDefaultVisiblePhase(visiblePhases);
+  const phaseScheduleSignature = currentPhase ? JSON.stringify(currentPhase.schedule || []) : "";
+  const completedInstancesSignature = currentPhase
+    ? JSON.stringify(currentPhase.completedScheduleInstances || [])
+    : "";
+
+  useEffect(() => {
+    previousRecommendedWeekRef.current = null;
+  }, [currentPhase?.id]);
+
+  useEffect(() => {
+    if (!currentPhase) return;
+    const schedule = ((currentPhase.schedule as any[]) || []) as TrainingScheduleEntry[];
+    const completedInstances = ((currentPhase.completedScheduleInstances as string[]) || []) as string[];
+    const lifecycle = getTrainingWeekLifecycle(
+      currentPhase.durationWeeks || 1,
+      schedule,
+      completedInstances,
+      currentPhase.id,
+      weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>,
+    );
+    const recommendedWeek = lifecycle.currentWeek;
+    const selectedStatus = lifecycle.weeks.find((status) => status.week === selectedWeek);
+    const selectedWeekOutOfRange = selectedWeek < 1 || selectedWeek > lifecycle.weeks.length;
+    const previousRecommendedWeek = previousRecommendedWeekRef.current;
+    const shouldInitializeToRecommended = previousRecommendedWeek === null;
+    const shouldAdvanceWithProgress =
+      previousRecommendedWeek !== null &&
+      recommendedWeek !== previousRecommendedWeek &&
+      selectedWeek === previousRecommendedWeek;
+
+    if (
+      selectedWeekOutOfRange ||
+      !selectedStatus ||
+      shouldInitializeToRecommended ||
+      shouldAdvanceWithProgress
+    ) {
+      setSelectedWeek(recommendedWeek);
+    }
+    previousRecommendedWeekRef.current = recommendedWeek;
+
+  }, [
+    currentPhase?.id,
+    currentPhase?.durationWeeks,
+    phaseScheduleSignature,
+    completedInstancesSignature,
+    JSON.stringify(
+      (weeklyCheckins as Array<{ id?: string; phaseId?: string | null; phaseWeekNumber?: number | null }>).map(
+        (entry) => `${entry.id || ""}:${entry.phaseId || ""}:${entry.phaseWeekNumber ?? ""}`,
+      ),
+    ),
+    selectedWeek,
+  ]);
 
   const handleOpenUpload = (phaseId: string, exerciseId: string) => {
     setUploadPhaseId(phaseId);
     setSelectedExerciseId(exerciseId);
     setVideoUrl("");
+    setMovementUploadFile(null);
     setClientNote("");
     setIsUploadOpen(true);
   };
@@ -83,17 +238,97 @@ export default function ClientMyPhase() {
     if (!uploadPhaseId || !selectedExerciseId) return;
     const phase = allPhases.find((p: any) => p.id === uploadPhaseId);
     if (!phase) return;
+    const normalizedVideoUrl = videoUrl.trim();
+    const hasUploadFile = Boolean(movementUploadFile);
+    if (!hasUploadFile && !normalizedVideoUrl) {
+      toast({
+        title: "Add video",
+        description: "Upload a video file or paste a valid link.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (movementUploadFile) {
+      if (!ALLOWED_CLIENT_VIDEO_TYPES.has(movementUploadFile.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Use mp4, mov, webm, mkv, or 3gp.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (movementUploadFile.size > MAX_CLIENT_VIDEO_BYTES) {
+        toast({
+          title: "Video is too large",
+          description: "Maximum file size is 250MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      try {
+        const parsed = new URL(normalizedVideoUrl);
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+          throw new Error("invalid protocol");
+        }
+      } catch {
+        toast({
+          title: "Invalid video link",
+          description: "Please provide a valid http(s) video URL.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     
     setIsSubmitting(true);
     try {
+      let uploadPayload: {
+        source: "link" | "upload";
+        videoUrl: string | null;
+        objectKey: string | null;
+        mimeType: string | null;
+        originalFilename: string | null;
+      } = {
+        source: "link",
+        videoUrl: normalizedVideoUrl || null,
+        objectKey: null,
+        mimeType: null,
+        originalFilename: null,
+      };
+
+      if (movementUploadFile) {
+        const uploadTarget = await createClientVideoUploadTarget.mutateAsync({
+          purpose: "movement_check",
+          fileName: movementUploadFile.name,
+          fileSize: movementUploadFile.size,
+          contentType: movementUploadFile.type,
+        });
+        await uploadClientVideoToObjectStorage({
+          uploadUrl: uploadTarget.uploadUrl,
+          file: movementUploadFile,
+        });
+        uploadPayload = {
+          source: "upload",
+          videoUrl: null,
+          objectKey: uploadTarget.objectKey,
+          mimeType: movementUploadFile.type || null,
+          originalFilename: movementUploadFile.name || null,
+        };
+      }
+
       const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
         if (mc.exerciseId !== selectedExerciseId) return mc;
         return { 
           ...mc, 
           status: 'Pending', 
-          videoUrl: videoUrl || 'https://example.com/demo.mp4',
+          videoUrl: uploadPayload.videoUrl,
+          videoSource: uploadPayload.source,
+          videoObjectKey: uploadPayload.objectKey,
+          videoMimeType: uploadPayload.mimeType,
+          videoOriginalFilename: uploadPayload.originalFilename,
           submittedAt: new Date().toISOString(),
-          clientNote: clientNote
+          clientNote: clientNote.trim(),
         };
       });
 
@@ -103,14 +338,15 @@ export default function ClientMyPhase() {
       });
 
       toast({
-        title: "Video Submitted",
+        title: "Submission received",
         description: "Your coach will review your movement shortly.",
       });
       setIsUploadOpen(false);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not submit your video link.";
       toast({
         title: "Submission Failed",
-        description: "There was an error submitting your video.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -119,7 +355,13 @@ export default function ClientMyPhase() {
   };
 
   const openWeeklyCheckin = () => {
-    if (impersonating) {
+    if (isCheckinReadOnly) {
+      toast({
+        title: "Read-only client context",
+        description:
+          "Weekly check-ins can be submitted only in a real client session for this client.",
+        variant: "destructive",
+      });
       return;
     }
     setWeeklyCheckinStep(1);
@@ -132,10 +374,11 @@ export default function ClientMyPhase() {
   };
 
   const handleSubmitWeeklyCheckin = async () => {
-    if (impersonating) {
+    if (isCheckinReadOnly) {
       toast({
-        title: "Read-only in impersonation mode",
-        description: "Client check-ins cannot be submitted while impersonating.",
+        title: "Read-only client context",
+        description:
+          "Weekly check-ins can be submitted only in a real client session for this client.",
         variant: "destructive",
       });
       return;
@@ -144,11 +387,13 @@ export default function ClientMyPhase() {
     setSubmittingWeeklyCheckin(true);
     try {
       await createWeeklyCheckin.mutateAsync({
-        sleepWeek: weeklySleep,
-        energyWeek: weeklyEnergy,
+        recoveryThisTrainingWeek: weeklySleep,
+        stressOutsideTrainingThisWeek: weeklyEnergy,
         injuryAffectedTraining: weeklyInjuryAffected,
         injuryImpact: weeklyInjuryAffected ? weeklyInjuryImpact : null,
-        coachNoteFromClient: weeklyNote.trim() || null,
+        optionalNote: weeklyNote.trim() || null,
+        phaseId: currentPhase.id,
+        phaseWeekNumber: weeklyCheckinWeek,
       });
       toast({
         title: "Weekly check-in submitted",
@@ -189,14 +434,72 @@ export default function ClientMyPhase() {
   if (!currentPhase) return null;
 
   const isMovementCheckPhase = currentPhase.status === 'Waiting for Movement Check';
-  const weeklyCheckinDue = Boolean(weeklyCheckinStatus?.due);
-  const currentWeeklyCheckin = weeklyCheckinStatus?.current;
   const movementChecks = (currentPhase.movementChecks as any[]) || [];
   const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id);
-  const schedule = (currentPhase.schedule as any[]) || [];
+  const movementCheckExerciseById = new Map<string, any>();
+  for (const session of phaseSessions) {
+    const sections = (session.sections as any[]) || [];
+    for (const section of sections) {
+      const exercises = (section?.exercises as any[]) || [];
+      for (const exercise of exercises) {
+        if (exercise?.id) {
+          movementCheckExerciseById.set(exercise.id, exercise);
+        }
+      }
+    }
+  }
+  const schedule = ((currentPhase.schedule as any[]) || []) as TrainingScheduleEntry[];
   const weekSchedule = schedule.filter((s: any) => s.week === selectedWeek);
   const hasGridSchedule = schedule.some((s: any) => s.slot);
   const completedInstances: string[] = (currentPhase.completedScheduleInstances as string[]) || [];
+  const weekLifecycle = getTrainingWeekLifecycle(
+    currentPhase.durationWeeks || 1,
+    schedule,
+    completedInstances,
+    currentPhase.id,
+    (weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>) || [],
+  );
+  const weekStatuses = weekLifecycle.weeks;
+  const selectedWeekStatus =
+    weekStatuses.find((status) => status.week === selectedWeek) ||
+    ({
+      week: selectedWeek,
+      scheduledCount: 0,
+      completedCount: 0,
+      isCompleted: false,
+      hasWeeklyCheckin: false,
+      state: "future",
+    } as const);
+  const currentTrainingWeek = weekLifecycle.currentWeek;
+  const currentWeekStatus = weekStatuses.find((status) => status.week === currentTrainingWeek);
+  const weeklyCheckinWeek = currentTrainingWeek;
+  const weeklyCheckinDue = currentWeekStatus?.state === "ready_for_checkin";
+  const latestPhaseProgressReport = currentPhase
+    ? pickLatestProgressReportForPhase(
+        activePhaseProgressReports as Array<{
+          id: string;
+          phaseId: string;
+          status: "requested" | "submitted" | "approved" | "resubmission_requested" | "reviewed";
+          createdAt: string;
+        }>,
+        currentPhase.id,
+      )
+    : null;
+  const progressStatusMeta = latestPhaseProgressReport
+    ? getProgressReportStatusMeta(latestPhaseProgressReport.status)
+    : null;
+  const progressNeedsAction =
+    latestPhaseProgressReport &&
+    (latestPhaseProgressReport.status === "requested" ||
+      latestPhaseProgressReport.status === "resubmission_requested");
+  const progressSecondaryStatus =
+    latestPhaseProgressReport && !progressNeedsAction ? latestPhaseProgressReport.status : null;
+  const actionRequiredItems = buildActionRequiredItems({
+    weeklyDue: weeklyCheckinDue,
+    weeklyWeekNumber: weeklyCheckinWeek,
+    progressReport: progressNeedsAction ? latestPhaseProgressReport : null,
+  });
+  const hasActionRequiredSection = actionRequiredItems.length > 0;
 
   const isEntryCompleted = (entry: any, session: any) => {
     const key = `w${selectedWeek}_${entry.day}_${entry.slot || "AM"}_${session.id}`;
@@ -234,11 +537,11 @@ export default function ClientMyPhase() {
   })();
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
-      {impersonating && (
+    <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
+      {isCheckinReadOnly && (
         <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-2xl" data-testid="card-impersonation-read-only">
           <CardContent className="p-4 text-sm text-amber-800">
-            You are viewing this as an admin in impersonation mode. Client check-ins are read-only.
+            Client check-ins are read-only unless you are logged in as this client account.
           </CardContent>
         </Card>
       )}
@@ -264,29 +567,6 @@ export default function ClientMyPhase() {
         </div>
       )}
 
-      {(weeklyCheckinDue || currentWeeklyCheckin) && (
-        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white" data-testid="card-weekly-checkin">
-          <CardContent className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Weekly check-in</p>
-              <h2 className="text-xl font-bold text-slate-900 mt-1">Readiness check</h2>
-              <p className="text-slate-600 mt-1">
-                {weeklyCheckinDue
-                  ? "Takes about 1 minute."
-                  : "Completed this week. Thanks for the update."}
-              </p>
-            </div>
-            {weeklyCheckinDue ? (
-              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl" onClick={openWeeklyCheckin} data-testid="button-open-weekly-checkin" disabled={impersonating}>
-                Start weekly check-in
-              </Button>
-            ) : (
-              <Badge className="bg-green-100 text-green-700 border-green-200">Submitted</Badge>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {isMovementCheckPhase ? (
         <div className="animate-in fade-in slide-in-from-bottom-4">
           <div className="text-center mb-10 mt-4">
@@ -303,6 +583,10 @@ export default function ClientMyPhase() {
               <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
                 <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
+                    {(() => {
+                      const exercise = movementCheckExerciseById.get(mc.exerciseId);
+                      return (
+                        <>
                     <div className="flex items-center gap-3 mb-2">
                       <Badge variant="outline" className={
                         mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
@@ -313,7 +597,7 @@ export default function ClientMyPhase() {
                         {mc.status || 'Not Submitted'}
                       </Badge>
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900">{mc.name}</h3>
+                    <ExerciseStandardDetails exercise={{ ...exercise, name: exercise?.name || mc.name }} />
                     {mc.approvedNote && mc.status === 'Approved' && (
                       <div className="mt-3 bg-green-50 border border-green-100 p-4 rounded-xl">
                         <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">Coach's Note</p>
@@ -329,6 +613,9 @@ export default function ClientMyPhase() {
                     {mc.clientNote && mc.status === 'Pending' && (
                       <p className="text-sm text-slate-500 mt-2 italic">Note: {mc.clientNote}</p>
                     )}
+                        </>
+                      );
+                    })()}
                   </div>
                   
                   <div className="w-full md:w-auto shrink-0">
@@ -357,114 +644,171 @@ export default function ClientMyPhase() {
         </div>
       ) : (
         <>
-          <div className="bg-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none">
-              <div className="w-64 h-64 border-8 border-indigo-500 rounded-full blur-3xl mix-blend-screen" />
-            </div>
-            <div className="relative z-10">
-              <Badge className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-md mb-6 py-1.5 px-3" data-testid="badge-active-phase">
-                Active Phase &bull; Week {selectedWeek} / {currentPhase.durationWeeks}
-              </Badge>
-              <h1 className="text-4xl md:text-5xl font-display font-bold tracking-tight mb-4" data-testid="text-phase-name">{currentPhase.name}</h1>
-              <p className="text-slate-300 text-lg max-w-xl leading-relaxed">{currentPhase.goal}</p>
-            </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm" data-testid="card-phase-hero">
+            <p className="text-[11px] md:text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
+              Week {selectedWeek}/{currentPhase.durationWeeks}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight text-slate-900 leading-tight" data-testid="text-phase-name">
+              {currentPhase.name}
+            </h1>
+            {currentPhase.goal ? (
+              <p className="text-sm md:text-base text-slate-600 mt-1.5 max-w-2xl leading-relaxed">{currentPhase.goal}</p>
+            ) : null}
+            {nextScheduleItem && (
+              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3" data-testid="card-start-next-session">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{nextScheduleItem.session.name}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Week {selectedWeek} · {nextScheduleItem.entry.day} {nextScheduleItem.entry.slot || "AM"}
+                  </p>
+                </div>
+                <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
+                  <Button className="bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl w-full md:w-auto h-10 shadow-sm" data-testid="button-start-next-session">
+                    Start next session <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
 
-          {nextScheduleItem && (
-            <Card className="border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 shadow-sm rounded-2xl" data-testid="card-start-next-session">
-              <CardContent className="p-5 md:p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mb-1">Today first</div>
-                    <h2 className="text-xl font-bold text-slate-900">Start next session</h2>
-                    <p className="text-slate-600 mt-1">
-                      {nextScheduleItem.session.name} · {nextScheduleItem.entry.day} {nextScheduleItem.entry.slot || "AM"}
-                    </p>
-                  </div>
-                  <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl w-full md:w-auto" data-testid="button-start-next-session">
-                      Start session <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+          {hasActionRequiredSection && (
+            <section className="space-y-2.5" data-testid="section-action-required">
+              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900">Action Required</h2>
+              <div className="space-y-3">
+                {weeklyCheckinDue && (
+                  <ActionRequiredCard
+                    title={`Week ${weeklyCheckinWeek} closing check`}
+                    ctaLabel="Complete check"
+                    onCtaClick={openWeeklyCheckin}
+                    ctaDisabled={isCheckinReadOnly}
+                    testId="card-action-weekly-checkin"
+                  />
+                )}
+                {progressNeedsAction && latestPhaseProgressReport && progressStatusMeta && (
+                  <ActionRequiredCard
+                    title="Progress report"
+                    ctaLabel="Submit update"
+                    ctaHref={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}
+                    testId="card-action-progress-report"
+                  />
+                )}
+              </div>
+            </section>
           )}
 
           <div>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
-                <CalendarDays className="h-6 w-6 text-indigo-600" />
-                Weekly Schedule
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-indigo-600" />
+                Week
               </h2>
               {currentPhase.durationWeeks > 1 && (
-                <div className="flex bg-slate-100 rounded-lg p-1 gap-0.5">
-                  {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map(w => (
+                <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 gap-1">
+                  {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map((w) => {
+                    const weekStatus =
+                      weekStatuses.find((status) => status.week === w) ||
+                      ({ isCompleted: false, state: "future" } as const);
+                    const isSelected = selectedWeek === w;
+                    const isCurrent = w === currentTrainingWeek;
+                    return (
                     <button
                       key={w}
                       onClick={() => setSelectedWeek(w)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedWeek === w ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'}`}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : weekStatus.state === "ready_for_checkin"
+                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                            : weekStatus.state === "completed"
+                              ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                              : isCurrent
+                              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
+                      }`}
                       data-testid={`button-week-${w}`}
                     >
                       W{w}
+                      {weekStatus.state === "ready_for_checkin" && (
+                        <span className="text-[10px] font-bold">!</span>
+                      )}
+                      {isCurrent && !isSelected && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                      )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
+              )}
+            </div>
+            <div className="mb-4" data-testid="text-week-progress">
+              {selectedWeekStatus.scheduledCount > 0 ? (
+                <p className="text-xs md:text-sm text-slate-600">
+                  Week {selectedWeek}: {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed{" "}
+                  {selectedWeekStatus.state === "completed" ? (
+                    <span className="text-green-700 font-semibold">· Completed</span>
+                  ) : selectedWeekStatus.state === "ready_for_checkin" ? (
+                    <span className="text-amber-700 font-semibold">· Ready for weekly check-in</span>
+                  ) : selectedWeekStatus.state === "future" ? (
+                    <span className="text-slate-500 font-semibold">· Future week</span>
+                  ) : (
+                    <span className="text-indigo-700 font-semibold">· Current</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-slate-500">Week {selectedWeek}: No scheduled sessions</p>
               )}
             </div>
 
             {hasGridSchedule ? (
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
-                <div className="overflow-x-auto">
-                  <div className="min-w-[500px]">
-                    <div className="grid grid-cols-[100px_1fr_1fr] border-b border-slate-200 bg-slate-50">
-                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
-                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
-                      <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
-                    </div>
-                    {WEEKDAYS.map((day, dayIdx) => {
-                      const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
-                      const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
-                      const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
-
-                      return (
-                        <div key={day} className={`grid grid-cols-[100px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-40'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                          <div className="p-3 text-sm font-medium text-slate-600 border-r border-slate-100 flex items-center gap-2">
-                            <span className="text-xs text-slate-400 font-mono w-4">{dayIdx + 1}</span>
-                            {day.slice(0, 3)}
-                          </div>
-                          {["AM", "PM"].map(slotVal => {
-                            const entries = slotVal === "AM" ? amEntries : pmEntries;
-                            return (
-                              <div key={slotVal} className="p-2 border-r last:border-r-0 border-slate-100 min-h-[52px] flex flex-wrap items-center gap-1.5">
-                                {entries.map((entry: any, i: number) => {
-                                  const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
-                                  if (!session) return null;
-                                  const completed = isEntryCompleted(entry, session);
-                                  return (
-                                    <Link key={i} href={buildSessionUrl(session.id, day, slotVal)}>
-                                      <Badge
-                                        variant="outline"
-                                        className={`cursor-pointer transition-colors text-xs font-medium ${
-                                          completed
-                                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                            : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                                        }`}
-                                        data-testid={`sched-session-${day}-${slotVal}-${i}`}
-                                      >
-                                        {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                                        {session.name}
-                                      </Badge>
-                                    </Link>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
+                <div>
+                  <div className="grid grid-cols-[72px_1fr_1fr] border-b border-slate-200 bg-slate-50">
+                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
+                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
+                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
                   </div>
+                  {WEEKDAYS.map((day, dayIdx) => {
+                    const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
+                    const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
+                    const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
+
+                    return (
+                      <div key={day} className={`grid grid-cols-[72px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-50'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                        <div className="px-2 py-2 text-xs font-medium text-slate-600 border-r border-slate-100 flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 font-mono w-3">{dayIdx + 1}</span>
+                          {day.slice(0, 3)}
+                        </div>
+                        {["AM", "PM"].map(slotVal => {
+                          const entries = slotVal === "AM" ? amEntries : pmEntries;
+                          return (
+                            <div key={slotVal} className="px-1.5 py-1.5 border-r last:border-r-0 border-slate-100 min-h-[42px] flex flex-col items-stretch gap-1">
+                              {entries.map((entry: any, i: number) => {
+                                const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
+                                if (!session) return null;
+                                const completed = isEntryCompleted(entry, session);
+                                return (
+                                  <Link key={i} href={buildSessionUrl(session.id, day, slotVal)} className="block">
+                                    <Badge
+                                      variant="outline"
+                                      className={`cursor-pointer transition-colors text-[11px] font-medium w-full justify-start ${
+                                        completed
+                                          ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                                          : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                      }`}
+                                      data-testid={`sched-session-${day}-${slotVal}-${i}`}
+                                    >
+                                      {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                                      <span className="truncate max-w-[110px] md:max-w-none">{session.name}</span>
+                                    </Badge>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
             ) : (
@@ -512,6 +856,41 @@ export default function ClientMyPhase() {
                 })()}
               </div>
             )}
+
+            {latestPhaseProgressReport && progressStatusMeta && progressSecondaryStatus && (
+              <Card
+                className={`mt-6 rounded-2xl shadow-sm ${
+                  progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
+                    ? "border-green-200 bg-green-50"
+                    : "border-slate-200 bg-white"
+                }`}
+                data-testid="card-phase-progress-report-context"
+              >
+                <CardContent className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress Report</p>
+                      <Badge
+                        variant="outline"
+                        className={
+                          progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
+                            ? "bg-green-100 text-green-700 border-green-200"
+                            : "bg-indigo-100 text-indigo-700 border-indigo-200"
+                        }
+                      >
+                        {progressStatusMeta.label}
+                      </Badge>
+                    </div>
+                    <p className="text-slate-700">{progressStatusMeta.description}</p>
+                  </div>
+                  <Link href={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}>
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl">
+                      View progress report
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </>
       )}
@@ -528,7 +907,7 @@ export default function ClientMyPhase() {
           {weeklyCheckinStep === 1 ? (
             <div className="space-y-5 py-2">
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">How was your sleep this week?</p>
+                <p className="text-sm font-semibold text-slate-900">Recovery this training week</p>
                 <div className="grid grid-cols-5 gap-2">
                   {[1, 2, 3, 4, 5].map((value) => (
                     <button
@@ -549,7 +928,7 @@ export default function ClientMyPhase() {
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">How was your energy this week?</p>
+                <p className="text-sm font-semibold text-slate-900">Stress outside training this week</p>
                 <div className="grid grid-cols-5 gap-2">
                   {[1, 2, 3, 4, 5].map((value) => (
                     <button
@@ -566,13 +945,13 @@ export default function ClientMyPhase() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">1 Very low · 2 Low · 3 OK · 4 Good · 5 Very high</p>
+                <p className="text-xs text-slate-500">1 Very low · 2 Low · 3 Moderate · 4 High · 5 Very high</p>
               </div>
             </div>
           ) : (
             <div className="space-y-5 py-2">
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">Did any injury or pain affect your training this week?</p>
+                <p className="text-sm font-semibold text-slate-900">Did pain or injury affect training this week?</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -601,7 +980,7 @@ export default function ClientMyPhase() {
 
               {weeklyInjuryAffected && (
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-slate-900">How much did it affect your training?</p>
+                  <p className="text-sm font-semibold text-slate-900">How much did it affect training?</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[0, 1, 2, 3].map((value) => (
                       <button
@@ -622,11 +1001,12 @@ export default function ClientMyPhase() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="weekly-note">Anything to tell your coach? (optional)</Label>
+                <Label htmlFor="weekly-note">Optional note</Label>
                 <Textarea
                   id="weekly-note"
                   value={weeklyNote}
                   onChange={(event) => setWeeklyNote(event.target.value)}
+                  placeholder="Anything to add?"
                   className="min-h-[90px]"
                 />
               </div>
@@ -640,9 +1020,9 @@ export default function ClientMyPhase() {
               </Button>
             )}
             {weeklyCheckinStep === 1 ? (
-              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={impersonating}>Continue</Button>
+              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
             ) : (
-              <Button onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || impersonating}>
+              <Button onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || isCheckinReadOnly}>
                 {submittingWeeklyCheckin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Submit weekly check-in
               </Button>
@@ -654,30 +1034,35 @@ export default function ClientMyPhase() {
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Submit Movement Check</DialogTitle>
+            <DialogTitle>Submit Movement Check Video</DialogTitle>
             <DialogDescription>
-              Upload a video of your performance or provide a link (YouTube, Drive, etc.)
+              Upload a video file or paste a link fallback for your coach to review.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="video-file">Video File</Label>
-              <Input id="video-file" type="file" accept="video/*" className="cursor-pointer" />
-              <p className="text-[10px] text-slate-500 italic">Files are simulated in this prototype. Use the URL field below for direct links.</p>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-500">Or use a URL</span>
-              </div>
+              <Label htmlFor="video-file">Upload video</Label>
+              <Input
+                id="video-file"
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/3gpp"
+                onChange={(event) => {
+                  const nextFile = event.target.files?.[0] || null;
+                  setMovementUploadFile(nextFile);
+                }}
+                data-testid="input-video-file"
+              />
+              {movementUploadFile ? (
+                <p className="text-xs text-slate-500 break-all">
+                  Selected: {movementUploadFile.name}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="video-url">Video URL</Label>
               <Input 
                 id="video-url" 
-                placeholder="https://youtube.com/..." 
+                placeholder="https://youtube.com/... or https://drive.google.com/..."
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
                 data-testid="input-video-url"

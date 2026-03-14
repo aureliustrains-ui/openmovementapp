@@ -57,11 +57,11 @@ export async function ensureWeeklyCheckinNotSubmitted(
 
 export function normalizeWeeklyCheckinInput(
   input: {
-    sleepWeek: number;
-    energyWeek: number;
+    recoveryThisTrainingWeek: number;
+    stressOutsideTrainingThisWeek: number;
     injuryAffectedTraining: boolean;
     injuryImpact?: number | null;
-    coachNoteFromClient?: string | null;
+    optionalNote?: string | null;
   },
   clientId: string,
   phaseId: string,
@@ -74,10 +74,11 @@ export function normalizeWeeklyCheckinInput(
     phaseWeekNumber,
     weekStartDate,
     submittedAt: new Date().toISOString(),
-    sleepWeek: input.sleepWeek,
-    energyWeek: input.energyWeek,
+    // Keep DB columns stable while using the new weekly metric names in UI/API.
+    sleepWeek: input.recoveryThisTrainingWeek,
+    energyWeek: input.stressOutsideTrainingThisWeek,
     injuryAffectedTraining: input.injuryAffectedTraining,
     injuryImpact: input.injuryAffectedTraining ? input.injuryImpact ?? 0 : null,
-    coachNoteFromClient: input.coachNoteFromClient?.trim() || null,
+    coachNoteFromClient: input.optionalNote?.trim() || null,
   };
 }

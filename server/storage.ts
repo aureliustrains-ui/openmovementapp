@@ -11,6 +11,8 @@ import {
   workoutLogs,
   sessionCheckins,
   weeklyCheckins,
+  progressReports,
+  progressReportItems,
   messages,
   chatReadStatus,
   type User,
@@ -33,6 +35,10 @@ import {
   type InsertSessionCheckin,
   type WeeklyCheckin,
   type InsertWeeklyCheckin,
+  type ProgressReport,
+  type InsertProgressReport,
+  type ProgressReportItem,
+  type InsertProgressReportItem,
   type Message,
   type InsertMessage,
   type ChatReadStatus,
@@ -112,6 +118,20 @@ export interface IStorage {
     id: string,
     data: Pick<InsertWeeklyCheckin, "phaseId" | "phaseWeekNumber" | "weekStartDate">,
   ): Promise<WeeklyCheckin | undefined>;
+
+  getProgressReportsByClient(clientId: string): Promise<ProgressReport[]>;
+  getProgressReport(id: string): Promise<ProgressReport | undefined>;
+  createProgressReport(report: InsertProgressReport): Promise<ProgressReport>;
+  updateProgressReport(
+    id: string,
+    data: Partial<InsertProgressReport>,
+  ): Promise<ProgressReport | undefined>;
+  getProgressReportItems(reportId: string): Promise<ProgressReportItem[]>;
+  createProgressReportItem(item: InsertProgressReportItem): Promise<ProgressReportItem>;
+  updateProgressReportItem(
+    id: string,
+    data: Partial<InsertProgressReportItem>,
+  ): Promise<ProgressReportItem | undefined>;
 
   getMessages(): Promise<Message[]>;
   getMessagesByClient(clientId: string): Promise<Message[]>;
@@ -386,6 +406,45 @@ export class DatabaseStorage implements IStorage {
     data: Pick<InsertWeeklyCheckin, "phaseId" | "phaseWeekNumber" | "weekStartDate">,
   ): Promise<WeeklyCheckin | undefined> {
     const [updated] = await db.update(weeklyCheckins).set(data).where(eq(weeklyCheckins.id, id)).returning();
+    return updated;
+  }
+
+  async getProgressReportsByClient(clientId: string): Promise<ProgressReport[]> {
+    return db.select().from(progressReports).where(eq(progressReports.clientId, clientId));
+  }
+
+  async getProgressReport(id: string): Promise<ProgressReport | undefined> {
+    const [report] = await db.select().from(progressReports).where(eq(progressReports.id, id));
+    return report;
+  }
+
+  async createProgressReport(report: InsertProgressReport): Promise<ProgressReport> {
+    const [created] = await db.insert(progressReports).values(report).returning();
+    return created;
+  }
+
+  async updateProgressReport(
+    id: string,
+    data: Partial<InsertProgressReport>,
+  ): Promise<ProgressReport | undefined> {
+    const [updated] = await db.update(progressReports).set(data).where(eq(progressReports.id, id)).returning();
+    return updated;
+  }
+
+  async getProgressReportItems(reportId: string): Promise<ProgressReportItem[]> {
+    return db.select().from(progressReportItems).where(eq(progressReportItems.progressReportId, reportId));
+  }
+
+  async createProgressReportItem(item: InsertProgressReportItem): Promise<ProgressReportItem> {
+    const [created] = await db.insert(progressReportItems).values(item).returning();
+    return created;
+  }
+
+  async updateProgressReportItem(
+    id: string,
+    data: Partial<InsertProgressReportItem>,
+  ): Promise<ProgressReportItem | undefined> {
+    const [updated] = await db.update(progressReportItems).set(data).where(eq(progressReportItems.id, id)).returning();
     return updated;
   }
 

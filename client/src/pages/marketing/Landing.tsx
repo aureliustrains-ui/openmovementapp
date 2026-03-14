@@ -9,24 +9,24 @@ export default function Landing() {
     <MarketingLayout>
       {/* Hero Section */}
       <section className="relative pt-24 pb-32 overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-slate-50">
+        <div className="absolute inset-0 -z-10 bg-white">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white" />
         </div>
         
         <div className="container mx-auto px-4 text-center max-w-4xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-sm font-medium mb-6">
-            <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
-            CoachingApp is live
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md border border-slate-200 bg-white text-slate-700 text-sm font-medium mb-6">
+            <span className="flex h-2 w-2 rounded-full bg-[#2B4A42]"></span>
+            Open Movement is live
           </div>
           <h1 className="text-5xl md:text-7xl font-display font-bold text-slate-900 tracking-tight mb-6">
-            The operating system for <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-cyan-500">modern teams</span>
+            The operating system for <span className="text-[#2B4A42]">modern teams</span>
           </h1>
           <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto leading-relaxed">
             One unified platform for your projects, messages, calendar, and files. Stop switching between tabs and start doing your best work.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/signup">
-              <Button size="lg" className="h-14 px-8 text-lg w-full sm:w-auto shadow-lg shadow-indigo-200">
+              <Button size="lg" className="h-14 px-8 text-lg w-full sm:w-auto">
                 Start for free <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
@@ -39,9 +39,9 @@ export default function Landing() {
         </div>
 
         <div className="container mx-auto px-4 mt-20">
-          <div className="relative rounded-2xl border border-slate-200 shadow-2xl overflow-hidden bg-white max-w-5xl mx-auto">
+          <div className="relative rounded-lg border border-slate-200 overflow-hidden bg-white max-w-5xl mx-auto">
             <img src={heroImg} alt="Dashboard Preview" className="w-full h-auto object-cover opacity-90" />
-            <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] rounded-2xl pointer-events-none"></div>
+            <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] rounded-lg pointer-events-none"></div>
           </div>
         </div>
       </section>
@@ -60,8 +60,8 @@ export default function Landing() {
               { title: "Enterprise Security", desc: "Bank-level encryption and role-based access controls.", icon: Shield },
               { title: "Work Anywhere", desc: "Fully responsive and functional on any device.", icon: Globe },
             ].map((feature, i) => (
-              <div key={i} className="p-6 rounded-2xl bg-slate-50 border border-slate-100">
-                <div className="h-12 w-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-6">
+              <div key={i} className="p-6 rounded-lg bg-white border border-slate-200">
+                <div className="h-12 w-12 rounded-md bg-slate-100 text-[#2B4A42] flex items-center justify-center mb-6">
                   <feature.icon className="h-6 w-6" />
                 </div>
                 <h3 className="text-xl font-display font-bold mb-3">{feature.title}</h3>

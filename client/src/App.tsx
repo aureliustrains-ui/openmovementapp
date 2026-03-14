@@ -31,6 +31,7 @@ import ClientMyPhase from "@/pages/client/MyPhase";
 import ClientSessionView from "@/pages/client/SessionView";
 import ClientChat from "@/pages/client/Chat";
 import ClientInfo from "@/pages/client/Info";
+import ClientProgressReport from "@/pages/client/ProgressReport";
 
 function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
   const { sessionUser, impersonating } = useAuth();
@@ -128,6 +129,9 @@ function Router() {
                 </Route>
                 <Route path="/app/client/session/:sessionId">
                   {() => <ProtectedRoute component={ClientSessionView} allowedRole="Client" />}
+                </Route>
+                <Route path="/app/client/progress-reports/:id">
+                  {() => <ProtectedRoute component={ClientProgressReport} allowedRole="Client" />}
                 </Route>
                 <Route path="/app/client/chat">
                   {() => <ProtectedRoute component={ClientChat} allowedRole="Client" />}

@@ -1,12 +1,23 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usersQuery, phasesQuery, useCreateUser } from "@/lib/api";
+import {
+  usersQuery,
+  phasesQuery,
+  useCreateUser,
+} from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, UserPlus, ChevronRight, Activity, AlertCircle, Loader2 } from "lucide-react";
+import {
+  Search,
+  UserPlus,
+  ChevronRight,
+  Activity,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -28,10 +39,25 @@ export default function AdminClientsList() {
   const { data: allUsers = [], isLoading: loadingUsers } = useQuery(usersQuery);
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
 
-  const clients = allUsers.filter((u: any) => u.role === 'Client' && u.name.toLowerCase().includes(search.toLowerCase()));
+  const clients = allUsers.filter((u: any) => {
+    if (u.role !== "Client") return false;
+    if (u.status === "Removed") return false;
+    const q = search.toLowerCase();
+    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+  });
+  const activeClients = clients.filter((client: any) => client.status === "Active");
+  const inactiveClients = clients.filter((client: any) => client.status !== "Active");
 
-  const getClientStatus = (clientId: string) => {
-    const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
+  const getClientStatus = (client: any) => {
+    if (client.status !== "Active") {
+      const archivedCount = allPhases.filter((phase: any) => phase.clientId === client.id).length;
+      return {
+        label: "Inactive",
+        type: "secondary",
+        desc: archivedCount > 0 ? `${archivedCount} archived phase${archivedCount > 1 ? "s" : ""}` : "No archived phases",
+      };
+    }
+    const clientPhases = allPhases.filter((p: any) => p.clientId === client.id);
     const activePhase = clientPhases.find((p: any) => p.status === 'Active');
     const pendingPhase = clientPhases.find((p: any) => p.status === 'Waiting for Movement Check');
 
@@ -116,7 +142,7 @@ export default function AdminClientsList() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-clients-title">Client Management</h1>
-          <p className="text-slate-500 mt-1">Overview of all active roster clients.</p>
+          <p className="text-slate-500 mt-1">Manage active and inactive clients. Open a client to change account access.</p>
         </div>
         <Button 
           className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" 
@@ -229,41 +255,100 @@ export default function AdminClientsList() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {clients.map((client: any) => {
-          const status = getClientStatus(client.id);
-          return (
-            <Link key={client.id} href={`/app/admin/clients/${client.id}`}>
-              <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group bg-white overflow-hidden rounded-2xl" data-testid={`card-client-${client.id}`}>
-                <CardContent className="p-0">
-                  <div className="p-6 flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
-                        <AvatarImage src={client.avatar} />
-                        <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">{client.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
-                        <p className="text-sm text-slate-500">{client.email}</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-                  </div>
-                  
-                  <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {status.type === 'destructive' ? <AlertCircle className="h-4 w-4 text-rose-500" /> : <Activity className="h-4 w-4 text-slate-400" />}
-                      <span className="text-sm font-medium text-slate-700">{status.desc}</span>
-                    </div>
-                    <Badge variant={status.type as any} className={status.type === 'destructive' ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 border-none' : status.type === 'default' ? 'bg-green-100 text-green-700 hover:bg-green-200 border-none' : 'bg-slate-200 text-slate-700 border-none'}>
-                      {status.label}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
+      <div className="space-y-8">
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-900">Active Clients</h2>
+            <Badge className="bg-green-100 text-green-700 border-none">{activeClients.length}</Badge>
+          </div>
+          {activeClients.length === 0 ? (
+            <Card className="border-slate-200 rounded-2xl bg-white">
+              <CardContent className="p-6 text-sm text-slate-500">No active clients match your search.</CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {activeClients.map((client: any) => {
+                const status = getClientStatus(client);
+                return (
+                  <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-${client.id}`}>
+                    <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
+                      <CardContent className="p-0">
+                        <div className="p-6 flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
+                              <AvatarImage src={client.avatar} />
+                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">{client.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
+                              <p className="text-sm text-slate-500">{client.email}</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
+                        </div>
+                        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {status.type === "destructive" ? <AlertCircle className="h-4 w-4 text-rose-500" /> : <Activity className="h-4 w-4 text-slate-400" />}
+                            <span className="text-sm font-medium text-slate-700">{status.desc}</span>
+                          </div>
+                          <Badge variant={status.type as any} className={status.type === "destructive" ? "bg-rose-100 text-rose-700 hover:bg-rose-200 border-none" : status.type === "default" ? "bg-green-100 text-green-700 hover:bg-green-200 border-none" : "bg-slate-200 text-slate-700 border-none"}>
+                            {status.label}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Link>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-900">Inactive Clients</h2>
+            <Badge className="bg-slate-200 text-slate-700 border-none">{inactiveClients.length}</Badge>
+          </div>
+          {inactiveClients.length === 0 ? (
+            <Card className="border-slate-200 rounded-2xl bg-white">
+              <CardContent className="p-6 text-sm text-slate-500">No inactive clients.</CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {inactiveClients.map((client: any) => {
+                const status = getClientStatus(client);
+                return (
+                  <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-inactive-${client.id}`}>
+                    <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
+                      <CardContent className="p-0">
+                        <div className="p-6 flex items-start justify-between">
+                          <div className="flex items-center gap-4">
+                            <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
+                              <AvatarImage src={client.avatar} />
+                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">{client.name.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{client.name}</h3>
+                              <p className="text-sm text-slate-500">{client.email}</p>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
+                        </div>
+                        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-slate-400" />
+                            <span className="text-sm font-medium text-slate-700">{status.desc}</span>
+                          </div>
+                          <Badge className="bg-slate-200 text-slate-700 border-none">{status.label}</Badge>
+                        </div>
+                      </CardContent>
+                    </Link>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

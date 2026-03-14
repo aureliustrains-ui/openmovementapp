@@ -16,13 +16,19 @@ import {
   clientCheckinsSummaryQuery,
   clientCheckinsTrendsQuery,
   clientCheckinsRecentQuery,
+  useUpdateUserStatus,
+  useRemoveClient,
+  clientMovementChecksGroupedQuery,
+  clientProgressReportsGroupedQuery,
+  useCreateClientProgressReport,
+  useReviewProgressReportItem,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dumbbell, Plus, MessageCircle, PlayCircle, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Clock, ExternalLink, Send, Pencil, CalendarDays, Trash2, Archive, Zap, Save } from "lucide-react";
+import { Dumbbell, Plus, MessageCircle, CheckCircle2, ChevronLeft, ArrowRight, BarChart, Repeat, Loader2, XCircle, Send, Pencil, CalendarDays, Trash2, Archive, Zap, Save, UserCheck, UserX } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -31,18 +37,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ReviewSubmissionRow } from "@/components/admin/review/ReviewSubmissionRow";
+import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
 import {
   CartesianGrid,
   Legend,
   Line,
   LineChart,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const CHECKIN_COLORS = {
+  sessionRpe: "#eab308",
+  sleepLastNight: "#2563eb",
+  feltOff: "#dc2626",
+  recovery: "#16a34a",
+  stress: "#d97706",
+  painInjury: "#dc2626",
+} as const;
+
+function formatScaledAverage(value: unknown, scale: 5 | 10): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const rounded = Number(value.toFixed(1));
+  return `${rounded}/${scale}`;
+}
 
 function isPhaseReadyToActivate(phase: any): boolean {
   const checks = (phase.movementChecks as any[]) || [];
@@ -77,6 +100,10 @@ export default function AdminClientProfile() {
   const { sessionUser, impersonate } = useAuth();
   const updatePhase = useUpdatePhase();
   const deletePhase = useDeletePhase();
+  const updateUserStatus = useUpdateUserStatus();
+  const removeClient = useRemoveClient();
+  const createClientProgressReport = useCreateClientProgressReport();
+  const reviewProgressReportItem = useReviewProgressReportItem();
 
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
@@ -87,6 +114,13 @@ export default function AdminClientProfile() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("programming");
   const [chatMessage, setChatMessage] = useState("");
+  const [chatProfilePreview, setChatProfilePreview] = useState<{
+    name: string;
+    avatar: string | null;
+    bio: string | null;
+    height: string | null;
+    weight: string | null;
+  } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteTargetPhase, setDeleteTargetPhase] = useState<any>(null);
@@ -94,20 +128,31 @@ export default function AdminClientProfile() {
   const [finishing, setFinishing] = useState(false);
   const [activateTargetPhase, setActivateTargetPhase] = useState<any>(null);
   const [activating, setActivating] = useState(false);
-  const [movementCheckPhaseId, setMovementCheckPhaseId] = useState<string | null>(null);
   const [specificsDraft, setSpecificsDraft] = useState("");
   const [savingSpecifics, setSavingSpecifics] = useState(false);
   const [structuredLogsFilter, setStructuredLogsFilter] = useState("all");
   const [checkinsRange, setCheckinsRange] = useState("8w");
   const [sessionMetrics, setSessionMetrics] = useState({
     rpeOverall: true,
+    sleepLastNight: true,
     feltOffEvents: true,
   });
   const [weeklyMetrics, setWeeklyMetrics] = useState({
-    sleepWeek: true,
-    energyWeek: true,
+    recoveryThisTrainingWeek: true,
+    stressOutsideTrainingThisWeek: true,
     injuryImpact: true,
   });
+  const [createProgressReportOpen, setCreateProgressReportOpen] = useState(false);
+  const [selectedProgressExerciseIds, setSelectedProgressExerciseIds] = useState<string[]>([]);
+  const [isProgressApproveOpen, setIsProgressApproveOpen] = useState(false);
+  const [isProgressResubmitOpen, setIsProgressResubmitOpen] = useState(false);
+  const [selectedProgressReview, setSelectedProgressReview] = useState<{
+    reportId: string;
+    itemId: string;
+  } | null>(null);
+  const [progressApproveNote, setProgressApproveNote] = useState("");
+  const [progressResubmitFeedback, setProgressResubmitFeedback] = useState("");
+  const [submittingProgressReview, setSubmittingProgressReview] = useState(false);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -134,6 +179,15 @@ export default function AdminClientProfile() {
     ...clientCheckinsRecentQuery(clientId || ""),
     enabled: !!clientId && activeTab === "checkins",
   });
+  const { data: movementCheckGroupsData = [] } = useQuery({
+    ...(clientId ? clientMovementChecksGroupedQuery(clientId) : clientMovementChecksGroupedQuery("")),
+    enabled: !!clientId && activeTab === "movement",
+    refetchInterval: activeTab === "movement" ? 10000 : false,
+  });
+  const { data: progressReportGroupsData = [] } = useQuery({
+    ...(clientId ? clientProgressReportsGroupedQuery(clientId) : clientProgressReportsGroupedQuery("")),
+    enabled: !!clientId && activeTab === "progress-report",
+  });
 
   useEffect(() => {
     if (typeof specificsData?.specifics === "string") {
@@ -148,10 +202,10 @@ export default function AdminClientProfile() {
   }, [chatMessages, activeTab]);
 
   useEffect(() => {
-    if (activeTab === "chat" && sessionUser && clientId && chatMessages.length > 0) {
+    if (activeTab === "chat" && sessionUser && clientId) {
       markRead.mutate({ userId: sessionUser.id, clientId });
     }
-  }, [activeTab, sessionUser?.id, clientId, chatMessages.length]);
+  }, [activeTab, sessionUser?.id, clientId]);
 
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
@@ -159,19 +213,29 @@ export default function AdminClientProfile() {
   const pendingPhases = clientPhases.filter((p: any) => p.status === 'Waiting for Movement Check');
   const draftPhases = clientPhases.filter((p: any) => p.status === 'Draft');
   const completedPhases = clientPhases.filter((p: any) => p.status === 'Completed');
-
-  const phasesWithMovementChecks = clientPhases.filter((p: any) =>
-    (p.status === 'Waiting for Movement Check' || p.status === 'Active') &&
-    (p.movementChecks as any[])?.length > 0
-  );
-
-  useEffect(() => {
-    if (phasesWithMovementChecks.length > 0 && !movementCheckPhaseId) {
-      setMovementCheckPhaseId(phasesWithMovementChecks[0].id);
-    }
-  }, [phasesWithMovementChecks, movementCheckPhaseId]);
-
-  const selectedMovementPhase = allPhases.find((p: any) => p.id === movementCheckPhaseId);
+  const activePhaseForProgress = activePhases[0];
+  const progressPhaseSessions = allSessions.filter((session: any) => session.phaseId === activePhaseForProgress?.id);
+  const selectableProgressExercises = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; sets?: string; reps?: string; tempo?: string }>();
+    progressPhaseSessions.forEach((session: any) => {
+      const sections = (session.sections as any[]) || [];
+      sections.forEach((section: any) => {
+        const exercises = (section?.exercises as any[]) || [];
+        exercises.forEach((exercise: any) => {
+          if (exercise?.id && exercise?.name && !map.has(exercise.id)) {
+            map.set(exercise.id, {
+              id: String(exercise.id),
+              name: String(exercise.name),
+              sets: exercise.sets ? String(exercise.sets) : undefined,
+              reps: exercise.reps ? String(exercise.reps) : undefined,
+              tempo: exercise.tempo ? String(exercise.tempo) : undefined,
+            });
+          }
+        });
+      });
+    });
+    return Array.from(map.values());
+  }, [progressPhaseSessions]);
 
   if (!client) return (
     <div className="flex items-center justify-center py-20">
@@ -179,8 +243,7 @@ export default function AdminClientProfile() {
     </div>
   );
 
-  const handleSendChatMessage = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitChatMessage = () => {
     if (!chatMessage.trim() || !clientId) return;
 
     sendMessage.mutate({
@@ -188,6 +251,30 @@ export default function AdminClientProfile() {
       text: chatMessage,
     });
     setChatMessage("");
+  };
+
+  const handleSendChatMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitChatMessage();
+  };
+
+  const handleChatComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    if (e.shiftKey) return;
+    if (e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    submitChatMessage();
+  };
+
+  const openChatProfilePreview = (msg: any) => {
+    const senderDisplayName = getChatDisplayFirstName(msg);
+    setChatProfilePreview({
+      name: senderDisplayName,
+      avatar: msg?.senderProfile?.avatar ?? msg?.senderAvatar ?? null,
+      bio: msg?.senderProfile?.bio ?? null,
+      height: msg?.senderProfile?.height ?? null,
+      weight: msg?.senderProfile?.weight ?? null,
+    });
   };
 
   const handleOpenApprove = (phaseId: string, exerciseId: string) => {
@@ -347,6 +434,51 @@ export default function AdminClientProfile() {
     }
   };
 
+  const handleSetClientStatus = async (status: "Active" | "Inactive") => {
+    if (!clientId || updateUserStatus.isPending || removeClient.isPending) return;
+    try {
+      await updateUserStatus.mutateAsync({ id: clientId, status });
+      toast({
+        title: status === "Inactive" ? "Client set inactive" : "Client reactivated",
+        description:
+          status === "Inactive"
+            ? "Client access is disabled and existing phases are archived."
+            : "Client access is enabled again.",
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not update client status.";
+      toast({
+        title: "Status update failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveClient = async () => {
+    if (!clientId || updateUserStatus.isPending || removeClient.isPending) return;
+    const confirmed = window.confirm(
+      `Remove ${client?.name}? This permanently deletes their phases and removes account access.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await removeClient.mutateAsync(clientId);
+      toast({
+        title: "Client removed",
+        description: "Client account was removed and phase history deleted.",
+      });
+      setLocation("/app/admin/clients");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not remove client.";
+      toast({
+        title: "Client removal failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSaveSpecifics = async () => {
     if (!clientId || savingSpecifics) return;
     setSavingSpecifics(true);
@@ -360,6 +492,114 @@ export default function AdminClientProfile() {
       toast({ title: "Could not save specifics", variant: "destructive" });
     } finally {
       setSavingSpecifics(false);
+    }
+  };
+
+  const toggleProgressExercise = (exerciseId: string, checked: boolean) => {
+    setSelectedProgressExerciseIds((prev) => {
+      if (checked) {
+        if (prev.includes(exerciseId)) return prev;
+        return [...prev, exerciseId];
+      }
+      return prev.filter((id) => id !== exerciseId);
+    });
+  };
+
+  const handleCreateProgressReport = async () => {
+    if (!clientId || !activePhaseForProgress) return;
+    if (selectedProgressExerciseIds.length === 0) {
+      toast({
+        title: "Select exercises",
+        description: "Choose at least one exercise from the active phase.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await createClientProgressReport.mutateAsync({
+        clientId,
+        phaseId: activePhaseForProgress.id,
+        exerciseIds: selectedProgressExerciseIds,
+      });
+      toast({
+        title: "Progress report requested",
+        description: "The client will now see this request in their dashboard.",
+      });
+      setCreateProgressReportOpen(false);
+      setSelectedProgressExerciseIds([]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Could not create progress report.";
+      toast({
+        title: "Request failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleOpenApproveProgressReportItem = (reportId: string, itemId: string) => {
+    setSelectedProgressReview({ reportId, itemId });
+    setProgressApproveNote("");
+    setIsProgressApproveOpen(true);
+  };
+
+  const handleOpenResubmitProgressReportItem = (reportId: string, itemId: string) => {
+    setSelectedProgressReview({ reportId, itemId });
+    setProgressResubmitFeedback("");
+    setIsProgressResubmitOpen(true);
+  };
+
+  const handleApproveProgressReportItem = async () => {
+    if (!selectedProgressReview || submittingProgressReview) return;
+    setSubmittingProgressReview(true);
+    try {
+      await reviewProgressReportItem.mutateAsync({
+        reportId: selectedProgressReview.reportId,
+        itemId: selectedProgressReview.itemId,
+        decision: "approve",
+        feedbackNote: progressApproveNote.trim() || null,
+      });
+      toast({
+        title: "Progress item approved",
+        description: "Client feedback/status has been updated.",
+      });
+      setIsProgressApproveOpen(false);
+      setSelectedProgressReview(null);
+    } catch (error: unknown) {
+      toast({
+        title: "Review failed",
+        description: error instanceof Error ? error.message : "Could not approve this submission.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingProgressReview(false);
+    }
+  };
+
+  const handleResubmitProgressReportItem = async () => {
+    if (!selectedProgressReview || submittingProgressReview) return;
+    setSubmittingProgressReview(true);
+    try {
+      await reviewProgressReportItem.mutateAsync({
+        reportId: selectedProgressReview.reportId,
+        itemId: selectedProgressReview.itemId,
+        decision: "resubmit",
+        feedbackNote: progressResubmitFeedback.trim() || null,
+      });
+      toast({
+        title: "Resubmission requested",
+        description: "Client feedback/status has been updated.",
+      });
+      setIsProgressResubmitOpen(false);
+      setSelectedProgressReview(null);
+    } catch (error: unknown) {
+      toast({
+        title: "Review failed",
+        description: error instanceof Error ? error.message : "Could not request a resubmission.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingProgressReview(false);
     }
   };
 
@@ -385,13 +625,19 @@ export default function AdminClientProfile() {
 
   const structuredLogs = useMemo(
     () =>
-      workoutLogs.map((log: any) => ({
-        ...log,
-        exerciseDisplayName:
-          log.exerciseName ||
-          exerciseNameById.get(log.exerciseId) ||
-          "Unknown exercise",
-      })),
+      [...workoutLogs]
+        .map((log: any) => ({
+          ...log,
+          exerciseDisplayName:
+            log.exerciseName ||
+            exerciseNameById.get(log.exerciseId) ||
+            "Unknown exercise",
+        }))
+        .sort((a: any, b: any) => {
+          const aTime = typeof a.date === "string" ? a.date : "";
+          const bTime = typeof b.date === "string" ? b.date : "";
+          return bTime.localeCompare(aTime);
+        }),
     [workoutLogs, exerciseNameById],
   );
 
@@ -422,7 +668,7 @@ export default function AdminClientProfile() {
       ((checkinsTrends as any)?.sessions || []).map((entry: any) => ({
         ...entry,
         dateLabel: new Date(entry.date).toLocaleDateString(),
-        feltOffEvents: entry.feltOff ? 10 : null,
+        feltOffMarker: entry.feltOff ? entry.rpeOverall : null,
       })),
     [checkinsTrends],
   );
@@ -435,6 +681,51 @@ export default function AdminClientProfile() {
       })),
     [checkinsTrends],
   );
+
+  const summarySleepFallback = useMemo(() => {
+    const values = ((checkinsTrends as any)?.sessions || [])
+      .map((entry: any) => entry?.sleepLastNight)
+      .filter((value: unknown): value is number => typeof value === "number" && Number.isFinite(value));
+    if (values.length === 0) return null;
+    return Number((values.reduce((sum: number, value: number) => sum + value, 0) / values.length).toFixed(2));
+  }, [checkinsTrends]);
+
+  const avgSessionSleepValue =
+    typeof (checkinsSummary as any)?.avgSessionSleepLastNight === "number"
+      ? (checkinsSummary as any).avgSessionSleepLastNight
+      : summarySleepFallback;
+
+  const movementCheckGroups = useMemo(() => {
+    return [...(movementCheckGroupsData as any[])].sort((a: any, b: any) => {
+      const newestInGroup = (group: any) =>
+        ((group?.items || []) as any[]).reduce((latest: string, item: any) => {
+          const candidate =
+            (typeof item?.decidedAt === "string" && item.decidedAt) ||
+            (typeof item?.submittedAt === "string" && item.submittedAt) ||
+            "";
+          return candidate > latest ? candidate : latest;
+        }, "");
+      return newestInGroup(b).localeCompare(newestInGroup(a));
+    });
+  }, [movementCheckGroupsData]);
+
+  const progressReportGroups = useMemo(() => {
+    const sorted = [...(progressReportGroupsData as any[])].map((group: any) => ({
+      ...group,
+      items: [...(group.items || [])].sort((a: any, b: any) => {
+        const aTime = a.reviewedAt || a.submittedAt || a.createdAt || "";
+        const bTime = b.reviewedAt || b.submittedAt || b.createdAt || "";
+        return bTime.localeCompare(aTime);
+      }),
+    }));
+    return sorted.sort((a: any, b: any) => {
+      const aTop = a.items?.[0];
+      const bTop = b.items?.[0];
+      const aTime = aTop ? aTop.reviewedAt || aTop.submittedAt || aTop.createdAt || "" : "";
+      const bTime = bTop ? bTop.reviewedAt || bTop.submittedAt || bTop.createdAt || "" : "";
+      return bTime.localeCompare(aTime);
+    });
+  }, [progressReportGroupsData]);
 
   const renderPhaseCard = (phase: any) => {
     const displayStatus = getPhaseDisplayStatus(phase);
@@ -582,6 +873,7 @@ export default function AdminClientProfile() {
               }
             }}
             data-testid="button-impersonate"
+            disabled={client.status !== "Active"}
           >
             <Repeat className="mr-2 h-4 w-4" /> Impersonate
           </Button>
@@ -590,13 +882,15 @@ export default function AdminClientProfile() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start overflow-x-auto h-12">
+        <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start flex-wrap h-auto gap-1">
           <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Programming</TabsTrigger>
-          <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">Movement Checks</TabsTrigger>
           <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">Chat</TabsTrigger>
-          <TabsTrigger value="specifics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-specifics">Specifics</TabsTrigger>
+          <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Metrics</TabsTrigger>
           <TabsTrigger value="structured-logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-structured-logs">Notes &amp; Logs</TabsTrigger>
-          <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Readiness &amp; Check-ins</TabsTrigger>
+          <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">Movement Check</TabsTrigger>
+          <TabsTrigger value="progress-report" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-progress-report">Progress Report</TabsTrigger>
+          <TabsTrigger value="specifics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-specifics">Specifics</TabsTrigger>
+          <TabsTrigger value="access" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-client-access">Client Access</TabsTrigger>
         </TabsList>
         
         <div className="mt-8">
@@ -718,114 +1012,206 @@ export default function AdminClientProfile() {
           <TabsContent value="movement" className="m-0 outline-none">
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
-                <div className="flex items-center justify-between">
-                  <CardTitle>Movement Checks</CardTitle>
-                  {phasesWithMovementChecks.length > 1 && (
-                    <Select value={movementCheckPhaseId || ''} onValueChange={setMovementCheckPhaseId}>
-                      <SelectTrigger className="w-[220px] bg-white" data-testid="select-movement-phase">
-                        <SelectValue placeholder="Select phase" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {phasesWithMovementChecks.map((p: any) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({getPhaseDisplayStatus(p)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                {selectedMovementPhase && (
-                  <p className="text-sm text-slate-500 mt-1">{selectedMovementPhase.name} — {getPhaseDisplayStatus(selectedMovementPhase)}</p>
-                )}
+                <CardTitle>Movement Checks</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">Review movement submissions grouped by phase.</p>
               </CardHeader>
-              <CardContent className="p-0">
-                {selectedMovementPhase && (selectedMovementPhase.movementChecks as any[]).length > 0 ? (
-                  <div className="divide-y divide-slate-100">
-                    {(selectedMovementPhase.movementChecks as any[]).map((mc: any, i: number) => (
-                      <div key={i} className="p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between hover:bg-slate-50/50 transition-colors" data-testid={`movement-check-${i}`}>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <Badge variant="outline" className={
-                              mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
-                              mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
-                              mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
-                              'bg-slate-100 text-slate-700'
-                            }>
-                              {mc.status || 'Not Submitted'}
-                            </Badge>
-                            {mc.decidedAt && (
-                              <span className="text-xs text-slate-500 flex items-center">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Reviewed {new Date(mc.decidedAt).toLocaleDateString()}
-                              </span>
-                            )}
-                            {!mc.decidedAt && mc.submittedAt && (
-                              <span className="text-xs text-slate-500 flex items-center">
-                                <Clock className="h-3 w-3 mr-1" />
-                                Submitted {new Date(mc.submittedAt).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="font-semibold text-lg text-slate-900">{mc.name}</h4>
-                          {mc.clientNote && (
-                            <div className="mt-2 text-sm bg-blue-50 text-blue-800 p-2 rounded-lg border border-blue-100">
-                              <span className="font-bold">Client Note:</span> {mc.clientNote}
-                            </div>
-                          )}
-                          {mc.approvedNote && mc.status === 'Approved' && (
-                            <div className="mt-2 text-sm bg-green-50 text-green-800 p-2 rounded-lg border border-green-100">
-                              <span className="font-bold">Approval Note:</span> {mc.approvedNote}
-                            </div>
-                          )}
-                          {mc.resubmitFeedback && mc.status === 'Needs Resubmission' && (
-                            <div className="mt-2 text-sm bg-red-50 text-red-800 p-2 rounded-lg border border-red-100">
-                              <span className="font-bold">Resubmission Feedback:</span> {mc.resubmitFeedback}
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div className="shrink-0 flex items-center gap-3">
-                          {mc.videoUrl ? (
-                            <a href={mc.videoUrl} target="_blank" rel="noopener noreferrer">
-                              <Button variant="outline" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200" data-testid={`button-watch-video-${i}`}>
-                                <PlayCircle className="mr-2 h-4 w-4" /> Watch Video <ExternalLink className="ml-2 h-3 w-3" />
-                              </Button>
-                            </a>
-                          ) : (
-                            <div className="text-sm text-slate-400 italic">No video submitted</div>
-                          )}
-                          
-                          {mc.status === 'Pending' && (
-                            <div className="flex gap-2">
-                              <Button 
-                                variant="outline"
-                                className="border-red-200 text-red-700 hover:bg-red-50"
-                                onClick={() => handleOpenReject(selectedMovementPhase.id, mc.exerciseId)}
-                                data-testid={`button-reject-${i}`}
-                                disabled={isSubmitting}
-                              >
-                                <XCircle className="mr-2 h-4 w-4" /> Resubmit
-                              </Button>
-                              <Button 
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                                onClick={() => handleOpenApprove(selectedMovementPhase.id, mc.exerciseId)}
-                                data-testid={`button-approve-${i}`}
-                                disabled={isSubmitting}
-                              >
-                                <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
+              <CardContent className="p-0 divide-y divide-slate-100">
+                {movementCheckGroups.length === 0 ? (
                   <div className="p-12 text-center text-slate-500">
                     <CheckCircle2 className="h-12 w-12 text-green-200 mx-auto mb-3" />
-                    <p>No pending movement checks.</p>
+                    <p>No movement checks submitted yet.</p>
                   </div>
+                ) : (
+                  movementCheckGroups.map((group: any) => (
+                    <div key={group.phaseId} className="p-5 space-y-3" data-testid={`movement-group-${group.phaseId}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-semibold text-slate-900">{group.phaseName}</div>
+                        <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-200">
+                          {group.phaseStatus}
+                        </Badge>
+                      </div>
+                      <div className="rounded-xl border border-slate-100 divide-y divide-slate-100 overflow-hidden bg-white">
+                        {[...(group.items || [])]
+                          .sort((a: any, b: any) => {
+                            const aTime = a.decidedAt || a.submittedAt || "";
+                            const bTime = b.decidedAt || b.submittedAt || "";
+                            return bTime.localeCompare(aTime);
+                          })
+                          .map((item: any, index: number) => {
+                          const note =
+                            item.rawStatus === "Approved"
+                              ? item.approvedNote
+                              : item.rawStatus === "Needs Resubmission"
+                                ? item.resubmitFeedback
+                                : item.clientNote;
+                          const noteLabel =
+                            item.rawStatus === "Approved"
+                              ? "Approval note"
+                              : item.rawStatus === "Needs Resubmission"
+                                ? "Resubmission feedback"
+                                : "Client note";
+
+                          return (
+                            <ReviewSubmissionRow
+                              key={`${group.phaseId}-${item.exerciseId}-${index}`}
+                              exerciseName={item.exerciseName}
+                              status={(item.status as "requested" | "submitted" | "reviewed") || "requested"}
+                              submittedAt={item.decidedAt || item.submittedAt}
+                              submittedLabel={item.decidedAt ? "Reviewed" : "Submitted"}
+                              videoUrl={item.videoUrl}
+                              videoSource={item.videoSource}
+                              note={note}
+                              noteLabel={noteLabel}
+                              actions={
+                                item.rawStatus === "Pending" ? (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant="outline"
+                                      className="border-red-200 text-red-700 hover:bg-red-50"
+                                      onClick={() => handleOpenReject(group.phaseId, item.exerciseId)}
+                                      data-testid={`button-reject-${group.phaseId}-${item.exerciseId}`}
+                                      disabled={isSubmitting}
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4" /> Resubmit
+                                    </Button>
+                                    <Button
+                                      className="bg-green-600 hover:bg-green-700 text-white"
+                                      onClick={() => handleOpenApprove(group.phaseId, item.exerciseId)}
+                                      data-testid={`button-approve-${group.phaseId}-${item.exerciseId}`}
+                                      disabled={isSubmitting}
+                                    >
+                                      <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+                                    </Button>
+                                  </div>
+                                ) : null
+                              }
+                              testId={`movement-check-${group.phaseId}-${item.exerciseId}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="progress-report" className="m-0 outline-none space-y-4">
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Progress Report Requests</CardTitle>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Request exercise updates from the active phase without interrupting training.
+                    </p>
+                  </div>
+                  <Button
+                    className="bg-slate-900 hover:bg-slate-800 text-white rounded-full"
+                    onClick={() => setCreateProgressReportOpen(true)}
+                    disabled={!activePhaseForProgress || selectableProgressExercises.length === 0}
+                    data-testid="button-open-create-progress-report"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Request
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 divide-y divide-slate-100">
+                {progressReportGroups.length === 0 ? (
+                  <div className="p-8 text-sm text-slate-500">No progress report requests yet.</div>
+                ) : (
+                  progressReportGroups.map((group: any) => (
+                    <div key={group.phaseId} className="p-5 space-y-3" data-testid={`progress-group-${group.phaseId}`}>
+                      <div className="font-semibold text-slate-900">{group.phaseName}</div>
+                      <div className="rounded-xl border border-slate-100 divide-y divide-slate-100 overflow-hidden bg-white">
+                        {(group.items || []).map((item: any, index: number) => {
+                          const videoUrl =
+                            (typeof item.submissionPlaybackUrl === "string" &&
+                              item.submissionPlaybackUrl.trim().length > 0
+                              ? item.submissionPlaybackUrl
+                              : null) ||
+                            (typeof item.submissionLink === "string" && item.submissionLink.trim().length > 0
+                              ? item.submissionLink
+                              : null);
+                          const hasSubmission =
+                            Boolean(videoUrl) ||
+                            (typeof item.submissionObjectKey === "string" &&
+                              item.submissionObjectKey.trim().length > 0);
+                          const status =
+                            item.reviewStatus === "approved"
+                              ? "approved"
+                              : item.reviewStatus === "resubmission_requested"
+                                ? "resubmission_requested"
+                                : item.reviewStatus === "submitted"
+                                  ? "submitted"
+                                  : item.reportStatus === "approved" || item.reportStatus === "reviewed"
+                                    ? "approved"
+                                    : item.reportStatus === "resubmission_requested"
+                                      ? "resubmission_requested"
+                                      : hasSubmission
+                                        ? "submitted"
+                                        : "requested";
+                          const reviewNote =
+                            status === "resubmission_requested" || status === "approved"
+                              ? item.feedbackNote
+                              : item.submissionNote;
+                          const noteLabel =
+                            status === "resubmission_requested"
+                              ? "Coach feedback"
+                              : status === "approved"
+                                ? "Coach note"
+                                : "Achieved parameters";
+                          const canReview = hasSubmission && status !== "approved";
+
+                          return (
+                            <ReviewSubmissionRow
+                              key={`${group.phaseId}-${item.reportId}-${item.exerciseId}-${index}`}
+                              exerciseName={item.exerciseName}
+                              status={status}
+                              submittedAt={item.reviewedAt || item.submittedAt || item.createdAt}
+                              submittedLabel={
+                                item.reviewedAt
+                                  ? "Reviewed"
+                                  : item.submittedAt
+                                    ? "Submitted"
+                                    : "Requested"
+                              }
+                              videoUrl={videoUrl}
+                              videoSource={item.submissionSource}
+                              note={reviewNote}
+                              noteLabel={noteLabel}
+                              actions={
+                                canReview ? (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      variant="outline"
+                                      className="border-red-200 text-red-700 hover:bg-red-50"
+                                      onClick={() => handleOpenResubmitProgressReportItem(item.reportId, item.itemId)}
+                                      data-testid={`button-progress-resubmit-${item.reportId}-${item.itemId}`}
+                                      disabled={submittingProgressReview}
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4" /> Resubmit
+                                    </Button>
+                                    <Button
+                                      className="bg-green-600 hover:bg-green-700 text-white"
+                                      onClick={() => handleOpenApproveProgressReportItem(item.reportId, item.itemId)}
+                                      data-testid={`button-progress-approve-${item.reportId}-${item.itemId}`}
+                                      disabled={submittingProgressReview}
+                                    >
+                                      <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+                                    </Button>
+                                  </div>
+                                ) : null
+                              }
+                              testId={`progress-report-item-${item.reportId}-${item.exerciseId}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
                 )}
               </CardContent>
             </Card>
@@ -844,20 +1230,30 @@ export default function AdminClientProfile() {
                     <p>No messages yet. Start a conversation.</p>
                   </div>
                 ) : (
-                  chatMessages.map((msg: any) => (
+                  chatMessages.map((msg: any) => {
+                    const senderDisplayName = getChatDisplayFirstName(msg);
+                    const senderInitial = senderDisplayName.charAt(0) || "U";
+                    return (
                     <div key={msg.id} className={`flex gap-4 ${!msg.isClient ? 'flex-row-reverse' : ''}`}>
-                      <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
-                        <AvatarImage src={msg.senderAvatar || undefined} alt={msg.senderName || msg.sender || undefined} />
-                        <AvatarFallback className={!msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
-                          {msg.sender.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <button
+                        type="button"
+                        onClick={() => openChatProfilePreview(msg)}
+                        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                        data-testid={`button-open-chat-profile-${msg.id}`}
+                      >
+                        <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                          <AvatarImage src={msg.senderAvatar || undefined} alt={senderDisplayName || undefined} />
+                          <AvatarFallback className={!msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
+                            {senderInitial}
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
                       <div className={`flex flex-col ${!msg.isClient ? 'items-end' : 'items-start'}`}>
                         <div className="flex items-baseline gap-2 mb-1">
-                          <span className="font-semibold text-slate-900 text-sm">{msg.sender}</span>
+                          <span className="font-semibold text-slate-900 text-sm">{senderDisplayName}</span>
                           <span className="text-xs text-slate-500">{msg.time?.includes("T") ? new Date(msg.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : msg.time}</span>
                         </div>
-                        <div className={`text-sm leading-relaxed p-4 rounded-2xl max-w-md ${
+                        <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words p-4 rounded-2xl max-w-md ${
                           !msg.isClient
                             ? 'bg-indigo-600 text-white rounded-tr-sm'
                             : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tl-sm'
@@ -866,24 +1262,26 @@ export default function AdminClientProfile() {
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
               <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-                <form className="relative flex items-center" onSubmit={handleSendChatMessage}>
-                  <Input
+                <form className="relative" onSubmit={handleSendChatMessage}>
+                  <Textarea
                     placeholder="Message client..."
-                    className="w-full pr-12 py-6 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"
+                    className="w-full min-h-[56px] max-h-44 resize-none pr-12 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"
                     value={chatMessage}
                     onChange={(e) => setChatMessage(e.target.value)}
+                    onKeyDown={handleChatComposerKeyDown}
                     data-testid="input-chat-message"
                   />
                   <Button
                     type="submit"
                     size="icon"
-                    className="absolute right-2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                    className="absolute right-2 bottom-2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm"
                     data-testid="button-send-message"
                     disabled={!chatMessage.trim()}
                   >
@@ -892,6 +1290,50 @@ export default function AdminClientProfile() {
                 </form>
               </div>
             </Card>
+
+            <Dialog open={!!chatProfilePreview} onOpenChange={(open) => !open && setChatProfilePreview(null)}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Profile</DialogTitle>
+                </DialogHeader>
+                {chatProfilePreview && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center gap-3">
+                      <Avatar className="h-24 w-24 border border-slate-200">
+                        <AvatarImage src={chatProfilePreview.avatar || undefined} alt={chatProfilePreview.name} />
+                        <AvatarFallback className="bg-indigo-50 text-indigo-700 text-lg font-semibold">
+                          {(chatProfilePreview.name || "U")
+                            .split(" ")
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase() || "")
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="text-lg font-semibold text-slate-900">{chatProfilePreview.name}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Bio</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-700">
+                        {chatProfilePreview.bio?.trim() ? chatProfilePreview.bio : "No bio added yet."}
+                      </p>
+                    </div>
+                    {(chatProfilePreview.height || chatProfilePreview.weight) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-slate-200 bg-white p-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Height</p>
+                          <p className="text-sm text-slate-800">{chatProfilePreview.height || "—"}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Weight</p>
+                          <p className="text-sm text-slate-800">{chatProfilePreview.weight || "—"}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </TabsContent>
           
           <TabsContent value="specifics" className="m-0 outline-none">
@@ -976,38 +1418,53 @@ export default function AdminClientProfile() {
           </TabsContent>
 
           <TabsContent value="checkins" className="m-0 outline-none space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
                 <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Sleep</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgWeeklySleep ?? "-"}</div>
-                  <div className="text-xs text-slate-500">last weeks</div>
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.recovery }}>Recovery</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgWeeklyRecovery, 5)}</div>
+                  <div className="text-xs text-slate-500">
+                    {typeof (checkinsSummary as any)?.avgWeeklyRecovery === "number" ? "last weeks" : "No data yet"}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
                 <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Energy</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgWeeklyEnergy ?? "-"}</div>
-                  <div className="text-xs text-slate-500">last weeks</div>
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.stress }}>Stress</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgWeeklyStress, 5)}</div>
+                  <div className="text-xs text-slate-500">
+                    {typeof (checkinsSummary as any)?.avgWeeklyStress === "number" ? "last weeks" : "No data yet"}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
                 <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Avg Session RPE</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.avgSessionRpe ?? "-"}</div>
-                  <div className="text-xs text-slate-500">micro load</div>
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.sessionRpe }}>Session RPE</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgSessionRpe, 10)}</div>
+                  <div className="text-xs text-slate-500">
+                    {typeof (checkinsSummary as any)?.avgSessionRpe === "number" ? "session trend" : "No data yet"}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
                 <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Felt Off Flags</div>
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.sleepLastNight }}>Sleep last night</div>
+                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage(avgSessionSleepValue, 5)}</div>
+                  <div className="text-xs text-slate-500">
+                    {typeof avgSessionSleepValue === "number" ? "session check-ins" : "No data yet"}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                <CardContent className="p-4">
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.feltOff }}>Felt off events</div>
                   <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.feltOffFlags ?? 0}</div>
                   <div className="text-xs text-slate-500">session alerts</div>
                 </CardContent>
               </Card>
               <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
                 <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Injury Weeks</div>
+                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.painInjury }}>Pain/injury weeks</div>
                   <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.injuryAffectedWeeks ?? 0}</div>
                   <div className="text-xs text-slate-500">weekly impact</div>
                 </CardContent>
@@ -1045,6 +1502,13 @@ export default function AdminClientProfile() {
                     </Button>
                     <Button
                       size="sm"
+                      variant={sessionMetrics.sleepLastNight ? "default" : "outline"}
+                      onClick={() => setSessionMetrics((prev) => ({ ...prev, sleepLastNight: !prev.sleepLastNight }))}
+                    >
+                      Sleep last night
+                    </Button>
+                    <Button
+                      size="sm"
                       variant={sessionMetrics.feltOffEvents ? "default" : "outline"}
                       onClick={() => setSessionMetrics((prev) => ({ ...prev, feltOffEvents: !prev.feltOffEvents }))}
                     >
@@ -1056,7 +1520,8 @@ export default function AdminClientProfile() {
                       <LineChart data={sessionCheckinTrendData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
-                        <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
+                        <YAxis yAxisId="rpe" domain={[0, 10]} tick={{ fontSize: 11 }} />
+                        <YAxis yAxisId="sleep" orientation="right" domain={[1, 5]} tick={{ fontSize: 11 }} />
                         <Tooltip
                           content={({ active, payload }) => {
                             if (!active || !payload || payload.length === 0) return null;
@@ -1066,18 +1531,23 @@ export default function AdminClientProfile() {
                                 <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
                                 <div className="text-slate-600">{point?.dateLabel}</div>
                                 <div className="text-slate-700 mt-1">RPE: {point?.rpeOverall}</div>
+                                <div className="text-slate-700">Sleep last night: {point?.sleepLastNight ?? "-"}</div>
                                 {point?.feltOff ? <div className="text-amber-700">Felt off: yes</div> : null}
-                                {point?.feltOffNote ? <div className="text-slate-700 mt-1">Note: {point.feltOffNote}</div> : null}
+                                {point?.whatFeltOff ? <div className="text-slate-700 mt-1">What felt off: {point.whatFeltOff}</div> : null}
+                                {point?.optionalNote ? <div className="text-slate-700 mt-1">Optional note: {point.optionalNote}</div> : null}
                               </div>
                             );
                           }}
                         />
                         <Legend />
                         {sessionMetrics.rpeOverall && (
-                          <Line type="monotone" dataKey="rpeOverall" name="Session RPE" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line yAxisId="rpe" type="monotone" dataKey="rpeOverall" name="Session RPE" stroke={CHECKIN_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
+                        )}
+                        {sessionMetrics.sleepLastNight && (
+                          <Line yAxisId="sleep" type="monotone" dataKey="sleepLastNight" name="Sleep last night" stroke={CHECKIN_COLORS.sleepLastNight} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
                         )}
                         {sessionMetrics.feltOffEvents && (
-                          <Line type="monotone" dataKey="feltOffEvents" name="Felt-off events" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
+                          <Scatter yAxisId="rpe" dataKey="feltOffMarker" name="Felt off events" fill={CHECKIN_COLORS.feltOff} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1089,17 +1559,17 @@ export default function AdminClientProfile() {
                     <span className="text-sm font-semibold text-slate-700">Weekly metrics</span>
                     <Button
                       size="sm"
-                      variant={weeklyMetrics.sleepWeek ? "default" : "outline"}
-                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, sleepWeek: !prev.sleepWeek }))}
+                      variant={weeklyMetrics.recoveryThisTrainingWeek ? "default" : "outline"}
+                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, recoveryThisTrainingWeek: !prev.recoveryThisTrainingWeek }))}
                     >
-                      Sleep
+                      Recovery
                     </Button>
                     <Button
                       size="sm"
-                      variant={weeklyMetrics.energyWeek ? "default" : "outline"}
-                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, energyWeek: !prev.energyWeek }))}
+                      variant={weeklyMetrics.stressOutsideTrainingThisWeek ? "default" : "outline"}
+                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, stressOutsideTrainingThisWeek: !prev.stressOutsideTrainingThisWeek }))}
                     >
-                      Energy
+                      Stress
                     </Button>
                     <Button
                       size="sm"
@@ -1122,23 +1592,24 @@ export default function AdminClientProfile() {
                             return (
                               <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
                                 <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
-                                <div className="text-slate-700 mt-1">Sleep: {point?.sleepWeek}</div>
-                                <div className="text-slate-700">Energy: {point?.energyWeek}</div>
+                                <div className="text-slate-700 mt-1">Recovery: {point?.recoveryThisTrainingWeek}</div>
+                                <div className="text-slate-700">Stress: {point?.stressOutsideTrainingThisWeek}</div>
+                                <div className="text-slate-700">Pain/injury affected training: {point?.injuryAffectedTraining ? "Yes" : "No"}</div>
                                 <div className="text-slate-700">Injury impact: {point?.injuryImpact ?? 0}</div>
-                                {point?.coachNoteFromClient ? <div className="text-slate-700 mt-1">Note: {point.coachNoteFromClient}</div> : null}
+                                {point?.optionalNote ? <div className="text-slate-700 mt-1">Note: {point.optionalNote}</div> : null}
                               </div>
                             );
                           }}
                         />
                         <Legend />
-                        {weeklyMetrics.sleepWeek && (
-                          <Line type="monotone" dataKey="sleepWeek" name="Sleep" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                        {weeklyMetrics.recoveryThisTrainingWeek && (
+                          <Line type="monotone" dataKey="recoveryThisTrainingWeek" name="Recovery this training week" stroke={CHECKIN_COLORS.recovery} strokeWidth={2} dot={{ r: 3 }} />
                         )}
-                        {weeklyMetrics.energyWeek && (
-                          <Line type="monotone" dataKey="energyWeek" name="Energy" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                        {weeklyMetrics.stressOutsideTrainingThisWeek && (
+                          <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHECKIN_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
                         )}
                         {weeklyMetrics.injuryImpact && (
-                          <Line type="monotone" dataKey="injuryImpact" name="Injury impact" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="injuryImpact" name="Pain/injury impact" stroke={CHECKIN_COLORS.painInjury} strokeWidth={2} dot={{ r: 3 }} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1161,8 +1632,10 @@ export default function AdminClientProfile() {
                       <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
                         <div className="text-sm font-semibold text-slate-900">{entry.sessionName}</div>
                         <div className="text-xs text-slate-500">{new Date(entry.submittedAt).toLocaleString()}</div>
-                        <div className="text-xs text-slate-700 mt-1">RPE {entry.rpeOverall}{entry.feltOff ? " · felt off" : ""}</div>
-                        {entry.feltOffNote ? <div className="text-xs text-slate-700 mt-1">Note: {entry.feltOffNote}</div> : null}
+                        <div className="text-xs text-slate-700 mt-1">Session RPE {entry.sessionRpe ?? entry.rpeOverall}{entry.feltOff ? " · felt off" : ""}</div>
+                        <div className="text-xs text-slate-700">Sleep last night {entry.sleepLastNight ?? "-"}</div>
+                        {entry.whatFeltOff ? <div className="text-xs text-slate-700 mt-1">What felt off: {entry.whatFeltOff}</div> : null}
+                        {entry.optionalNote ? <div className="text-xs text-slate-700 mt-1">Optional note: {entry.optionalNote}</div> : null}
                       </div>
                     ))
                   )}
@@ -1175,9 +1648,10 @@ export default function AdminClientProfile() {
                     (checkinsRecent as any).weeks.map((entry: any) => (
                       <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
                         <div className="text-sm font-semibold text-slate-900">Week of {entry.weekStartDate}</div>
-                        <div className="text-xs text-slate-700 mt-1">Sleep {entry.sleepWeek} · Energy {entry.energyWeek}</div>
+                        <div className="text-xs text-slate-700 mt-1">Recovery {entry.recoveryThisTrainingWeek} · Stress {entry.stressOutsideTrainingThisWeek}</div>
+                        <div className="text-xs text-slate-700">Pain/injury affected training {entry.injuryAffectedTraining ? "Yes" : "No"}</div>
                         <div className="text-xs text-slate-700">Injury impact {entry.injuryImpact ?? 0}</div>
-                        {entry.coachNoteFromClient ? <div className="text-xs text-slate-700 mt-1">Note: {entry.coachNoteFromClient}</div> : null}
+                        {entry.optionalNote ? <div className="text-xs text-slate-700 mt-1">Optional note: {entry.optionalNote}</div> : null}
                       </div>
                     ))
                   )}
@@ -1185,8 +1659,133 @@ export default function AdminClientProfile() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="access" className="m-0 outline-none">
+            <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <CardTitle>Client Access Management</CardTitle>
+                <p className="text-sm text-slate-500">
+                  Inactive keeps phases archived. Remove deletes all client phases and disables account access permanently.
+                </p>
+              </CardHeader>
+              <CardContent className="p-6 space-y-6">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Current account status</p>
+                    <p className="text-xs text-slate-500">{client.status}</p>
+                  </div>
+                  <Badge className={client.status === "Active" ? "bg-green-100 text-green-700 border-none" : "bg-slate-200 text-slate-700 border-none"}>
+                    {client.status}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {client.status === "Active" ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleSetClientStatus("Inactive")}
+                      disabled={updateUserStatus.isPending || removeClient.isPending}
+                      data-testid="button-client-set-inactive"
+                    >
+                      <UserX className="h-4 w-4 mr-2" />
+                      Set inactive
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => handleSetClientStatus("Active")}
+                      disabled={updateUserStatus.isPending || removeClient.isPending}
+                      data-testid="button-client-reactivate"
+                    >
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Reactivate
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="destructive"
+                    onClick={handleRemoveClient}
+                    disabled={updateUserStatus.isPending || removeClient.isPending}
+                    data-testid="button-client-remove"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Remove Client
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </div>
       </Tabs>
+
+      <Dialog open={createProgressReportOpen} onOpenChange={setCreateProgressReportOpen}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Create Progress Report Request</DialogTitle>
+            <DialogDescription>
+              Select exercises from the currently active phase. The client will receive this as an additional task while continuing training.
+            </DialogDescription>
+          </DialogHeader>
+          {!activePhaseForProgress ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              This client has no active phase. Activate a phase first.
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+              <div className="text-sm text-slate-600">
+                Active phase: <span className="font-semibold text-slate-900">{activePhaseForProgress.name}</span>
+              </div>
+              {selectableProgressExercises.length === 0 ? (
+                <div className="text-sm text-slate-500">No exercises found in the active phase.</div>
+              ) : (
+                selectableProgressExercises.map((exercise) => {
+                  const checked = selectedProgressExerciseIds.includes(exercise.id);
+                  return (
+                    <label key={exercise.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4"
+                        checked={checked}
+                        onChange={(event) => toggleProgressExercise(exercise.id, event.target.checked)}
+                      />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900">{exercise.name}</div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          {exercise.sets || "—"} sets · {exercise.reps || "—"} reps · {exercise.tempo || "—"} tempo
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateProgressReportOpen(false);
+                setSelectedProgressExerciseIds([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateProgressReport}
+              disabled={
+                !activePhaseForProgress ||
+                selectedProgressExerciseIds.length === 0 ||
+                createClientProgressReport.isPending
+              }
+              className="bg-slate-900 hover:bg-slate-800 text-white"
+              data-testid="button-create-progress-report"
+            >
+              {createClientProgressReport.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Send Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isApproveOpen} onOpenChange={setIsApproveOpen}>
         <DialogContent className="sm:max-w-[425px]">
@@ -1264,6 +1863,88 @@ export default function AdminClientProfile() {
               data-testid="button-confirm-reject"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Send Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isProgressApproveOpen} onOpenChange={setIsProgressApproveOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Approve Progress Report Item</DialogTitle>
+            <DialogDescription>
+              Optionally leave a short feedback note for the client.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="progress-approve-note">Feedback Note (optional)</Label>
+              <Textarea
+                id="progress-approve-note"
+                placeholder="e.g. Great progress on depth and tempo consistency."
+                value={progressApproveNote}
+                onChange={(e) => setProgressApproveNote(e.target.value)}
+                data-testid="input-progress-approve-note"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsProgressApproveOpen(false)}
+              disabled={submittingProgressReview}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleApproveProgressReportItem}
+              disabled={submittingProgressReview}
+              data-testid="button-confirm-progress-approve"
+            >
+              {submittingProgressReview ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isProgressResubmitOpen} onOpenChange={setIsProgressResubmitOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request Progress Resubmission</DialogTitle>
+            <DialogDescription>
+              Leave clear feedback so the client can resubmit with improvements.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="progress-resubmit-feedback">Resubmission Feedback</Label>
+              <Textarea
+                id="progress-resubmit-feedback"
+                placeholder="e.g. Please share a clearer angle to assess form depth."
+                value={progressResubmitFeedback}
+                onChange={(e) => setProgressResubmitFeedback(e.target.value)}
+                data-testid="input-progress-resubmit-feedback"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsProgressResubmitOpen(false)}
+              disabled={submittingProgressReview}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleResubmitProgressReportItem}
+              disabled={submittingProgressReview || !progressResubmitFeedback.trim()}
+              data-testid="button-confirm-progress-resubmit"
+            >
+              {submittingProgressReview ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
               Send Feedback
             </Button>
           </DialogFooter>

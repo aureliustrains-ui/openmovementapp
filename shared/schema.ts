@@ -119,8 +119,10 @@ export const sessionCheckins = pgTable("session_checkins", {
   sessionId: varchar("session_id", { length: 64 }).notNull(),
   submittedAt: text("submitted_at").notNull(),
   rpeOverall: integer("rpe_overall").notNull(),
+  sleepLastNight: integer("sleep_last_night"),
   feltOff: boolean("felt_off").notNull().default(false),
   feltOffNote: text("felt_off_note"),
+  optionalNote: text("optional_note"),
 });
 
 export const weeklyCheckins = pgTable(
@@ -145,6 +147,45 @@ export const weeklyCheckins = pgTable(
       table.clientId,
       table.phaseId,
       table.phaseWeekNumber,
+    ),
+  }),
+);
+
+export const progressReports = pgTable("progress_reports", {
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  clientId: varchar("client_id", { length: 64 }).notNull(),
+  phaseId: varchar("phase_id", { length: 64 }).notNull(),
+  status: text("status").notNull().default("requested"),
+  createdBy: varchar("created_by", { length: 64 }).notNull(),
+  createdAt: text("created_at").notNull(),
+  submittedAt: text("submitted_at"),
+});
+
+export const progressReportItems = pgTable(
+  "progress_report_items",
+  {
+    id: varchar("id", { length: 64 })
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    progressReportId: varchar("progress_report_id", { length: 64 }).notNull(),
+    exerciseId: text("exercise_id").notNull(),
+    exerciseName: text("exercise_name").notNull(),
+    submissionSource: text("submission_source"),
+    submissionObjectKey: text("submission_object_key"),
+    submissionMimeType: text("submission_mime_type"),
+    submissionOriginalFilename: text("submission_original_filename"),
+    submissionLink: text("submission_link"),
+    submissionNote: text("submission_note"),
+    reviewStatus: text("review_status").notNull().default("requested"),
+    feedbackNote: text("feedback_note"),
+    reviewedAt: text("reviewed_at"),
+  },
+  (table) => ({
+    progressReportItemsReportExerciseUnique: uniqueIndex("progress_report_items_report_exercise_unique").on(
+      table.progressReportId,
+      table.exerciseId,
     ),
   }),
 );
@@ -182,6 +223,8 @@ export const insertPhaseTemplateSchema = createInsertSchema(phaseTemplates).omit
 export const insertWorkoutLogSchema = createInsertSchema(workoutLogs).omit({ id: true });
 export const insertSessionCheckinSchema = createInsertSchema(sessionCheckins).omit({ id: true });
 export const insertWeeklyCheckinSchema = createInsertSchema(weeklyCheckins).omit({ id: true });
+export const insertProgressReportSchema = createInsertSchema(progressReports).omit({ id: true });
+export const insertProgressReportItemSchema = createInsertSchema(progressReportItems).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
 export const insertChatReadStatusSchema = createInsertSchema(chatReadStatus).omit({ id: true });
 
@@ -205,6 +248,10 @@ export type InsertSessionCheckin = z.infer<typeof insertSessionCheckinSchema>;
 export type SessionCheckin = typeof sessionCheckins.$inferSelect;
 export type InsertWeeklyCheckin = z.infer<typeof insertWeeklyCheckinSchema>;
 export type WeeklyCheckin = typeof weeklyCheckins.$inferSelect;
+export type InsertProgressReport = z.infer<typeof insertProgressReportSchema>;
+export type ProgressReport = typeof progressReports.$inferSelect;
+export type InsertProgressReportItem = z.infer<typeof insertProgressReportItemSchema>;
+export type ProgressReportItem = typeof progressReportItems.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertChatReadStatus = z.infer<typeof insertChatReadStatusSchema>;

@@ -6,10 +6,10 @@ const configuredApiBaseUrl =
     : "";
 
 function getDefaultDevApiOrigin(): string {
-  if (typeof window === "undefined") return "http://localhost:5099";
+  if (typeof window === "undefined") return "http://localhost:5000";
   const protocol = window.location.protocol || "http:";
   const hostname = window.location.hostname || "localhost";
-  return `${protocol}//${hostname}:5099`;
+  return `${protocol}//${hostname}:5000`;
 }
 
 const devApiFallbackOrigin =
@@ -151,8 +151,20 @@ async function fetchApi(url: string, options?: RequestInit) {
     return await requestJson(resolvedUrl, method, options);
   } catch (error) {
     if (isNetworkError(error)) {
+      const fallbackUrl = resolveDevFallbackUrl(url);
+      if (fallbackUrl) {
+        try {
+          const originalOrigin = new URL(resolvedUrl, window.location.origin).origin;
+          const fallbackOrigin = new URL(fallbackUrl, window.location.origin).origin;
+          if (originalOrigin !== fallbackOrigin) {
+            return await requestJson(fallbackUrl, method, options);
+          }
+        } catch {
+          // ignore fallback parse/attempt errors and keep original network error below
+        }
+      }
       throw new Error(
-        `${formatHttpPrefix(method, url)} failed to reach API from ${getBrowserOriginForMessage()}. If you are on a Vite page, ensure backend is running and /api is proxied.`,
+        `${formatHttpPrefix(method, url)} failed to reach API from ${getBrowserOriginForMessage()}. If you are on a Vite page, ensure backend is running and /api is proxied${fallbackUrl ? ` (fallback ${fallbackUrl})` : ""}.`,
       );
     }
     if (!shouldRetryWithDevFallback(url, resolvedUrl, error)) {
@@ -212,10 +224,12 @@ export const usersQuery = queryOptions({
   queryFn: () => fetchApi("/api/users"),
 });
 
-export const myProfileQuery = queryOptions({
-  queryKey: ["myProfile"],
-  queryFn: () => fetchApi("/api/me"),
-});
+export function myProfileQuery(userId: string) {
+  return queryOptions({
+    queryKey: ["myProfile", userId],
+    queryFn: () => fetchApi("/api/me"),
+  });
+}
 
 export const phasesQuery = queryOptions({
   queryKey: ["phases"],
@@ -318,6 +332,44 @@ export const weeklyCheckinsCurrentOrDueQuery = queryOptions({
   queryFn: () => fetchApi("/api/weekly-checkins/me/current-or-due"),
 });
 
+export const myOpenProgressReportsQuery = queryOptions({
+  queryKey: ["progressReports", "me", "open"],
+  queryFn: () => fetchApi("/api/progress-reports/me/open"),
+});
+
+export const myActivePhaseProgressReportsQuery = queryOptions({
+  queryKey: ["progressReports", "me", "activePhase"],
+  queryFn: () => fetchApi("/api/progress-reports/me/active-phase"),
+});
+
+export function progressReportQuery(reportId: string) {
+  return queryOptions({
+    queryKey: ["progressReport", reportId],
+    queryFn: () => fetchApi(`/api/progress-reports/${reportId}`),
+  });
+}
+
+export function clientProgressReportsQuery(clientId: string) {
+  return queryOptions({
+    queryKey: ["clientProgressReports", clientId],
+    queryFn: () => fetchApi(`/api/clients/${clientId}/progress-reports`),
+  });
+}
+
+export function clientMovementChecksGroupedQuery(clientId: string) {
+  return queryOptions({
+    queryKey: ["clientMovementChecksGrouped", clientId],
+    queryFn: () => fetchApi(`/api/clients/${clientId}/movement-checks/grouped`),
+  });
+}
+
+export function clientProgressReportsGroupedQuery(clientId: string) {
+  return queryOptions({
+    queryKey: ["clientProgressReportsGrouped", clientId],
+    queryFn: () => fetchApi(`/api/clients/${clientId}/progress-reports/grouped`),
+  });
+}
+
 export function clientCheckinsSummaryQuery(clientId: string) {
   return queryOptions({
     queryKey: ["clientCheckinsSummary", clientId],
@@ -359,7 +411,11 @@ export function useUpdatePhase() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: any) => fetchApi(`/api/phases/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["phases"] }); qc.invalidateQueries({ queryKey: ["phase"] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["phases"] });
+      qc.invalidateQueries({ queryKey: ["phase"] });
+      qc.invalidateQueries({ queryKey: ["clientMovementChecksGrouped"] });
+    },
   });
 }
 
@@ -416,9 +472,11 @@ export function useCreateSessionCheckin() {
   return useMutation({
     mutationFn: (data: {
       sessionId: string;
-      rpeOverall: number;
+      sessionRpe: number;
+      sleepLastNight: number;
       feltOff?: boolean;
-      feltOffNote?: string | null;
+      whatFeltOff?: string | null;
+      optionalNote?: string | null;
     }) => fetchApi("/api/session-checkins", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sessionCheckins"] });
@@ -433,17 +491,141 @@ export function useCreateWeeklyCheckin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: {
-      sleepWeek: number;
-      energyWeek: number;
+      recoveryThisTrainingWeek: number;
+      stressOutsideTrainingThisWeek: number;
       injuryAffectedTraining: boolean;
       injuryImpact?: number | null;
-      coachNoteFromClient?: string | null;
+      optionalNote?: string | null;
+      phaseId?: string;
+      phaseWeekNumber?: number;
     }) => fetchApi("/api/weekly-checkins", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["weeklyCheckins"] });
+      qc.invalidateQueries({ queryKey: ["weeklyCheckins", "currentOrDue"] });
       qc.invalidateQueries({ queryKey: ["clientCheckinsSummary"] });
       qc.invalidateQueries({ queryKey: ["clientCheckinsTrends"] });
       qc.invalidateQueries({ queryKey: ["clientCheckinsRecent"] });
+    },
+  });
+}
+
+export function useCreateClientProgressReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      phaseId,
+      exerciseIds,
+    }: {
+      clientId: string;
+      phaseId?: string;
+      exerciseIds: string[];
+    }) =>
+      fetchApi(`/api/clients/${clientId}/progress-reports`, {
+        method: "POST",
+        body: JSON.stringify({ phaseId, exerciseIds }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["clientProgressReports", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["progressReports"] });
+      qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
+    },
+  });
+}
+
+export function useCreateClientVideoUploadTarget() {
+  return useMutation({
+    mutationFn: (data: {
+      purpose: "movement_check" | "progress_report";
+      fileName: string;
+      fileSize: number;
+      contentType: string;
+    }) =>
+      fetchApi("/api/client-videos/upload-url", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }) as Promise<{
+        objectKey: string;
+        uploadUrl: string;
+        expiresInSeconds: number;
+      }>,
+  });
+}
+
+export async function uploadClientVideoToObjectStorage(input: {
+  uploadUrl: string;
+  file: File;
+}) {
+  const response = await fetch(input.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "content-type": input.file.type || "application/octet-stream",
+    },
+    body: input.file,
+  });
+  if (!response.ok) {
+    const preview = (await response.text()).replace(/\s+/g, " ").trim().slice(0, 180);
+    throw new Error(`Video upload failed (${response.status})${preview ? `: ${preview}` : ""}`);
+  }
+}
+
+export function useSubmitProgressReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reportId,
+      items,
+    }: {
+      reportId: string;
+      items: Array<{
+        itemId: string;
+        submissionLink?: string | null;
+        submissionSource?: "link" | "upload";
+        submissionObjectKey?: string | null;
+        submissionMimeType?: string | null;
+        submissionOriginalFilename?: string | null;
+        submissionNote?: string | null;
+      }>;
+    }) =>
+      fetchApi(`/api/progress-reports/${reportId}/submit`, {
+        method: "PATCH",
+        body: JSON.stringify({ items }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["progressReport", vars.reportId] });
+      qc.invalidateQueries({ queryKey: ["progressReports", "me", "open"] });
+      qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
+      qc.invalidateQueries({ queryKey: ["clientProgressReports"] });
+      qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped"] });
+    },
+  });
+}
+
+export function useReviewProgressReportItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      reportId,
+      itemId,
+      decision,
+      feedbackNote,
+    }: {
+      reportId: string;
+      itemId: string;
+      decision: "approve" | "resubmit";
+      feedbackNote?: string | null;
+    }) =>
+      fetchApi(`/api/progress-reports/${reportId}/items/${itemId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ decision, feedbackNote: feedbackNote ?? null }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["progressReport", vars.reportId] });
+      qc.invalidateQueries({ queryKey: ["progressReports", "me", "open"] });
+      qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
+      qc.invalidateQueries({ queryKey: ["clientProgressReports"] });
+      qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped"] });
     },
   });
 }
@@ -547,9 +729,39 @@ export function useDeletePhaseTemplate() {
 export function useMarkChatRead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { userId: string; clientId: string }) =>
-      fetchApi("/api/chat/read", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["chatUnread"] }); },
+    mutationFn: (data: { clientId: string; userId?: string }) =>
+      fetchApi("/api/chat/read", { method: "POST", body: JSON.stringify({ clientId: data.clientId }) }),
+    onMutate: async (vars) => {
+      if (!vars.userId) return;
+      await qc.cancelQueries({ queryKey: ["chatUnread", vars.userId] });
+      const previous = qc.getQueryData<{ total: number; conversations: Array<{ clientId: string; unread: number }> }>([
+        "chatUnread",
+        vars.userId,
+      ]);
+      if (!previous) return { previous, userId: vars.userId };
+
+      const unreadForConversation = previous.conversations.find((entry) => entry.clientId === vars.clientId)?.unread || 0;
+      const nextConversations = previous.conversations
+        .map((entry) => (entry.clientId === vars.clientId ? { ...entry, unread: 0 } : entry))
+        .filter((entry) => entry.unread > 0);
+      qc.setQueryData(["chatUnread", vars.userId], {
+        total: Math.max(0, previous.total - unreadForConversation),
+        conversations: nextConversations,
+      });
+      return { previous, userId: vars.userId };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.userId && context.previous) {
+        qc.setQueryData(["chatUnread", context.userId], context.previous);
+      }
+    },
+    onSuccess: (_data, vars) => {
+      if (vars.userId) {
+        qc.invalidateQueries({ queryKey: ["chatUnread", vars.userId] });
+      } else {
+        qc.invalidateQueries({ queryKey: ["chatUnread"] });
+      }
+    },
   });
 }
 
@@ -578,6 +790,38 @@ export function useCreateUser() {
   });
 }
 
+export function useUpdateUserStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: "Active" | "Inactive";
+    }) =>
+      fetchApi(`/api/users/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["phases"] });
+    },
+  });
+}
+
+export function useRemoveClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/users/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["phases"] });
+    },
+  });
+}
+
 export function useUpdateMyProfile() {
   const qc = useQueryClient();
   return useMutation({
@@ -593,6 +837,8 @@ export function useUpdateMyProfile() {
     }) => fetchApi("/api/me", { method: "PATCH", body: JSON.stringify(data) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["myProfile"] });
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["auth"] });
     },
   });
@@ -611,6 +857,8 @@ export function useUploadMyAvatar() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["myProfile"] });
+      qc.invalidateQueries({ queryKey: ["messages"] });
+      qc.invalidateQueries({ queryKey: ["chatUnread"] });
       qc.invalidateQueries({ queryKey: ["users"] });
     },
   });

@@ -132,11 +132,11 @@ test("admin can read client check-ins and clients cannot access analytics endpoi
 test("normalizeWeeklyCheckinInput enforces impact reset when no injury impact", () => {
   const normalized = normalizeWeeklyCheckinInput(
     {
-      sleepWeek: 4,
-      energyWeek: 3,
+      recoveryThisTrainingWeek: 4,
+      stressOutsideTrainingThisWeek: 3,
       injuryAffectedTraining: false,
       injuryImpact: 3,
-      coachNoteFromClient: " All good ",
+      optionalNote: " All good ",
     },
     "client_1",
     "phase_1",
@@ -145,6 +145,8 @@ test("normalizeWeeklyCheckinInput enforces impact reset when no injury impact", 
   );
   assert.equal(normalized.injuryImpact, null);
   assert.equal(normalized.coachNoteFromClient, "All good");
+  assert.equal(normalized.sleepWeek, 4);
+  assert.equal(normalized.energyWeek, 3);
   assert.equal(normalized.phaseId, "phase_1");
   assert.equal(normalized.phaseWeekNumber, 2);
 });

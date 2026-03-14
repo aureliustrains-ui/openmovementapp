@@ -5,28 +5,22 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" +
-" hover-elevate active-elevate-2",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-           // Base button style with visible primary border.
-           "bg-primary text-primary-foreground border border-primary-border",
+          "border-black bg-black text-white hover:bg-[#222222]",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm border-destructive-border",
+          "border-[#7a2323] bg-[#9a2e2e] text-white hover:bg-[#8a2a2a]",
         outline:
-          // Inherits surrounding background and text color.
-          " border [border-color:var(--button-outline)] shadow-xs active:shadow-none ",
+          "border-border bg-white text-foreground hover:bg-slate-50",
         secondary:
-          // Secondary tone with matching border.
-          "border bg-secondary text-secondary-foreground border border-secondary-border ",
-        // Minimal button with transparent border.
-        ghost: "border border-transparent",
-        link: "text-primary underline-offset-4 hover:underline",
+          "border-border bg-slate-100 text-foreground hover:bg-slate-200",
+        ghost: "border-transparent bg-transparent text-foreground hover:bg-slate-100",
+        link: "border-transparent bg-transparent p-0 text-[#2B4A42] underline-offset-4 hover:underline",
       },
       size: {
-        // Size variants tuned for this app layout.
         default: "min-h-9 px-4 py-2",
         sm: "min-h-8 rounded-md px-3 text-xs",
         lg: "min-h-10 rounded-md px-8",

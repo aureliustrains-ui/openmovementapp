@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
-import { Dumbbell, Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,14 +49,17 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <Card className="w-full max-w-md border-slate-200 shadow-sm">
+    <div className="min-h-screen flex items-center justify-center bg-white p-4">
+      <Card className="w-full max-w-md border-slate-200">
         <CardContent className="p-8 space-y-6">
           <div className="text-center space-y-2">
-            <div className="mx-auto h-14 w-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-              <Dumbbell className="h-7 w-7" />
-            </div>
-            <h1 className="text-2xl font-display font-bold text-slate-900">Welcome to CoachingApp</h1>
+            <img
+              src="/favicon.svg"
+              alt="Open Movement"
+              className="mx-auto h-16 w-16"
+              loading="eager"
+            />
+            <p className="text-xl font-bold text-slate-900">Open Movement</p>
             <p className="text-sm text-slate-500">Sign in with your account.</p>
           </div>
 
@@ -90,13 +93,6 @@ export default function Login() {
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </Button>
           </form>
-
-          <p className="text-xs text-slate-500 text-center">
-            Need an account?{" "}
-            <Link href="/signup" className="text-indigo-600 hover:text-indigo-500 font-medium">
-              Create one
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>

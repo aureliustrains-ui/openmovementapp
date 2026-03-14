@@ -25,6 +25,10 @@ export async function loginWithEmailPassword(
     throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
   }
 
+  if (user.status !== "Active") {
+    throw new AppError("Account is inactive", 403, "ACCOUNT_INACTIVE");
+  }
+
   return user;
 }
 
@@ -39,6 +43,9 @@ export async function requireAuthenticatedUser(
   const user = await deps.users.getUser(userId);
   if (!user) {
     throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+  }
+  if (user.status !== "Active") {
+    throw new AppError("Account is inactive", 403, "ACCOUNT_INACTIVE");
   }
 
   return user;

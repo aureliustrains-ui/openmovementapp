@@ -2,9 +2,9 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Box } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export default function SignUp() {
   const [, setLocation] = useLocation();
@@ -47,16 +47,21 @@ export default function SignUp() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-slate-100">
+    <div className="min-h-screen flex items-center justify-center bg-white py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-md border border-slate-200">
         <div className="text-center">
-          <Box className="mx-auto h-12 w-12 text-indigo-600" />
+          <BrandLogo
+            className="mx-auto items-center"
+            stacked
+            showDivider
+            textClassName="text-xl"
+          />
           <h2 className="mt-6 text-3xl font-display font-bold text-gray-900">
-            Create your account
+            Create your Open Movement account
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Or{' '}
-            <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <Link href="/login" className="font-medium text-[#2B4A42] hover:text-[#243f39]">
               sign in to your existing account
             </Link>
           </p>

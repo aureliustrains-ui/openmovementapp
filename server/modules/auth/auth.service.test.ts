@@ -62,6 +62,28 @@ test("loginWithEmailPassword throws AppError for invalid credentials", async () 
   );
 });
 
+test("loginWithEmailPassword rejects inactive accounts", async () => {
+  await assert.rejects(
+    () =>
+      loginWithEmailPassword(
+        { email: "inactive@example.com", password: "secret123" },
+        {
+          users: {
+            getUserByEmail: async () => buildUser({ status: "Inactive" }),
+            getUser: async () => undefined,
+          },
+          verifyPassword: async () => true,
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, "ACCOUNT_INACTIVE");
+      return true;
+    },
+  );
+});
+
 test("requireAuthenticatedUser throws for missing session user id", async () => {
   await assert.rejects(
     () =>
@@ -75,6 +97,24 @@ test("requireAuthenticatedUser throws for missing session user id", async () => 
       assert.ok(error instanceof AppError);
       assert.equal(error.status, 401);
       assert.equal(error.code, "UNAUTHORIZED");
+      return true;
+    },
+  );
+});
+
+test("requireAuthenticatedUser rejects inactive accounts", async () => {
+  await assert.rejects(
+    () =>
+      requireAuthenticatedUser("user_1", {
+        users: {
+          getUserByEmail: async () => undefined,
+          getUser: async () => buildUser({ status: "Inactive" }),
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, "ACCOUNT_INACTIVE");
       return true;
     },
   );

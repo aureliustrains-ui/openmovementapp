@@ -3,10 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { messagesQuery, useSendMessage, useMarkChatRead } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Send, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
+
+type ChatProfilePreview = {
+  name: string;
+  avatar: string | null;
+  bio: string | null;
+  height: string | null;
+  weight: string | null;
+};
 
 function formatTime(t: string) {
   if (t.includes("T") || t.includes("Z")) {
@@ -17,44 +27,76 @@ function formatTime(t: string) {
 
 export default function ClientChat() {
   const [message, setMessage] = useState("");
+  const [profilePreview, setProfilePreview] = useState<ChatProfilePreview | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  const { user } = useAuth();
+  const { sessionUser, viewedUser } = useAuth();
+  const chatClientId = sessionUser?.role === "Client" ? sessionUser.id : viewedUser?.id;
+
   const { data: chatMessages = [], isLoading } = useQuery({
-    ...messagesQuery(user?.id || ""),
-    enabled: !!user,
+    ...messagesQuery(chatClientId || ""),
+    enabled: !!chatClientId,
     refetchInterval: 5000,
   });
   const sendMessage = useSendMessage();
   const markRead = useMarkChatRead();
 
   useEffect(() => {
-    if (user && chatMessages.length > 0) {
-      markRead.mutate({ userId: user.id, clientId: user.id });
+    if (sessionUser && chatClientId) {
+      markRead.mutate({ userId: sessionUser.id, clientId: chatClientId });
     }
-  }, [user?.id, chatMessages.length]);
+  }, [sessionUser?.id, chatClientId]);
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim() || !user) return;
-    
+  const submitMessage = () => {
+    if (!message.trim() || !chatClientId) return;
     sendMessage.mutate({
-      clientId: user.id,
+      clientId: chatClientId,
       text: message,
     });
     setMessage("");
+  };
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMessage();
+  };
+
+  const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    if (e.shiftKey) return;
+    if (e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    submitMessage();
   };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  if (!user) return null;
+  if (!sessionUser || !chatClientId) return null;
+
+  const openProfilePreview = (msg: any) => {
+    const senderDisplayName = getChatDisplayFirstName(msg);
+    setProfilePreview({
+      name: senderDisplayName,
+      avatar: msg?.senderProfile?.avatar ?? msg?.senderAvatar ?? null,
+      bio: msg?.senderProfile?.bio ?? null,
+      height: msg?.senderProfile?.height ?? null,
+      weight: msg?.senderProfile?.weight ?? null,
+    });
+  };
+
+  const previewInitials = (profilePreview?.name || "U")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
 
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col animate-in fade-in">
       <div className="mb-6">
-        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-chat-title">Chat with Coach</h1>
+        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-chat-title">Chat</h1>
         <p className="text-slate-500 mt-1">Ask questions, share updates, or discuss your form.</p>
       </div>
 
@@ -65,20 +107,30 @@ export default function ClientChat() {
               <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
             </div>
           ) : (
-            chatMessages.map((msg: any) => (
-              <div key={msg.id} className={`flex gap-4 ${msg.isClient ? 'flex-row-reverse' : ''}`}>
-                <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
-                  <AvatarImage src={msg.senderAvatar || undefined} alt={msg.senderName || msg.sender || undefined} />
-                  <AvatarFallback className={msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
-                    {msg.sender.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
+            chatMessages.map((msg: any) => {
+              const senderDisplayName = getChatDisplayFirstName(msg);
+              const senderInitial = senderDisplayName.charAt(0) || "U";
+              return (
+                <div key={msg.id} className={`flex gap-4 ${msg.isClient ? 'flex-row-reverse' : ''}`}>
+                <button
+                  type="button"
+                  onClick={() => openProfilePreview(msg)}
+                  className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                  data-testid={`button-open-chat-profile-${msg.id}`}
+                >
+                  <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                    <AvatarImage src={msg.senderAvatar || undefined} alt={senderDisplayName || undefined} />
+                    <AvatarFallback className={msg.isClient ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-700'}>
+                      {senderInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
                 <div className={`flex flex-col ${msg.isClient ? 'items-end' : 'items-start'}`}>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="font-semibold text-slate-900 text-sm">{msg.sender}</span>
+                    <span className="font-semibold text-slate-900 text-sm">{senderDisplayName}</span>
                     <span className="text-xs text-slate-500">{formatTime(msg.time)}</span>
                   </div>
-                  <div className={`text-sm leading-relaxed p-4 rounded-2xl max-w-md ${
+                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words p-4 rounded-2xl max-w-md ${
                     msg.isClient 
                       ? 'bg-indigo-600 text-white rounded-tr-sm' 
                       : 'bg-slate-50 border border-slate-100 text-slate-700 rounded-tl-sm'
@@ -86,25 +138,27 @@ export default function ClientChat() {
                     {msg.text}
                   </div>
                 </div>
-              </div>
-            ))
+                </div>
+              );
+            })
           )}
           <div ref={messagesEndRef} />
         </div>
 
         <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <form className="relative flex items-center" onSubmit={handleSend}>
-            <Input 
+          <form className="relative" onSubmit={handleSend}>
+            <Textarea
               placeholder="Message your coach..." 
-              className="w-full pr-12 py-6 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"
+              className="w-full min-h-[56px] max-h-44 resize-none pr-12 rounded-xl bg-white border-slate-200 focus-visible:ring-indigo-500 shadow-sm"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleComposerKeyDown}
               data-testid="input-chat-message"
             />
             <Button 
               type="submit" 
               size="icon" 
-              className="absolute right-2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg bg-indigo-600 hover:bg-indigo-700 shadow-sm"
               data-testid="button-send-message"
             >
               <Send className="h-4 w-4 text-white" />
@@ -112,6 +166,47 @@ export default function ClientChat() {
           </form>
         </div>
       </Card>
+
+      <Dialog open={!!profilePreview} onOpenChange={(open) => !open && setProfilePreview(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Profile</DialogTitle>
+          </DialogHeader>
+          {profilePreview && (
+            <div className="space-y-4">
+              <div className="flex flex-col items-center gap-3">
+                <Avatar className="h-24 w-24 border border-slate-200">
+                  <AvatarImage src={profilePreview.avatar || undefined} alt={profilePreview.name} />
+                  <AvatarFallback className="bg-indigo-50 text-indigo-700 text-lg font-semibold">
+                    {previewInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-900">{profilePreview.name}</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Bio</p>
+                <p className="mt-1 text-sm leading-relaxed text-slate-700">
+                  {profilePreview.bio?.trim() ? profilePreview.bio : "No bio added yet."}
+                </p>
+              </div>
+              {(profilePreview.height || profilePreview.weight) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-slate-200 bg-white p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Height</p>
+                    <p className="text-sm text-slate-800">{profilePreview.height || "—"}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Weight</p>
+                    <p className="text-sm text-slate-800">{profilePreview.weight || "—"}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
