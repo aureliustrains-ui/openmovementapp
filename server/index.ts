@@ -16,6 +16,12 @@ import { installGracefulShutdown } from "./lifecycle";
 const app = express();
 const httpServer = createServer(app);
 const config = getConfig();
+const isProductionBuild = process.env.NODE_ENV === "production";
+
+async function loadDevViteModule() {
+  const viteModulePath = "./vite";
+  return import(viteModulePath);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -132,10 +138,10 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (config.NODE_ENV === "production") {
+  if (isProductionBuild) {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await loadDevViteModule();
     await setupVite(httpServer, app);
   }
 

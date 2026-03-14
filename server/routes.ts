@@ -4,7 +4,6 @@ import { storage } from "./storage";
 import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import multer from "multer";
 import { hashPassword, verifyPassword } from "./auth";
 import type { Phase, User, WeeklyCheckin, Session, ProgressReport, ProgressReportItem } from "@shared/schema";
@@ -82,8 +81,7 @@ const updateClientSpecificsSchema = z.object({
 
 const maxAvatarSizeBytes = 5 * 1024 * 1024;
 const allowedAvatarMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const routesDirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadRoot = path.resolve(routesDirname, "..", "uploads");
+const uploadRoot = path.resolve(process.cwd(), "uploads");
 const avatarUploadDir = path.join(uploadRoot, "avatars");
 const invalidAvatarFileTypeError = "INVALID_AVATAR_FILE_TYPE";
 
