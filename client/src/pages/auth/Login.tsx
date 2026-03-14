@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
-  const [email, setEmail] = useState("coach@example.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
