@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -147,18 +147,124 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private isMissingColumnError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+    if (code === "42703") return true;
+    const message = "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
+    return /column .* does not exist/i.test(message);
+  }
+
+  private toCompatUser(row: {
+    id: string;
+    name: string;
+    email: string;
+    password_hash: string | null;
+    role: string | null;
+    status: string | null;
+  }): User {
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      passwordHash: row.password_hash,
+      role: row.role || "Client",
+      status: row.status || "Active",
+      avatar: null,
+      bio: null,
+      height: null,
+      weight: null,
+      goals: null,
+      infos: null,
+      specifics: null,
+      specificsUpdatedAt: null,
+      specificsUpdatedBy: null,
+    };
+  }
+
+  private async getUserCompatById(id: string): Promise<User | undefined> {
+    const result = await db.execute(sql`
+      select id, name, email, password_hash, role, status
+      from users
+      where id = ${id}
+      limit 1
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          name: string;
+          email: string;
+          password_hash: string | null;
+          role: string | null;
+          status: string | null;
+        }
+      | undefined;
+    return row ? this.toCompatUser(row) : undefined;
+  }
+
+  private async getUserCompatByEmail(email: string): Promise<User | undefined> {
+    const result = await db.execute(sql`
+      select id, name, email, password_hash, role, status
+      from users
+      where email = ${email}
+      limit 1
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          name: string;
+          email: string;
+          password_hash: string | null;
+          role: string | null;
+          status: string | null;
+        }
+      | undefined;
+    return row ? this.toCompatUser(row) : undefined;
+  }
+
+  private async getUsersCompat(): Promise<User[]> {
+    const result = await db.execute(sql`
+      select id, name, email, password_hash, role, status
+      from users
+    `);
+    const rows = result.rows as Array<{
+      id: string;
+      name: string;
+      email: string;
+      password_hash: string | null;
+      role: string | null;
+      status: string | null;
+    }>;
+    return rows.map((row) => this.toCompatUser(row));
+  }
+
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getUserCompatById(id);
+    }
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getUserCompatByEmail(email);
+    }
   }
 
   async getUsers(): Promise<User[]> {
-    return db.select().from(users);
+    try {
+      return db.select().from(users);
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getUsersCompat();
+    }
   }
 
   async createUser(user: InsertUser): Promise<User> {
