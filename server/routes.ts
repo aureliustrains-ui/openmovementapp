@@ -445,7 +445,10 @@ async function maybeBootstrapAdminUser(): Promise<void> {
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || "";
   const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || "Admin";
 
-  if (!email || !password) return;
+  if (!email || !password) {
+    logInfo("bootstrap", "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD missing");
+    return;
+  }
 
   if (password.length < 8) {
     logError("bootstrap", "Skipping admin bootstrap due to invalid password length");
@@ -484,7 +487,12 @@ async function maybeBootstrapAdminUser(): Promise<void> {
     logInfo("bootstrap", `Created admin user: ${email}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const pgCode =
+      typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : null;
     logError("bootstrap", "Failed to bootstrap admin user", { message });
+    if (pgCode === "42P01") {
+      logError("bootstrap", "users table missing. Run migrations (npm run db:push) on DATABASE_URL.");
+    }
   }
 }
 
