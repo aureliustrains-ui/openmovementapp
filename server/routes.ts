@@ -39,6 +39,7 @@ import {
   isClientOwnedObjectKey,
   resolveClientVideoPlaybackUrl,
 } from "./media/client-video-storage";
+import { logError, logInfo } from "./http/logger";
 
 const registerSchema = z.object({
   name: z.string().min(2).max(120),
@@ -439,10 +440,60 @@ async function persistSession(session: Request["session"]): Promise<void> {
   });
 }
 
+async function maybeBootstrapAdminUser(): Promise<void> {
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || "";
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || "";
+  const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || "Admin";
+
+  if (!email || !password) return;
+
+  if (password.length < 8) {
+    logError("bootstrap", "Skipping admin bootstrap due to invalid password length");
+    return;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password);
+    const existing = await storage.getUserByEmail(email);
+
+    if (existing) {
+      await storage.updateUser(existing.id, {
+        name,
+        role: "Admin",
+        status: "Active",
+        passwordHash,
+      });
+      logInfo("bootstrap", `Updated existing admin user: ${email}`);
+      return;
+    }
+
+    await createUserAccount(
+      {
+        name,
+        email,
+        password,
+        role: "Admin",
+        status: "Active",
+        avatar: null,
+      },
+      {
+        users: storage,
+        hashPassword,
+      },
+    );
+    logInfo("bootstrap", `Created admin user: ${email}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError("bootstrap", "Failed to bootstrap admin user", { message });
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  await maybeBootstrapAdminUser();
+
   app.use(
     "/uploads",
     (_req, res, next) => {
