@@ -4,7 +4,6 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { Pool } from "pg";
 import { getConfig } from "./config";
 import { errorHandler } from "./http/error-handler";
 import { logError, logInfo } from "./http/logger";
@@ -12,6 +11,7 @@ import { enforceSameOriginForApi } from "./http/csrf";
 import { createRateLimitMiddleware } from "./http/rate-limit";
 import { createHealthHandlers } from "./http/health";
 import { installGracefulShutdown } from "./lifecycle";
+import { dbPool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -81,7 +81,6 @@ if (config.NODE_ENV === "development") {
 app.use(enforceSameOriginForApi);
 
 const PgSession = connectPgSimple(session);
-const dbPool = new Pool({ connectionString: config.DATABASE_URL });
 const startedAt = Date.now();
 const healthHandlers = createHealthHandlers({
   startedAt,
