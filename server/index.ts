@@ -7,7 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import { Pool } from "pg";
 import { getConfig } from "./config";
 import { errorHandler } from "./http/error-handler";
-import { logInfo } from "./http/logger";
+import { logError, logInfo } from "./http/logger";
 import { enforceSameOriginForApi } from "./http/csrf";
 import { createRateLimitMiddleware } from "./http/rate-limit";
 import { createHealthHandlers } from "./http/health";
@@ -21,6 +21,17 @@ const isProductionBuild = process.env.NODE_ENV === "production";
 async function loadDevViteModule() {
   const viteModulePath = "./vite";
   return import(viteModulePath);
+}
+
+function formatStartupError(error: unknown) {
+  if (error instanceof Error) {
+    const details = error as Error & { code?: unknown };
+    return {
+      message: error.message,
+      code: typeof details.code === "string" ? details.code : undefined,
+    };
+  }
+  return { message: String(error) };
 }
 
 declare module "http" {
@@ -126,6 +137,11 @@ app.use((req, res, next) => {
   next();
 });
 
+httpServer.on("error", (error) => {
+  logError("startup", "HTTP server failed to listen", formatStartupError(error));
+  process.exit(1);
+});
+
 (async () => {
   await registerRoutes(httpServer, app);
 
@@ -165,4 +181,7 @@ app.use((req, res, next) => {
     closeDb: async () => dbPool.end(),
     timeoutMs: config.SHUTDOWN_TIMEOUT_MS,
   });
-})();
+})().catch((error) => {
+  logError("startup", "Failed to start server", formatStartupError(error));
+  process.exit(1);
+});
