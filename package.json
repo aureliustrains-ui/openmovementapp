@@ -14,7 +14,8 @@
     "format": "prettier --write \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
     "format:check": "prettier --check \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
     "test": "node --import tsx --test \"server/**/*.test.ts\"",
-    "db:push": "npx drizzle-kit@0.31.9 push"
+    "db:push": "npx drizzle-kit@0.31.9 push",
+    "admin:bootstrap": "node --import tsx script/bootstrap-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1006.0",
