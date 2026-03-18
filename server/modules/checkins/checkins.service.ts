@@ -39,7 +39,7 @@ export async function assertSessionOwnedByClient(
 
 export function assertCanReadClientCheckins(authUser: User, clientId: string): void {
   if (authUser.role === "Admin" || authUser.role === "Coach") return;
-  void clientId;
+  if (authUser.role === "Client" && authUser.id === clientId) return;
   throw new AppError("Forbidden", 403, "FORBIDDEN");
 }
 

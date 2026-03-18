@@ -1,4 +1,7 @@
+import loadLocalEnv from "../script/load-local-env.cjs";
 import { z } from "zod";
+
+loadLocalEnv();
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),

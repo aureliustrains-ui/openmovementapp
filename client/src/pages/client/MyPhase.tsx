@@ -26,6 +26,9 @@ import {
   getTrainingWeekLifecycle,
   type TrainingScheduleEntry,
 } from "@/lib/trainingWeek";
+import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
+import { getWeekSchedulePreview, isScheduleEntryCompleted } from "@/lib/clientSchedule";
+import { getSessionAccentColor } from "@/lib/sessionAccent";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { buildActionRequiredItems, pickLatestProgressReportForPhase } from "@/lib/actionRequired";
@@ -39,30 +42,6 @@ const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
   "video/3gpp",
 ]);
 const MAX_CLIENT_VIDEO_BYTES = 250 * 1024 * 1024;
-
-function parsePhaseStartDateForSort(value: unknown): number {
-  if (typeof value !== "string" || value.trim().length === 0) return Number.NEGATIVE_INFINITY;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
-}
-
-function pickDefaultVisiblePhase(phases: any[]): any | null {
-  if (phases.length === 0) return null;
-
-  const activePhases = phases.filter((phase: any) => phase.status === "Active");
-  if (activePhases.length > 0) {
-    const orderedActivePhases = [...activePhases].sort((a: any, b: any) => {
-      const startDateDelta =
-        parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate);
-      if (startDateDelta !== 0) return startDateDelta;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    return orderedActivePhases[0];
-  }
-
-  const pendingPhase = phases.find((phase: any) => phase.status === "Waiting for Movement Check");
-  return pendingPhase || phases[0];
-}
 
 function getProgressReportStatusMeta(status: string): {
   label: string;
@@ -414,7 +393,7 @@ export default function ClientMyPhase() {
   if (loadingPhases) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand-600)]" />
       </div>
     );
   }
@@ -502,39 +481,25 @@ export default function ClientMyPhase() {
   const hasActionRequiredSection = actionRequiredItems.length > 0;
 
   const isEntryCompleted = (entry: any, session: any) => {
-    const key = `w${selectedWeek}_${entry.day}_${entry.slot || "AM"}_${session.id}`;
-    return completedInstances.includes(key);
+    return isScheduleEntryCompleted(
+      completedInstances,
+      selectedWeek,
+      entry.day,
+      entry.slot || "AM",
+      session.id,
+    );
   };
 
   const buildSessionUrl = (sessionId: string, day: string, slotVal: string) => {
     return `/app/client/session/${sessionId}?week=${selectedWeek}&day=${encodeURIComponent(day)}&slot=${encodeURIComponent(slotVal)}`;
   };
 
-  const sortedWeekEntries = weekSchedule
-    .map((entry: any) => {
-      const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
-      return {
-        entry,
-        session,
-        dayIndex: WEEKDAYS.indexOf(entry.day),
-        slotOrder: (entry.slot || "AM") === "AM" ? 0 : 1,
-      };
-    })
-    .filter((item: any) => item.session && item.dayIndex >= 0)
-    .sort((a: any, b: any) => a.dayIndex - b.dayIndex || a.slotOrder - b.slotOrder);
-
-  const nextScheduleItem = (() => {
-    const nextIncomplete = sortedWeekEntries.find((item: any) => !isEntryCompleted(item.entry, item.session));
-    if (nextIncomplete) return nextIncomplete;
-    if (sortedWeekEntries[0]) return sortedWeekEntries[0];
-    if (phaseSessions[0]) {
-      return {
-        entry: { day: WEEKDAYS[0], slot: "AM" },
-        session: phaseSessions[0],
-      };
-    }
-    return null;
-  })();
+  const { nextScheduleItem } = getWeekSchedulePreview(
+    selectedWeek,
+    schedule,
+    phaseSessions as Array<{ id: string; name: string }>,
+    completedInstances,
+  );
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
@@ -629,7 +594,7 @@ export default function ClientMyPhase() {
                       </div>
                     ) : (
                       <Button 
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-12 px-6"
+                        className="btn-primary-action w-full rounded-xl h-12 px-6"
                         onClick={() => handleOpenUpload(currentPhase.id, mc.exerciseId)}
                         data-testid={`button-upload-video-${i}`}
                       >
@@ -663,7 +628,7 @@ export default function ClientMyPhase() {
                   </p>
                 </div>
                 <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
-                  <Button className="bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl w-full md:w-auto h-10 shadow-sm" data-testid="button-start-next-session">
+                  <Button className="btn-primary-action rounded-xl w-full md:w-auto h-10 shadow-sm" data-testid="button-start-next-session">
                     Start next session <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </Link>
@@ -699,11 +664,11 @@ export default function ClientMyPhase() {
           <div>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
               <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-indigo-600" />
+                <CalendarDays className="h-5 w-5 text-slate-700" />
                 Week
               </h2>
               {currentPhase.durationWeeks > 1 && (
-                <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 gap-1">
+                <div className="flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1">
                   {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map((w) => {
                     const weekStatus =
                       weekStatuses.find((status) => status.week === w) ||
@@ -716,14 +681,14 @@ export default function ClientMyPhase() {
                       onClick={() => setSelectedWeek(w)}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 ${
                         isSelected
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? "bg-slate-700 text-white shadow-sm"
                           : weekStatus.state === "ready_for_checkin"
-                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                            ? "bg-slate-200 text-slate-800 hover:bg-slate-300"
                             : weekStatus.state === "completed"
-                              ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                              ? "bg-slate-200 text-slate-600 hover:bg-slate-300"
                               : isCurrent
-                              ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
+                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200"
                       }`}
                       data-testid={`button-week-${w}`}
                     >
@@ -732,7 +697,7 @@ export default function ClientMyPhase() {
                         <span className="text-[10px] font-bold">!</span>
                       )}
                       {isCurrent && !isSelected && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-700" />
                       )}
                     </button>
                     );
@@ -745,13 +710,13 @@ export default function ClientMyPhase() {
                 <p className="text-xs md:text-sm text-slate-600">
                   Week {selectedWeek}: {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed{" "}
                   {selectedWeekStatus.state === "completed" ? (
-                    <span className="text-green-700 font-semibold">· Completed</span>
+                    <span className="font-semibold text-slate-700">· Completed</span>
                   ) : selectedWeekStatus.state === "ready_for_checkin" ? (
-                    <span className="text-amber-700 font-semibold">· Ready for weekly check-in</span>
+                    <span className="font-semibold text-slate-700">· Ready for weekly check-in</span>
                   ) : selectedWeekStatus.state === "future" ? (
                     <span className="text-slate-500 font-semibold">· Future week</span>
                   ) : (
-                    <span className="text-indigo-700 font-semibold">· Current</span>
+                    <span className="font-semibold text-slate-700">· Current</span>
                   )}
                 </p>
               ) : (
@@ -786,19 +751,25 @@ export default function ClientMyPhase() {
                                 const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
                                 if (!session) return null;
                                 const completed = isEntryCompleted(entry, session);
+                                const accentColor = getSessionAccentColor({
+                                  id: session.id,
+                                  name: session.name,
+                                });
                                 return (
                                   <Link key={i} href={buildSessionUrl(session.id, day, slotVal)} className="block">
                                     <Badge
                                       variant="outline"
                                       className={`cursor-pointer transition-colors text-[11px] font-medium w-full justify-start ${
                                         completed
-                                          ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                                          : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                                          ? "border-[var(--color-done-border)] bg-[var(--color-done-background)] text-[var(--color-done-foreground)] opacity-85"
+                                          : "border-slate-200 bg-white text-slate-800 hover:bg-[var(--color-ui-surface)]"
                                       }`}
+                                      style={{ borderLeftWidth: "3px", borderLeftColor: accentColor }}
                                       data-testid={`sched-session-${day}-${slotVal}-${i}`}
                                     >
-                                      {completed && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                                      <span className="truncate max-w-[110px] md:max-w-none">{session.name}</span>
+                                      {completed ? <CheckCircle2 className="h-3 w-3 mr-1.5" /> : null}
+                                      <span className="h-1.5 w-1.5 rounded-full mr-1" style={{ backgroundColor: accentColor }} />
+                                      <span className={`truncate max-w-[110px] md:max-w-none ${completed ? "line-through" : ""}`}>{session.name}</span>
                                     </Badge>
                                   </Link>
                                 );
@@ -830,21 +801,30 @@ export default function ClientMyPhase() {
                     if (!session) return null;
                     const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
                     const isCompleted = completedInstances.includes(instanceKey);
+                    const accentColor = getSessionAccentColor({
+                      id: session.id,
+                      name: session.name,
+                    });
                     
                     return (
                       <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
-                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
+                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
                           <CardContent className="p-0 h-full">
-                            <div className="flex items-stretch h-full">
-                              <div className={`w-3 shrink-0 ${isCompleted ? 'bg-green-500' : 'bg-indigo-600'}`} />
+                            <div
+                              className={`flex items-stretch h-full ${isCompleted ? "opacity-85" : ""}`}
+                              style={{ borderLeft: `4px solid ${accentColor}` }}
+                            >
                               <div className="p-6 flex-1 flex justify-between items-center">
                                 <div>
                                   <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
-                                  <h3 className={`text-xl font-bold ${isCompleted ? 'text-slate-500 line-through' : 'text-slate-900 group-hover:text-indigo-700 transition-colors'}`}>{session?.name}</h3>
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
+                                    <h3 className={`text-xl font-bold ${isCompleted ? "text-slate-500 line-through" : "text-slate-900 group-hover:text-slate-700 transition-colors"}`}>{session?.name}</h3>
+                                  </div>
                                   <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks</p>
                                 </div>
-                                <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-indigo-50 group-hover:shadow-inner transition-all ml-4">
-                                   {isCompleted ? <CheckCircle2 className="h-6 w-6 text-green-500" /> : <ChevronRight className="h-6 w-6 text-indigo-600 group-hover:translate-x-0.5 transition-transform" />}
+                                <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-[var(--color-ui-surface)] group-hover:shadow-inner transition-all ml-4 border border-slate-200">
+                                   {isCompleted ? <CheckCircle2 className="h-6 w-6 text-[var(--color-done-foreground)]" /> : <ChevronRight className="h-6 w-6 text-[var(--color-brand-600)] group-hover:translate-x-0.5 transition-transform" />}
                                 </div>
                               </div>
                             </div>
@@ -861,7 +841,7 @@ export default function ClientMyPhase() {
               <Card
                 className={`mt-6 rounded-2xl shadow-sm ${
                   progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
-                    ? "border-green-200 bg-green-50"
+                    ? "border-[var(--color-done-border)] bg-[var(--color-done-background)]"
                     : "border-slate-200 bg-white"
                 }`}
                 data-testid="card-phase-progress-report-context"
@@ -874,8 +854,8 @@ export default function ClientMyPhase() {
                         variant="outline"
                         className={
                           progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
-                            ? "bg-green-100 text-green-700 border-green-200"
-                            : "bg-indigo-100 text-indigo-700 border-indigo-200"
+                            ? "bg-white text-[var(--color-done-foreground)] border-[var(--color-done-border)]"
+                            : "bg-slate-100 text-slate-700 border-slate-200"
                         }
                       >
                         {progressStatusMeta.label}
@@ -884,7 +864,7 @@ export default function ClientMyPhase() {
                     <p className="text-slate-700">{progressStatusMeta.description}</p>
                   </div>
                   <Link href={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl">
+                    <Button className="btn-primary-action rounded-xl">
                       View progress report
                     </Button>
                   </Link>
@@ -916,7 +896,7 @@ export default function ClientMyPhase() {
                       onClick={() => setWeeklySleep(value)}
                       className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
                         weeklySleep === value
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                           : "border-slate-200 bg-white text-slate-700"
                       }`}
                     >
@@ -937,7 +917,7 @@ export default function ClientMyPhase() {
                       onClick={() => setWeeklyEnergy(value)}
                       className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
                         weeklyEnergy === value
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                           : "border-slate-200 bg-white text-slate-700"
                       }`}
                     >
@@ -958,7 +938,7 @@ export default function ClientMyPhase() {
                     onClick={() => setWeeklyInjuryAffected(false)}
                     className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
                       !weeklyInjuryAffected
-                        ? "border-green-300 bg-green-50 text-green-700"
+                        ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
                   >
@@ -969,7 +949,7 @@ export default function ClientMyPhase() {
                     onClick={() => setWeeklyInjuryAffected(true)}
                     className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
                       weeklyInjuryAffected
-                        ? "border-amber-300 bg-amber-50 text-amber-700"
+                        ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
                   >
@@ -989,7 +969,7 @@ export default function ClientMyPhase() {
                         onClick={() => setWeeklyInjuryImpact(value)}
                         className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
                           weeklyInjuryImpact === value
-                            ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                            ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                             : "border-slate-200 bg-white text-slate-700"
                         }`}
                       >
@@ -1020,9 +1000,9 @@ export default function ClientMyPhase() {
               </Button>
             )}
             {weeklyCheckinStep === 1 ? (
-              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
+              <Button className="btn-primary-action" onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
             ) : (
-              <Button onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || isCheckinReadOnly}>
+              <Button className="btn-primary-action" onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || isCheckinReadOnly}>
                 {submittingWeeklyCheckin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Submit weekly check-in
               </Button>
@@ -1089,7 +1069,7 @@ export default function ClientMyPhase() {
             </Button>
             <Button 
               onClick={handleSubmitVideo}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              className="btn-primary-action"
               disabled={isSubmitting}
               data-testid="button-submit-video"
             >

@@ -114,13 +114,24 @@ test("weekly check-in enforces one submission per week", async () => {
   );
 });
 
-test("admin can read client check-ins and clients cannot access analytics endpoint", () => {
+test("admin and coach can read any client check-ins", () => {
   assert.doesNotThrow(() =>
     assertCanReadClientCheckins(buildUser({ role: "Admin" }), "client_1"),
   );
+  assert.doesNotThrow(() =>
+    assertCanReadClientCheckins(buildUser({ role: "Coach" }), "client_1"),
+  );
+});
 
+test("client can read own check-ins", () => {
+  assert.doesNotThrow(() =>
+    assertCanReadClientCheckins(buildUser({ id: "client_1", role: "Client" }), "client_1"),
+  );
+});
+
+test("client cannot read another client's check-ins", () => {
   assert.throws(
-    () => assertCanReadClientCheckins(buildUser({ id: "client_1", role: "Client" }), "client_1"),
+    () => assertCanReadClientCheckins(buildUser({ id: "client_1", role: "Client" }), "client_2"),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, "FORBIDDEN");

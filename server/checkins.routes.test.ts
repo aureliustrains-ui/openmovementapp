@@ -2112,6 +2112,38 @@ test("client cannot access admin client analytics endpoints", async (t) => {
   );
 });
 
+test("client can access own client analytics endpoint", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getSessionCheckinsByClient: async () => [],
+      getWeeklyCheckinsByClient: async () => [],
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const response = await fetch(`${baseUrl}/api/clients/client_1/checkins/summary`, {
+            headers: { "x-test-user-id": "client_1" },
+          });
+          assert.equal(response.status, 200);
+        });
+      } catch (error: unknown) {
+        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
+          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
 test("POST /api/clients/:clientId/progress-reports allows admin to create request from active phase exercises", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([

@@ -6,7 +6,15 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import { hashPassword, verifyPassword } from "./auth";
-import type { Phase, User, WeeklyCheckin, Session, ProgressReport, ProgressReportItem } from "@shared/schema";
+import type {
+  Phase,
+  User,
+  WeeklyCheckin,
+  Session,
+  ProgressReport,
+  ProgressReportItem,
+  InsertPhase,
+} from "@shared/schema";
 import { createUserAccount } from "./modules/users/users.service";
 import { loginWithEmailPassword, requireAuthenticatedUser } from "./modules/auth/auth.service";
 import { updateMyProfile } from "./modules/profile/profile.service";
@@ -143,6 +151,27 @@ function getProfileFirstName(user: User | undefined): string {
   const fromProfile = typeof user.infos === "string" ? user.infos.trim() : "";
   if (fromProfile) return fromProfile;
   return getFirstToken(user.name);
+}
+
+function parseOptionalPhaseHomeIntroVideoUrl(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new AppError("homeIntroVideoUrl must be a string", 400);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new AppError("Invalid home intro video URL", 400);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new AppError("Invalid home intro video URL protocol", 400);
+  }
+  return parsed.toString();
 }
 
 function toPublicMessage(
@@ -854,14 +883,19 @@ export async function registerRoutes(
 
   app.post("/api/phases", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const client = await storage.getUser(req.body.clientId);
+    const payload = { ...(req.body || {}) } as Record<string, unknown>;
+    const client = await storage.getUser(String(payload.clientId || ""));
     if (!client || client.role !== "Client") {
       return res.status(400).json({ message: "Client not found" });
     }
     if (client.status === "Removed") {
       return res.status(400).json({ message: "Cannot create phases for removed clients" });
     }
-    const phase = await storage.createPhase(req.body);
+    const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(payload.homeIntroVideoUrl);
+    if (parsedHomeIntroVideoUrl !== undefined) {
+      payload.homeIntroVideoUrl = parsedHomeIntroVideoUrl;
+    }
+    const phase = await storage.createPhase(payload as InsertPhase);
     res.status(201).json(phase);
   });
 
@@ -1025,6 +1059,16 @@ export async function registerRoutes(
       }
 
       updatePayload = nextClientPayload;
+    } else {
+      const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(
+        (req.body || {}).homeIntroVideoUrl,
+      );
+      if (parsedHomeIntroVideoUrl !== undefined) {
+        updatePayload = {
+          ...(req.body || {}),
+          homeIntroVideoUrl: parsedHomeIntroVideoUrl,
+        };
+      }
     }
 
     const phase = await storage.updatePhase(req.params.id, updatePayload);

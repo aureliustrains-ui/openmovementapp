@@ -146,26 +146,32 @@ test("client dashboard keeps selected week synced to the active lifecycle week",
 test("client dashboard defaults selected phase to active phase with deterministic fallback", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
-  const source = fs.readFileSync(myPhasePath, "utf8");
+  const helperPath = path.resolve(serverDir, "../client/src/lib/clientPhase.ts");
+  const myPhaseSource = fs.readFileSync(myPhasePath, "utf8");
+  const helperSource = fs.readFileSync(helperPath, "utf8");
 
   assert.ok(
-    source.includes("function pickDefaultVisiblePhase(phases: any[]): any | null {"),
-    "MyPhase should centralize default visible phase selection in one helper",
+    myPhaseSource.includes('import { pickDefaultVisiblePhase } from "@/lib/clientPhase";'),
+    "MyPhase should import default visible phase logic from shared helper",
   );
   assert.ok(
-    source.includes('const activePhases = phases.filter((phase: any) => phase.status === "Active");'),
+    helperSource.includes("export function pickDefaultVisiblePhase"),
+    "Shared client phase helper should expose deterministic default visible phase selection",
+  );
+  assert.ok(
+    helperSource.includes('const activePhases = phases.filter((phase) => phase.status === "Active");'),
     "Default phase should prioritize active phases",
   );
   assert.ok(
-    source.includes("const orderedActivePhases = [...activePhases].sort((a: any, b: any) => {"),
+    helperSource.includes("const orderedActivePhases = [...activePhases].sort((a, b) => {"),
     "When multiple phases are active, ordering should be deterministic",
   );
   assert.ok(
-    source.includes("parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)"),
+    helperSource.includes("parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)"),
     "Deterministic active-phase fallback should prefer most recently started phase",
   );
   assert.ok(
-    source.includes("return pendingPhase || phases[0];"),
+    helperSource.includes("return pendingPhase || phases[0];"),
     "When no active phase exists, keep existing safe fallback behavior",
   );
 });

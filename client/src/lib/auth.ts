@@ -7,6 +7,8 @@ interface User {
   role: string;
   status: string;
   avatar: string | null;
+  firstName?: string | null;
+  infos?: string | null;
 }
 
 interface AuthState {
@@ -61,7 +63,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
     }
 
     try {
-      const response = await fetch("/api/auth/me", { credentials: "include" });
+      const response = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
       if (!response.ok) {
         set({
           user: null,

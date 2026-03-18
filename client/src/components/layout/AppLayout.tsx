@@ -3,11 +3,13 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { chatUnreadQuery } from "@/lib/api";
+import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { 
   Users, 
   Library, 
   Settings, 
   Dumbbell, 
+  House,
   MessageCircle, 
   Info,
   LogOut,
@@ -31,6 +33,7 @@ const getAdminNavItems = () => [
 ];
 
 const getClientPrimaryNavItems = () => [
+  { href: "/app/client/home", label: "Home", icon: House },
   { href: "/app/client/my-phase", label: "Phases", icon: Dumbbell },
 ];
 
@@ -53,14 +56,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return user.name || user.email;
     }
 
-    const firstNameCandidate = ((user as { firstName?: string | null }).firstName || (user as { infos?: string | null }).infos || "").trim();
+    const firstNameCandidate = resolveUserFirstName(user);
     const nameCandidate = (user.name || "").trim();
 
     if (firstNameCandidate && nameCandidate) {
-      const startsWithFirstName = nameCandidate.toLowerCase().startsWith(`${firstNameCandidate.toLowerCase()} `);
-      return startsWithFirstName ? nameCandidate : `${firstNameCandidate} ${nameCandidate}`;
+      const firstLower = firstNameCandidate.toLowerCase();
+      const nameLower = nameCandidate.toLowerCase();
+      if (nameLower === firstLower || nameLower.startsWith(`${firstLower} `)) {
+        return nameCandidate;
+      }
+      return `${firstNameCandidate} ${nameCandidate}`;
     }
-    return firstNameCandidate || nameCandidate || user.email;
+    if (firstNameCandidate && firstNameCandidate !== "there") return firstNameCandidate;
+    return nameCandidate || user.email;
   }, [sessionUser.role, user]);
 
   const handleLogout = () => {
@@ -78,7 +86,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-white flex flex-col">
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex items-center gap-8">
-          <Link href={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} className="flex items-center gap-2.5 shrink-0">
+          <Link href={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} className="flex items-center gap-2.5 shrink-0">
             <BrandLogo textClassName="text-sm sm:text-base" />
           </Link>
 
@@ -86,20 +94,31 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {navItems.map((item) => {
               const isActive = location.startsWith(item.href) && (item.href !== '/app/settings' || location === '/app/settings');
               const isAdminNav = sessionUser.role === "Admin";
+              const isClientNav = sessionUser.role === "Client";
+              const spacingClassName = isAdminNav
+                ? "gap-0 px-2 py-2 sm:gap-2 sm:px-3"
+                : isClientNav
+                  ? "gap-2 px-2.5 py-2 sm:px-3"
+                  : "gap-2 px-3 py-2";
+              const labelClassName = isAdminNav
+                ? "hidden sm:inline"
+                : isClientNav
+                  ? "hidden sm:inline"
+                  : "";
               return (
                 <Link 
                   key={item.href} 
                   href={item.href}
                   className={`relative flex items-center rounded-lg text-sm font-medium transition-colors ${
-                    isAdminNav ? "gap-0 px-2 py-2 sm:gap-2 sm:px-3" : "gap-2 px-3 py-2"
+                    spacingClassName
                   } ${
                     isActive 
-                      ? "border-b-2 border-[#2B4A42] text-slate-900"
+                      ? "border-b-2 border-slate-900 text-slate-900"
                       : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
-                  <span className={isAdminNav ? "hidden sm:inline" : ""}>{item.label}</span>
+                  <span className={labelClassName}>{item.label}</span>
                 </Link>
               );
             })}
@@ -123,7 +142,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 variant="ghost"
                 className={`relative h-9 w-9 rounded-full border bg-white transition-colors ${
                   profileMenuOpen
-                    ? "border-[#2B4A42]/60 ring-2 ring-[#2B4A42]/25"
+                    ? "border-slate-400 ring-2 ring-slate-200"
                     : "border-slate-200"
                 }`}
               >
@@ -178,7 +197,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <DropdownMenuSeparator />
               
               {impersonating && (
-                <DropdownMenuItem onClick={handleStopImpersonating} className="text-[#2B4A42] font-medium cursor-pointer">
+                <DropdownMenuItem onClick={handleStopImpersonating} className="text-slate-700 font-medium cursor-pointer">
                   <Repeat className="mr-2 h-4 w-4" />
                   <span>Exit Impersonation</span>
                 </DropdownMenuItem>

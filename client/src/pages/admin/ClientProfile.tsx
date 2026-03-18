@@ -38,7 +38,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ReviewSubmissionRow } from "@/components/admin/review/ReviewSubmissionRow";
+import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
+import { mapSessionCheckinTrendData, mapWeeklyCheckinTrendData } from "@/lib/checkins";
+import { normalizeVideoSource } from "@/lib/video";
 import {
   CartesianGrid,
   Legend,
@@ -153,6 +156,8 @@ export default function AdminClientProfile() {
   const [progressApproveNote, setProgressApproveNote] = useState("");
   const [progressResubmitFeedback, setProgressResubmitFeedback] = useState("");
   const [submittingProgressReview, setSubmittingProgressReview] = useState(false);
+  const [phaseHomeVideoDrafts, setPhaseHomeVideoDrafts] = useState<Record<string, string>>({});
+  const [savingPhaseVideoId, setSavingPhaseVideoId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -275,6 +280,55 @@ export default function AdminClientProfile() {
       height: msg?.senderProfile?.height ?? null,
       weight: msg?.senderProfile?.weight ?? null,
     });
+  };
+
+  const getPhaseHomeVideoDraft = (phase: any): string => {
+    if (Object.prototype.hasOwnProperty.call(phaseHomeVideoDrafts, phase.id)) {
+      return phaseHomeVideoDrafts[phase.id] || "";
+    }
+    return typeof phase.homeIntroVideoUrl === "string" ? phase.homeIntroVideoUrl : "";
+  };
+
+  const setPhaseHomeVideoDraft = (phaseId: string, value: string) => {
+    setPhaseHomeVideoDrafts((prev) => ({
+      ...prev,
+      [phaseId]: value,
+    }));
+  };
+
+  const savePhaseHomeVideo = async (phase: any, nextValue: string) => {
+    const trimmed = nextValue.trim();
+    if (trimmed && !normalizeVideoSource(trimmed)) {
+      toast({
+        title: "Invalid video URL",
+        description: "Please add a valid YouTube, Drive, or direct video URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSavingPhaseVideoId(phase.id);
+      await updatePhase.mutateAsync({
+        id: phase.id,
+        homeIntroVideoUrl: trimmed || null,
+      });
+      setPhaseHomeVideoDraft(phase.id, trimmed);
+      toast({
+        title: "Saved",
+        description: trimmed
+          ? "Client home video updated."
+          : "Client home video removed.",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "Could not save the client home video.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPhaseVideoId(null);
+    }
   };
 
   const handleOpenApprove = (phaseId: string, exerciseId: string) => {
@@ -664,21 +718,12 @@ export default function AdminClientProfile() {
   );
 
   const sessionCheckinTrendData = useMemo(
-    () =>
-      ((checkinsTrends as any)?.sessions || []).map((entry: any) => ({
-        ...entry,
-        dateLabel: new Date(entry.date).toLocaleDateString(),
-        feltOffMarker: entry.feltOff ? entry.rpeOverall : null,
-      })),
+    () => mapSessionCheckinTrendData(((checkinsTrends as any)?.sessions || []) as any[]),
     [checkinsTrends],
   );
 
   const weeklyCheckinTrendData = useMemo(
-    () =>
-      ((checkinsTrends as any)?.weeks || []).map((entry: any) => ({
-        ...entry,
-        dateLabel: entry.weekStartDate,
-      })),
+    () => mapWeeklyCheckinTrendData(((checkinsTrends as any)?.weeks || []) as any[]),
     [checkinsTrends],
   );
 
@@ -734,6 +779,17 @@ export default function AdminClientProfile() {
     const pendingChecks = phase.status === 'Waiting for Movement Check' && !ready;
     const checksInfo = (phase.movementChecks as any[]) || [];
     const approvedCount = checksInfo.filter((mc: any) => mc.status === 'Approved').length;
+    const homeVideoDraft = getPhaseHomeVideoDraft(phase);
+    const homeVideoDraftTrimmed = homeVideoDraft.trim();
+    const homeVideoDraftParsed = homeVideoDraftTrimmed
+      ? normalizeVideoSource(homeVideoDraftTrimmed)
+      : null;
+    const storedHomeVideoUrl =
+      typeof phase.homeIntroVideoUrl === "string" && phase.homeIntroVideoUrl.trim().length > 0
+        ? phase.homeIntroVideoUrl.trim()
+        : "";
+    const previewVideoUrl = homeVideoDraftParsed ? homeVideoDraftTrimmed : storedHomeVideoUrl;
+    const isSavingHomeVideo = savingPhaseVideoId === phase.id;
 
     return (
       <Card key={phase.id} className="border-slate-200 shadow-sm overflow-hidden rounded-2xl bg-white" data-testid={`card-phase-${phase.id}`}>
@@ -836,6 +892,56 @@ export default function AdminClientProfile() {
               </div>
             );
           })()}
+
+          <div className="mt-6 border-t border-slate-100 pt-5 space-y-3">
+            <h5 className="text-sm font-semibold text-slate-600">Client home video</h5>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={homeVideoDraft}
+                onChange={(event) => setPhaseHomeVideoDraft(phase.id, event.target.value)}
+                placeholder="Paste YouTube, Google Drive, or direct video URL"
+                className="border-slate-200"
+                data-testid={`input-home-video-${phase.id}`}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => savePhaseHomeVideo(phase, homeVideoDraft)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white"
+                  disabled={isSavingHomeVideo}
+                  data-testid={`button-save-home-video-${phase.id}`}
+                >
+                  {isSavingHomeVideo ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save
+                </Button>
+                {storedHomeVideoUrl || homeVideoDraftTrimmed ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => savePhaseHomeVideo(phase, "")}
+                    disabled={isSavingHomeVideo}
+                    data-testid={`button-clear-home-video-${phase.id}`}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {homeVideoDraftTrimmed && !homeVideoDraftParsed ? (
+              <p className="text-xs text-red-600">Please enter a valid video URL.</p>
+            ) : null}
+            {previewVideoUrl ? (
+              <InlineVideoPlayer
+                url={previewVideoUrl}
+                testId={`preview-home-video-${phase.id}`}
+                openLinkLabel="Open intro video"
+              />
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     );
@@ -869,7 +975,7 @@ export default function AdminClientProfile() {
             onClick={() => {
               if (client) {
                 impersonate(client);
-                setLocation("/app/client/my-phase");
+                setLocation("/app/client/home");
               }
             }}
             data-testid="button-impersonate"
