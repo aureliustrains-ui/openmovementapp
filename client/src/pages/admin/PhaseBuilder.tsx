@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { phasesQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, sectionTemplatesQuery, sessionTemplatesQuery, phaseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase, useCreateExerciseTemplate, useCreateSectionTemplate, useCreateSessionTemplate, useCreatePhaseTemplate } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { phasesQuery, phaseQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, sectionTemplatesQuery, sessionTemplatesQuery, phaseTemplatesQuery, useUpdatePhase, useCreatePhase, useCreateSession, useUpdateSession, useDeleteSession, useDeletePhase, useCreateExerciseTemplate, useCreateSectionTemplate, useCreateSessionTemplate, useCreatePhaseTemplate } from "@/lib/api";
 import { cloneExerciseFromTemplate, clonePhaseTemplate, cloneSectionFromTemplate, cloneSessionFromTemplate, toBlueprintExercise } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -116,6 +116,7 @@ export default function AdminPhaseBuilder() {
   const [, params] = useRoute("/app/admin/clients/:clientId/builder/:phaseId");
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const isNew = params?.phaseId === 'new';
 
   const { data: allPhases = [], isFetching: fetchingPhases } = useQuery(phasesQuery);
@@ -366,6 +367,7 @@ export default function AdminPhaseBuilder() {
   const savePhase = async (): Promise<{ phaseId: string; savedSessions: any[]; persistedSchedule: ScheduleEntry[] } | null> => {
     const clientId = params?.clientId;
     let phaseId: string;
+    const existingSessionIds = new Set<string>();
 
     if (isNew && clientId) {
       const phase = await createPhase.mutateAsync({
@@ -381,12 +383,9 @@ export default function AdminPhaseBuilder() {
       phaseId = phase.id;
     } else if (params?.phaseId) {
       phaseId = params.phaseId;
-
-      const localDbIds = localSessions.map(ls => ls.dbId).filter(Boolean);
-      const sessionsToDelete = phaseSessions.filter((ps: any) => !localDbIds.includes(ps.id));
-      for (const s of sessionsToDelete) {
-        await deleteSession.mutateAsync(s.id);
-      }
+      phaseSessions.forEach((ps: any) => {
+        if (ps?.id) existingSessionIds.add(String(ps.id));
+      });
 
       await updatePhase.mutateAsync({
         id: phaseId,
@@ -441,6 +440,65 @@ export default function AdminPhaseBuilder() {
       schedule: persistedSchedule,
     });
 
+    if (!isNew) {
+      const savedSessionIds = new Set(
+        savedSessions.map((session: any) => String(session?.id || "")).filter(Boolean),
+      );
+      const sessionsToDelete = Array.from(existingSessionIds).filter(
+        (sessionId) => !savedSessionIds.has(sessionId),
+      );
+      for (const sessionId of sessionsToDelete) {
+        await deleteSession.mutateAsync(sessionId);
+      }
+    }
+
+    const [reloadedPhaseRaw, reloadedSessionsRaw] = await Promise.all([
+      queryClient.fetchQuery(phaseQuery(phaseId)),
+      queryClient.fetchQuery(sessionsByPhaseQuery(phaseId)),
+    ]);
+    const reloadedPhase = reloadedPhaseRaw as any;
+    const reloadedSessions = (reloadedSessionsRaw as any[]) || [];
+    const reloadedSessionIds = new Set(reloadedSessions.map((session: any) => String(session.id)));
+
+    const missingScheduledSessions = persistedSchedule.filter(
+      (entry) => !reloadedSessionIds.has(String(entry.sessionId)),
+    );
+    if (missingScheduledSessions.length > 0) {
+      throw new Error(
+        "Phase save verification failed: scheduled sessions are missing after reload.",
+      );
+    }
+
+    const normalizeSchedule = (entries: any[]): ScheduleEntry[] =>
+      entries.map((entry) => ({
+        day: String(entry.day),
+        week: Number(entry.week),
+        slot: String(entry.slot || "AM"),
+        sessionId: String(entry.sessionId),
+      }));
+    const sortSchedule = (entries: ScheduleEntry[]) =>
+      [...entries].sort(
+        (a, b) =>
+          a.week - b.week ||
+          a.day.localeCompare(b.day) ||
+          a.slot.localeCompare(b.slot) ||
+          a.sessionId.localeCompare(b.sessionId),
+      );
+
+    const reloadedSchedule = normalizeSchedule(
+      Array.isArray(reloadedPhase?.schedule) ? reloadedPhase.schedule : [],
+    );
+    if (
+      stableStringify(sortSchedule(reloadedSchedule)) !==
+      stableStringify(sortSchedule(persistedSchedule))
+    ) {
+      throw new Error("Phase save verification failed: weekly schedule did not persist.");
+    }
+
+    if (localSessions.length > 0 && reloadedSessions.length === 0) {
+      throw new Error("Phase save verification failed: no sessions persisted after reload.");
+    }
+
     return { phaseId, savedSessions, persistedSchedule };
   };
 
@@ -489,34 +547,31 @@ export default function AdminPhaseBuilder() {
     setPublishing(true);
 
     try {
-      let phaseId = params?.phaseId;
+      const result = await savePhase();
+      if (!result) {
+        toast({
+          title: "Publish Failed",
+          description: "Could not save the phase.",
+          variant: "destructive",
+        });
+        setPublishing(false);
+        return;
+      }
 
-      if (isNew || isDirty) {
-        const result = await savePhase();
-        if (!result) {
-          toast({
-            title: "Publish Failed",
-            description: "Could not save the phase.",
-            variant: "destructive",
-          });
-          setPublishing(false);
-          return;
-        }
-        phaseId = result.phaseId;
+      let phaseId = result.phaseId;
 
-        setLocalSessions(prev => prev.map((ls, idx) => ({
-          ...ls,
-          id: result.savedSessions[idx]?.id || ls.id,
-          dbId: result.savedSessions[idx]?.id || ls.dbId,
-          isNew: false,
-        })));
-        setLocalSchedule(result.persistedSchedule);
-        setLastSavedAt(new Date());
-        justSavedRef.current = true;
+      setLocalSessions(prev => prev.map((ls, idx) => ({
+        ...ls,
+        id: result.savedSessions[idx]?.id || ls.id,
+        dbId: result.savedSessions[idx]?.id || ls.dbId,
+        isNew: false,
+      })));
+      setLocalSchedule(result.persistedSchedule);
+      setLastSavedAt(new Date());
+      justSavedRef.current = true;
 
-        if (isNew) {
-          setLocation(`/app/admin/clients/${params?.clientId}/builder/${phaseId}`);
-        }
+      if (isNew) {
+        setLocation(`/app/admin/clients/${params?.clientId}/builder/${phaseId}`);
       }
 
       if (!phaseId || phaseId === 'new') {
