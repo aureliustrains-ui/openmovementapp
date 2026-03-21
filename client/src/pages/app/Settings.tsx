@@ -1,6 +1,11 @@
 import { type ChangeEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { myProfileQuery, useUpdateMyProfile, useUploadMyAvatar } from "@/lib/api";
+import {
+  myProfileQuery,
+  useChangePassword,
+  useUpdateMyProfile,
+  useUploadMyAvatar,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -22,6 +27,12 @@ type ProfileForm = {
   weight: string;
 };
 
+type PasswordForm = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
 function emptyForm(): ProfileForm {
   return {
     name: "",
@@ -34,6 +45,22 @@ function emptyForm(): ProfileForm {
   };
 }
 
+function emptyPasswordForm(): PasswordForm {
+  return {
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const normalized = error.message.trim();
+  const match = normalized.match(/:\s([^:]+)$/);
+  if (match?.[1]) return match[1].trim();
+  return normalized || fallback;
+}
+
 export default function MyProfilePage() {
   const AVATAR_PREVIEW_SIZE = 280;
   const AVATAR_OUTPUT_SIZE = 512;
@@ -44,10 +71,14 @@ export default function MyProfilePage() {
     enabled: !!sessionUser?.id,
   });
   const updateProfile = useUpdateMyProfile();
+  const changePassword = useChangePassword();
   const uploadAvatar = useUploadMyAvatar();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [form, setForm] = useState<ProfileForm>(emptyForm());
+  const [passwordForm, setPasswordForm] = useState<PasswordForm>(emptyPasswordForm());
+  const [passwordFormError, setPasswordFormError] = useState<string | null>(null);
+  const [passwordFormSuccess, setPasswordFormSuccess] = useState<string | null>(null);
   const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
   const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(null);
   const [avatarPendingFile, setAvatarPendingFile] = useState<File | null>(null);
@@ -100,6 +131,41 @@ export default function MyProfilePage() {
         ? "Email already in use"
         : "Could not save profile";
       toast({ title: message, variant: "destructive" });
+    }
+  };
+
+  const savePassword = async () => {
+    setPasswordFormError(null);
+    setPasswordFormSuccess(null);
+
+    const currentPassword = passwordForm.currentPassword.trim();
+    const newPassword = passwordForm.newPassword.trim();
+    const confirmPassword = passwordForm.confirmPassword.trim();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordFormError("All password fields are required.");
+      return;
+    }
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      setPasswordFormError("Password must be between 8 and 128 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordFormError("New password and confirmation do not match.");
+      return;
+    }
+
+    try {
+      await changePassword.mutateAsync({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      });
+      setPasswordForm(emptyPasswordForm());
+      setPasswordFormSuccess("Password updated successfully.");
+      toast({ title: "Password updated successfully" });
+    } catch (error: unknown) {
+      setPasswordFormError(getErrorMessage(error, "Could not update password."));
     }
   };
 
@@ -386,29 +452,6 @@ export default function MyProfilePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Age</Label>
-              <Input
-                type="number"
-                min={0}
-                max={130}
-                value={form.age}
-                onChange={(e) => setForm((prev) => ({ ...prev, age: e.target.value }))}
-                placeholder="e.g. 29"
-                disabled={impersonating}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Weight</Label>
-              <Input value={form.weight} onChange={(e) => setForm((prev) => ({ ...prev, weight: e.target.value }))} placeholder="e.g. 79 kg" disabled={impersonating} />
-            </div>
-            <div className="space-y-2">
-              <Label>Height</Label>
-              <Input value={form.height} onChange={(e) => setForm((prev) => ({ ...prev, height: e.target.value }))} placeholder="e.g. 182 cm" disabled={impersonating} />
-            </div>
-          </div>
-
           <div className="space-y-2 pt-1">
             <Label>Bio</Label>
             <Textarea value={form.bio} onChange={(e) => setForm((prev) => ({ ...prev, bio: e.target.value }))} className="min-h-[96px]" disabled={impersonating} />
@@ -424,6 +467,88 @@ export default function MyProfilePage() {
             <Button onClick={save} disabled={updateProfile.isPending || impersonating}>
               {updateProfile.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
               Save Profile
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle>Security</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-500">Change your account password.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="currentPassword">Current password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                value={passwordForm.currentPassword}
+                onChange={(e) =>
+                  setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                }
+                disabled={changePassword.isPending || impersonating}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                value={passwordForm.newPassword}
+                onChange={(e) =>
+                  setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                }
+                disabled={changePassword.isPending || impersonating}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm new password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) =>
+                  setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                }
+                disabled={changePassword.isPending || impersonating}
+              />
+            </div>
+          </div>
+
+          {passwordFormError && (
+            <p className="text-sm text-red-600">{passwordFormError}</p>
+          )}
+          {passwordFormSuccess && !passwordFormError && (
+            <p className="text-sm text-emerald-700">{passwordFormSuccess}</p>
+          )}
+
+          {impersonating && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              You are impersonating a client. Password changes are disabled to prevent updating the
+              wrong account.
+            </div>
+          )}
+
+          <div className="pt-1">
+            <Button
+              type="button"
+              onClick={savePassword}
+              disabled={changePassword.isPending || impersonating}
+            >
+              {changePassword.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Change Password
             </Button>
           </div>
         </CardContent>

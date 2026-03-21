@@ -16,7 +16,11 @@ import type {
   InsertPhase,
 } from "@shared/schema";
 import { createUserAccount } from "./modules/users/users.service";
-import { loginWithEmailPassword, requireAuthenticatedUser } from "./modules/auth/auth.service";
+import {
+  changeAuthenticatedUserPassword,
+  loginWithEmailPassword,
+  requireAuthenticatedUser,
+} from "./modules/auth/auth.service";
 import { updateMyProfile } from "./modules/profile/profile.service";
 import {
   assertCoachCanManageSpecifics,
@@ -82,6 +86,12 @@ const updateMyProfileSchema = z.object({
   weight: z.string().max(120).nullable().optional(),
   goals: z.string().max(4000).nullable().optional(),
   infos: z.string().max(4000).nullable().optional(),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(1).max(128),
+  confirmPassword: z.string().min(1).max(128),
 });
 
 const updateClientSpecificsSchema = z.object({
@@ -682,6 +692,39 @@ export async function registerRoutes(
       throw error;
     }
     res.json(toPublicUser(updated));
+  });
+
+  app.post("/api/account/change-password", async (req, res) => {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid change password payload" });
+    }
+
+    try {
+      await changeAuthenticatedUserPassword(
+        {
+          userId: authUser.id,
+          currentPassword: parsed.data.currentPassword,
+          newPassword: parsed.data.newPassword,
+          confirmPassword: parsed.data.confirmPassword,
+        },
+        {
+          users: storage,
+          verifyPassword,
+          hashPassword,
+        },
+      );
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.status || 400).json({ message: error.message, code: error.code });
+      }
+      throw error;
+    }
+
+    res.status(204).send();
   });
 
   app.post("/api/me/avatar", (req, res, next) => {

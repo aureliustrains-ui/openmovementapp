@@ -11,7 +11,6 @@ import {
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,7 @@ import { Loader2, ChevronLeft, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
+import { VideoUploadField } from "@/components/client/VideoUploadField";
 
 type ProgressReportItem = {
   id: string;
@@ -285,42 +285,27 @@ export default function ClientProgressReport() {
                 {submissionEditable ? (
                   <>
                     <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <Label htmlFor={`submission-file-${item.id}`}>Upload video</Label>
-                      <Input
-                        id={`submission-file-${item.id}`}
-                        type="file"
-                        accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/3gpp"
-                        onChange={(event) => {
-                          const nextFile = event.target.files?.[0] || null;
-                          setDraftFiles((prev) => ({ ...prev, [item.id]: nextFile }));
-                        }}
-                        disabled={readOnly}
-                      />
-                      {draftFiles[item.id] ? (
-                        <p className="text-xs text-slate-500 break-all">
-                          Selected: {draftFiles[item.id]?.name}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <Label htmlFor={`submission-link-${item.id}`}>Submission link</Label>
-                      <Input
-                        id={`submission-link-${item.id}`}
-                        placeholder="https://youtube.com/... or https://drive.google.com/..."
-                        value={draft[item.id]?.submissionLink || ""}
-                        onChange={(event) =>
+                      <VideoUploadField
+                        fileInputId={`submission-file-${item.id}`}
+                        linkInputId={`submission-link-${item.id}`}
+                        file={draftFiles[item.id] || null}
+                        linkValue={draft[item.id]?.submissionLink || ""}
+                        onFileChange={(nextFile) =>
+                          setDraftFiles((prev) => ({ ...prev, [item.id]: nextFile }))
+                        }
+                        onLinkChange={(nextLink) =>
                           setDraft((prev) => ({
                             ...prev,
                             [item.id]: {
-                              submissionLink: event.target.value,
+                              submissionLink: nextLink,
                               submissionNote: prev[item.id]?.submissionNote || "",
                             },
                           }))
                         }
                         disabled={readOnly}
+                        fileTestId={`input-submission-video-file-${item.id}`}
+                        linkTestId={`input-submission-video-link-${item.id}`}
                       />
-                      <p className="text-xs text-slate-500">Use a link only if you are not uploading a file.</p>
                     </div>
 
                     <div className="space-y-2">

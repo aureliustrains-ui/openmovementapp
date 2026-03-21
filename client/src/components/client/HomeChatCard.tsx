@@ -6,8 +6,10 @@ import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, MessageCircle, Send } from "lucide-react";
 import { getClientCounterpartDisplayName } from "@/lib/counterpartDisplayName";
+import { useChatAutoScroll } from "@/hooks/use-chat-auto-scroll";
 
 function formatMessageTime(value: string): string {
   if (value.includes("T") || value.includes("Z")) {
@@ -45,6 +47,10 @@ export function HomeChatCard() {
   if (!sessionUser || !chatClientId) return null;
 
   const recentMessages = chatMessages.slice(-4);
+  const recentMessageKey = recentMessages.map((entry: any) => entry.id).join("|");
+  const { scrollContainerRef, handleScroll } = useChatAutoScroll(recentMessageKey, {
+    enabled: !isLoading,
+  });
   const canSend = message.trim().length > 0;
 
   const submitMessage = () => {
@@ -63,7 +69,7 @@ export function HomeChatCard() {
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <MessageCircle className="h-4 w-4 text-slate-600" />
-            <CardTitle className="text-base">Chat with {counterpartName}</CardTitle>
+            <CardTitle className="text-base">Chat</CardTitle>
           </div>
           <Link href="/app/client/chat" className="text-xs font-medium text-slate-600 hover:text-slate-900">
             Open chat
@@ -72,7 +78,11 @@ export function HomeChatCard() {
       </CardHeader>
 
       <CardContent className="p-4 space-y-3">
-        <div className="max-h-[220px] overflow-y-auto space-y-2">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="max-h-[220px] overflow-y-auto space-y-2"
+        >
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
@@ -85,13 +95,24 @@ export function HomeChatCard() {
             recentMessages.map((entry: any) => {
               const isClientMessage = Boolean(entry.isClient);
               const senderLabel = isClientMessage ? "You" : counterpartName;
+              const senderDisplayName =
+                typeof entry.sender === "string" && entry.sender.trim().length > 0
+                  ? entry.sender.trim()
+                  : senderLabel;
+              const senderInitial = senderDisplayName.charAt(0).toUpperCase() || "U";
               return (
-                <div key={entry.id} className={`flex ${isClientMessage ? "justify-end" : "justify-start"}`}>
+                <div key={entry.id} className={`flex items-end gap-2 ${isClientMessage ? "justify-end" : "justify-start"}`}>
+                  <Avatar className={`h-7 w-7 shrink-0 border border-slate-200 ${isClientMessage ? "order-2" : "order-1"}`}>
+                    <AvatarImage src={entry.senderAvatar || undefined} alt={senderDisplayName} />
+                    <AvatarFallback className={isClientMessage ? "bg-slate-200 text-slate-700 text-[10px]" : "bg-slate-100 text-slate-700 text-[10px]"}>
+                      {senderInitial}
+                    </AvatarFallback>
+                  </Avatar>
                   <div
-                    className={`w-[90%] max-w-[290px] rounded-2xl border p-2.5 text-sm ${
+                    className={`w-[84%] max-w-[280px] rounded-2xl border p-2.5 text-sm ${
                       isClientMessage
-                        ? "rounded-br-md border-slate-300 bg-slate-100 text-slate-900"
-                        : "rounded-bl-md border-slate-200 bg-white text-slate-800"
+                        ? "order-1 rounded-br-md border-slate-300 bg-slate-100 text-slate-900"
+                        : "order-2 rounded-bl-md border-slate-200 bg-white text-slate-800"
                     }`}
                   >
                     <div className="mb-1 flex items-center justify-between gap-2">
@@ -118,7 +139,7 @@ export function HomeChatCard() {
           <Input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder={`Message ${counterpartName}...`}
+            placeholder="Ask about your session, schedule, or recovery..."
             className="h-9 border-slate-200 focus-visible:ring-slate-400"
             data-testid="input-home-chat-message"
           />

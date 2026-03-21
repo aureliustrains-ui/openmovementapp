@@ -52,6 +52,7 @@ export const sessions = pgTable("sessions", {
   phaseId: varchar("phase_id", { length: 64 }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
+  sessionVideoUrl: text("session_video_url"),
   completedInstances: jsonb("completed_instances").notNull().default([]),
   sections: jsonb("sections").notNull().default([]),
 });

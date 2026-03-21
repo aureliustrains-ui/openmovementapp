@@ -845,6 +845,20 @@ export function useUpdateMyProfile() {
   });
 }
 
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) =>
+      fetchApi("/api/account/change-password", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+  });
+}
+
 export function useUploadMyAvatar() {
   const qc = useQueryClient();
   return useMutation({

@@ -16,7 +16,8 @@ import {
   mapSessionCheckinTrendData,
   mapWeeklyCheckinTrendData,
 } from "@/lib/checkins";
-import { buildScheduleInstanceKey, getWeekSchedulePreview, type WeekScheduleItem } from "@/lib/clientSchedule";
+import { buildScheduleInstanceKey, getWeekSchedulePreview } from "@/lib/clientSchedule";
+import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { getClientCounterpartDisplayName } from "@/lib/counterpartDisplayName";
 import { cn } from "@/lib/utils";
@@ -84,16 +85,12 @@ function getActivePlanCompletion(phase: any | null): {
   return { completedInstances, totalInstances, percent };
 }
 
-function buildClientSessionUrl(item: WeekScheduleItem): string {
-  return `/app/client/session/${item.session.id}?week=${item.entry.week}&day=${encodeURIComponent(item.entry.day)}&slot=${encodeURIComponent(item.entry.slot)}`;
-}
-
 function metricToggleClassName(active: boolean): string {
   return cn(
-    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-medium transition-colors sm:text-xs",
     active
-      ? "border-slate-400 bg-slate-200 text-slate-800"
-      : "border-[var(--color-ui-border)] bg-white text-[var(--color-ui-secondary)] hover:bg-[var(--color-ui-surface)]",
+      ? "text-slate-900"
+      : "text-slate-500 hover:text-slate-700",
   );
 }
 
@@ -176,10 +173,19 @@ export default function ClientHome() {
     phaseSessions as Array<{ id: string; name: string }>,
     completedInstances,
   );
+  const nextSessionDestination = weekSchedulePreview.nextScheduleItem
+    ? resolveClientSessionEntryDestination({
+        phase: progressPhase as any,
+        sessionId: weekSchedulePreview.nextScheduleItem.session.id,
+        week: weekSchedulePreview.nextScheduleItem.entry.week,
+        day: weekSchedulePreview.nextScheduleItem.entry.day,
+        slot: weekSchedulePreview.nextScheduleItem.entry.slot,
+      })
+    : null;
 
   const primaryProgressCopy =
     activePlanCompletion.totalInstances > 0
-      ? `${activePlanCompletion.percent}% of current plan complete`
+      ? `${activePlanCompletion.percent}% of current phase complete`
       : "Your plan is ready to start";
   const mobilePrimaryProgressCopy =
     activePlanCompletion.totalInstances > 0 ? `${activePlanCompletion.percent}% complete` : "Plan ready";
@@ -203,6 +209,11 @@ export default function ClientHome() {
   const weeklyCheckinTrendData = allWeeklyCheckinTrendData;
   const hasAnySessionTrendData = hasSessionCheckinTrendData(sessionCheckinTrendData);
   const hasAnyWeeklyTrendData = hasWeeklyCheckinTrendData(weeklyCheckinTrendData);
+  const hasFeltOffEventsInView = sessionCheckinTrendData.some((entry: any) => Boolean(entry?.feltOff));
+  const hasInjuryImpactEventsInView = weeklyCheckinTrendData.some((entry: any) => {
+    const injuryImpact = typeof entry?.injuryImpact === "number" ? entry.injuryImpact : 0;
+    return injuryImpact > 0 || entry?.injuryAffectedTraining === true;
+  });
   const hasAnyTrendData = hasAnySessionTrendData || hasAnyWeeklyTrendData;
   const hasSessionTrendData = hasAnySessionTrendData;
   const hasWeeklyTrendData = hasAnyWeeklyTrendData;
@@ -254,7 +265,7 @@ export default function ClientHome() {
           </div>
           <div className="relative h-2 w-full rounded-full bg-[var(--color-ui-hover)] overflow-hidden">
             <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,#5F8C87_0%,#6E7FA3_52%,#5A678A_100%)] transition-all"
+              className="h-full rounded-full bg-[var(--color-brand-700)] transition-all"
               style={{ width: `${activePlanCompletion.totalInstances > 0 ? activePlanCompletion.percent : 0}%` }}
             />
             <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-[2px]">
@@ -269,7 +280,20 @@ export default function ClientHome() {
               ))}
             </div>
           </div>
-          <p className="text-sm text-slate-600">{weeklyProgressCopy}</p>
+          <div className="flex flex-col gap-2.5 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-slate-600">{weeklyProgressCopy}</p>
+            {currentPhase ? (
+              <Link href="/app/client/my-phase">
+                <Button
+                  variant="outline"
+                  className="h-8 w-full border-[var(--color-ui-border)] bg-[var(--color-ui-hover)] text-slate-900 hover:border-slate-400 hover:bg-[var(--color-ui-surface)] active:bg-slate-200 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:w-auto"
+                  data-testid="button-home-go-to-current-phase"
+                >
+                  Open phase
+                </Button>
+              </Link>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -286,8 +310,8 @@ export default function ClientHome() {
                   </p>
                 ) : null}
               </div>
-              {weekSchedulePreview.nextScheduleItem ? (
-                <Link href={buildClientSessionUrl(weekSchedulePreview.nextScheduleItem)}>
+              {weekSchedulePreview.nextScheduleItem && nextSessionDestination ? (
+                <Link href={nextSessionDestination.href}>
                   <Button className="btn-primary-action w-full sm:w-auto" data-testid="button-home-start-next-session">
                     Start next session
                     <ChevronRight className="h-4 w-4" />
@@ -332,7 +356,7 @@ export default function ClientHome() {
                         </p>
                       </div>
                       {item.isCompleted ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-done-border)] bg-[var(--color-done-background)] text-[var(--color-done-foreground)] px-2 py-0.5 text-[11px] font-medium">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)] px-2 py-0.5 text-[11px] font-medium">
                           <CheckCircle2 className="h-3 w-3" />
                           Done
                         </span>
@@ -388,14 +412,14 @@ export default function ClientHome() {
                 <h3 className="text-sm font-semibold text-slate-700">Session check-ins</h3>
                 {hasSessionTrendData ? (
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
                       <button
                         type="button"
                         className={metricToggleClassName(sessionMetrics.rpeOverall)}
                         onClick={() => toggleSessionMetric("rpeOverall")}
                       >
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sessionRpe }} />
-                        Session RPE
+                        Effort
                       </button>
                       <button
                         type="button"
@@ -403,16 +427,18 @@ export default function ClientHome() {
                         onClick={() => toggleSessionMetric("sleepLastNight")}
                       >
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sleepLastNight }} />
-                        Sleep (/10)
+                        Sleep
                       </button>
-                      <button
-                        type="button"
-                        className={metricToggleClassName(sessionMetrics.feltOffEvents)}
-                        onClick={() => toggleSessionMetric("feltOffEvents")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.feltOff }} />
-                        Felt-off events
-                      </button>
+                      {hasFeltOffEventsInView ? (
+                        <button
+                          type="button"
+                          className={metricToggleClassName(sessionMetrics.feltOffEvents)}
+                          onClick={() => toggleSessionMetric("feltOffEvents")}
+                        >
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.feltOff }} />
+                          Felt off
+                        </button>
+                      ) : null}
                     </div>
                     <div className={CHART_FRAME_CLASS}>
                       <ResponsiveContainer>
@@ -428,28 +454,28 @@ export default function ClientHome() {
                                 <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
                                   <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
                                   <div className="text-slate-600">{point?.dateLabel}</div>
-                                  <div className="text-slate-700 mt-1">RPE: {point?.rpeOverall}</div>
-                                  <div className="text-slate-700">Sleep last night: {point?.sleepLastNight ?? "-"}/5</div>
+                                  <div className="text-slate-700 mt-1">Effort: {point?.rpeOverall}</div>
+                                  <div className="text-slate-700">Sleep: {point?.sleepLastNight ?? "-"}/10</div>
                                 </div>
                               );
                             }}
                           />
                           {sessionMetrics.rpeOverall && (
-                            <Line type="monotone" dataKey="rpeOverall" name="Session RPE" stroke={CHART_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="rpeOverall" name="Effort" stroke={CHART_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
                           )}
                           {sessionMetrics.sleepLastNight && (
                             <Line
                               type="monotone"
-                              dataKey="sleepLastNightScaled"
-                              name="Sleep last night (/10)"
+                              dataKey="sleepLastNight"
+                              name="Sleep"
                               stroke={CHART_COLORS.sleepLastNight}
                               strokeWidth={2}
                               dot={{ r: 3 }}
                               connectNulls={false}
                             />
                           )}
-                          {sessionMetrics.feltOffEvents && (
-                            <Scatter dataKey="feltOffMarker" name="Felt off events" fill={CHART_COLORS.feltOff} />
+                          {hasFeltOffEventsInView && sessionMetrics.feltOffEvents && (
+                            <Scatter dataKey="feltOffMarker" name="Felt off" fill={CHART_COLORS.feltOff} />
                           )}
                         </LineChart>
                       </ResponsiveContainer>
@@ -470,7 +496,7 @@ export default function ClientHome() {
                 <h3 className="text-sm font-semibold text-slate-700">Weekly check-ins</h3>
                 {hasWeeklyTrendData ? (
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
                       <button
                         type="button"
                         className={metricToggleClassName(weeklyMetrics.recoveryThisTrainingWeek)}
@@ -487,14 +513,16 @@ export default function ClientHome() {
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.stress }} />
                         Stress
                       </button>
-                      <button
-                        type="button"
-                        className={metricToggleClassName(weeklyMetrics.injuryImpact)}
-                        onClick={() => toggleWeeklyMetric("injuryImpact")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.painInjury }} />
-                        Injury impact
-                      </button>
+                      {hasInjuryImpactEventsInView ? (
+                        <button
+                          type="button"
+                          className={metricToggleClassName(weeklyMetrics.injuryImpact)}
+                          onClick={() => toggleWeeklyMetric("injuryImpact")}
+                        >
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.painInjury }} />
+                          Injury impact
+                        </button>
+                      ) : null}
                     </div>
                     <div className={CHART_FRAME_CLASS}>
                       <ResponsiveContainer>
@@ -522,7 +550,7 @@ export default function ClientHome() {
                           {weeklyMetrics.stressOutsideTrainingThisWeek && (
                             <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHART_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
                           )}
-                          {weeklyMetrics.injuryImpact && (
+                          {hasInjuryImpactEventsInView && weeklyMetrics.injuryImpact && (
                             <Line type="monotone" dataKey="injuryImpact" name="Pain/injury impact" stroke={CHART_COLORS.painInjury} strokeWidth={2} dot={{ r: 3 }} />
                           )}
                         </LineChart>

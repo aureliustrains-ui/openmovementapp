@@ -35,7 +35,7 @@ test("client readiness uses shared checkins mappers and chart keys expected by a
   assert.ok(clientSource.includes("mapWeeklyCheckinTrendData"));
   assert.ok(clientSource.includes("LineChart data={sessionCheckinTrendData}"));
   assert.ok(clientSource.includes('dataKey="rpeOverall"'));
-  assert.ok(clientSource.includes('dataKey="sleepLastNightScaled"'));
+  assert.ok(clientSource.includes('dataKey="sleepLastNight"'));
   assert.ok(clientSource.includes("LineChart data={weeklyCheckinTrendData}"));
   assert.ok(clientSource.includes('dataKey="recoveryThisTrainingWeek"'));
   assert.ok(clientSource.includes('dataKey="stressOutsideTrainingThisWeek"'));

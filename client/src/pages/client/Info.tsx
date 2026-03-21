@@ -1,53 +1,81 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Info as InfoIcon, FileText, ShieldAlert, Zap } from "lucide-react";
 
 export default function ClientInfo() {
+  const sections: Array<{
+    title: string;
+    body: string[];
+    className?: string;
+  }> = [
+    {
+      title: "Session view",
+      body: [
+        "Each session shows the exercises for that day, with sets, reps, tempo, and any notes you need to follow.",
+      ],
+    },
+    {
+      title: "Sets and reps",
+      body: [
+        "Sets tell you how many rounds to complete. Reps tell you how many repetitions to do in each round.",
+      ],
+    },
+    {
+      title: "Tempo",
+      className: "md:col-span-2",
+      body: [
+        "Tempo tells you how fast to move through each rep. It is written in four parts: lowering phase, pause at the bottom, lifting phase, pause at the top.",
+        "Eccentric means the lowering phase of the movement. 0 means no pause. X means move as fast as possible with control.",
+        "Example: 31X1 = 3 seconds down, 1 second pause at the bottom, up fast with control, 1 second pause at the top.",
+      ],
+    },
+    {
+      title: "Track progress",
+      body: [
+        "Use Track Progress to log your reps, weight, effort, and any quick notes after the session.",
+      ],
+    },
+    {
+      title: "Movement checks",
+      body: [
+        "Movement checks are short video submissions used to review movement quality before you move on.",
+      ],
+    },
+    {
+      title: "Progress reports",
+      body: [
+        "Progress reports are used to show how the phase is going and capture your progress over time.",
+      ],
+    },
+    {
+      title: "Goals",
+      body: [
+        "Your goals help connect the work in the app to what you are trying to improve.",
+      ],
+    },
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in">
+    <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in">
       <div>
-        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight">Information & Rules</h1>
-        <p className="text-slate-500 mt-1">Everything you need to know about your training program.</p>
+        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight">Guide</h1>
+        <p className="text-slate-500 mt-1">Quick reference for using your plan in the app.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow bg-white rounded-2xl overflow-hidden">
-          <div className="bg-indigo-50/50 border-b border-indigo-100 p-6 flex items-center gap-4">
-            <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
-              <Zap className="h-6 w-6" />
-            </div>
-            <CardTitle className="text-xl">Training Philosophy</CardTitle>
-          </div>
-          <CardContent className="p-6 text-slate-600 leading-relaxed space-y-4">
-            <p>Consistency over intensity. Show up, do the work, and the results will follow.</p>
-            <p>Always prioritize form over load. If you can't hit the target reps with good form, lower the weight.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow bg-white rounded-2xl overflow-hidden">
-          <div className="bg-emerald-50/50 border-b border-emerald-100 p-6 flex items-center gap-4">
-            <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
-              <FileText className="h-6 w-6" />
-            </div>
-            <CardTitle className="text-xl">Logging Expectations</CardTitle>
-          </div>
-          <CardContent className="p-6 text-slate-600 leading-relaxed space-y-4">
-            <p>Log your weights and reps for every working set. Warm-ups are optional but recommended.</p>
-            <p>Use the RPE (Rate of Perceived Exertion) scale honestly. This helps us adjust your program dynamically.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow bg-white rounded-2xl overflow-hidden md:col-span-2">
-          <div className="bg-amber-50/50 border-b border-amber-100 p-6 flex items-center gap-4">
-            <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
-              <ShieldAlert className="h-6 w-6" />
-            </div>
-            <CardTitle className="text-xl">Movement Checks</CardTitle>
-          </div>
-          <CardContent className="p-6 text-slate-600 leading-relaxed space-y-4">
-            <p>Certain exercises require a form check before you can proceed. Record a side-angle video showing your full body.</p>
-            <p>Ensure good lighting and avoid wearing overly baggy clothing so your joints and posture are visible.</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {sections.map((section) => (
+          <Card
+            key={section.title}
+            className={`border-slate-200 shadow-sm bg-white rounded-2xl ${section.className ?? ""}`}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{section.title}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0 text-sm leading-relaxed text-slate-600">
+              {section.body.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );

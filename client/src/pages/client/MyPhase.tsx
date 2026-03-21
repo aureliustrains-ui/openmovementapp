@@ -28,9 +28,11 @@ import {
 } from "@/lib/trainingWeek";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview, isScheduleEntryCompleted } from "@/lib/clientSchedule";
+import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getSessionAccentColor } from "@/lib/sessionAccent";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
+import { VideoUploadField } from "@/components/client/VideoUploadField";
 import { buildActionRequiredItems, pickLatestProgressReportForPhase } from "@/lib/actionRequired";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -491,7 +493,13 @@ export default function ClientMyPhase() {
   };
 
   const buildSessionUrl = (sessionId: string, day: string, slotVal: string) => {
-    return `/app/client/session/${sessionId}?week=${selectedWeek}&day=${encodeURIComponent(day)}&slot=${encodeURIComponent(slotVal)}`;
+    return resolveClientSessionEntryDestination({
+      phase: currentPhase as any,
+      sessionId,
+      week: selectedWeek,
+      day,
+      slot: slotVal || "AM",
+    }).href;
   };
 
   const { nextScheduleItem } = getWeekSchedulePreview(
@@ -1012,47 +1020,30 @@ export default function ClientMyPhase() {
       </Dialog>
 
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Submit Movement Check Video</DialogTitle>
             <DialogDescription>
-              Upload a video file or paste a link fallback for your coach to review.
+              Upload your video directly. If upload does not work, you can paste a link as fallback.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="video-file">Upload video</Label>
-              <Input
-                id="video-file"
-                type="file"
-                accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/3gpp"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] || null;
-                  setMovementUploadFile(nextFile);
-                }}
-                data-testid="input-video-file"
-              />
-              {movementUploadFile ? (
-                <p className="text-xs text-slate-500 break-all">
-                  Selected: {movementUploadFile.name}
-                </p>
-              ) : null}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="video-url">Video URL</Label>
-              <Input 
-                id="video-url" 
-                placeholder="https://youtube.com/... or https://drive.google.com/..."
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                data-testid="input-video-url"
-              />
-            </div>
+            <VideoUploadField
+              fileInputId="video-file"
+              linkInputId="video-url"
+              file={movementUploadFile}
+              linkValue={videoUrl}
+              onFileChange={(nextFile) => setMovementUploadFile(nextFile)}
+              onLinkChange={(nextValue) => setVideoUrl(nextValue)}
+              disabled={isSubmitting}
+              fileTestId="input-video-file"
+              linkTestId="input-video-url"
+            />
             <div className="grid gap-2">
               <Label htmlFor="note">Optional Note</Label>
               <Textarea 
                 id="note" 
-                placeholder="Anything the coach should know?" 
+                placeholder="Anything we should know?" 
                 value={clientNote}
                 onChange={(e) => setClientNote(e.target.value)}
                 data-testid="input-client-note"

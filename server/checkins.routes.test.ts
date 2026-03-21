@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
+import { hashPassword } from "./auth";
 import { getWeekStartDateUtc } from "./modules/checkins/checkins.service";
 import type {
   InsertSessionCheckin,
@@ -57,6 +58,7 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     phaseId: "phase_1",
     name: "Session 1",
     description: null,
+    sessionVideoUrl: null,
     completedInstances: [],
     sections: [],
     ...overrides,
@@ -77,6 +79,10 @@ function buildPhase(overrides: Partial<Phase> = {}): Phase {
     completedScheduleInstances: [],
     ...overrides,
   };
+}
+
+function isEpermSocketError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM");
 }
 
 async function withPatchedStorage<T>(
@@ -106,8 +112,9 @@ async function withTestServer<T>(
   app.use((req, _res, next) => {
     const userIdHeader = req.headers["x-test-user-id"];
     const userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
-    (req as { session?: { userId?: string; destroy: (cb: () => void) => void } }).session = {
+    (req as { session?: { userId?: string; save: (cb: (error?: unknown) => void) => void; destroy: (cb: () => void) => void } }).session = {
       userId: userId || undefined,
+      save: (cb) => cb(),
       destroy: (cb: () => void) => cb(),
     };
     next();
@@ -211,6 +218,122 @@ test("POST /api/session-checkins inserts row and admin recent endpoint returns i
   );
 });
 
+test("session video URL persists via /api/sessions create/update and is returned on read", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
+  ]);
+  const sessionRows = new Map<string, Session>();
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      createSession: async (payload: {
+        phaseId: string;
+        name: string;
+        description?: string | null;
+        sessionVideoUrl?: string | null;
+        completedInstances?: unknown[];
+        sections?: unknown[];
+      }) => {
+        const row = buildSession({
+          id: "session_created",
+          phaseId: payload.phaseId,
+          name: payload.name,
+          description: payload.description ?? null,
+          sessionVideoUrl: payload.sessionVideoUrl ?? null,
+          completedInstances: Array.isArray(payload.completedInstances) ? payload.completedInstances : [],
+          sections: Array.isArray(payload.sections) ? payload.sections : [],
+        });
+        sessionRows.set(row.id, row);
+        return row;
+      },
+      updateSession: async (
+        id: string,
+        payload: {
+          name?: string;
+          description?: string | null;
+          sessionVideoUrl?: string | null;
+          completedInstances?: unknown[];
+          sections?: unknown[];
+        },
+      ) => {
+        const existing = sessionRows.get(id);
+        if (!existing) return undefined;
+        const updated = {
+          ...existing,
+          ...payload,
+          description:
+            payload.description !== undefined ? payload.description : existing.description,
+          sessionVideoUrl:
+            payload.sessionVideoUrl !== undefined
+              ? payload.sessionVideoUrl
+              : existing.sessionVideoUrl,
+        } as Session;
+        sessionRows.set(id, updated);
+        return updated;
+      },
+      getSession: async (id: string) => sessionRows.get(id),
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const createdVideo = "https://www.youtube.com/watch?v=abc123xyz00";
+          const createRes = await fetch(`${baseUrl}/api/sessions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              phaseId: "phase_1",
+              name: "Session 1",
+              description: "Session intro",
+              sessionVideoUrl: createdVideo,
+              sections: [],
+              completedInstances: [],
+            }),
+          });
+          assert.equal(createRes.status, 201);
+          const created = (await createRes.json()) as Session;
+          assert.equal(created.sessionVideoUrl, createdVideo);
+
+          const updatedVideo = "https://drive.google.com/file/d/demo/view";
+          const updateRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              sessionVideoUrl: updatedVideo,
+            }),
+          });
+          assert.equal(updateRes.status, 200);
+          const updated = (await updateRes.json()) as Session;
+          assert.equal(updated.sessionVideoUrl, updatedVideo);
+
+          const readRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
+            headers: {
+              "x-test-user-id": "admin_1",
+            },
+          });
+          assert.equal(readRes.status, 200);
+          const readBack = (await readRes.json()) as Session;
+          assert.equal(readBack.sessionVideoUrl, updatedVideo);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
+          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
 test("GET /api/auth/me is reachable and returns authenticated user payload", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([
@@ -236,6 +359,114 @@ test("GET /api/auth/me is reachable and returns authenticated user payload", asy
         });
       } catch (error: unknown) {
         if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
+          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
+test("POST /api/account/change-password updates credentials and login accepts only new password", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const oldPassword = "OldPassword123!";
+  const newPassword = "NewPassword123!";
+  const users = new Map<string, User>([
+    [
+      "client_1",
+      buildUser({
+        id: "client_1",
+        email: "client@example.com",
+        role: "Client",
+        passwordHash: await hashPassword(oldPassword),
+      }),
+    ],
+  ]);
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getUserByEmail: async (email: string) => {
+        const normalized = email.trim().toLowerCase();
+        return Array.from(users.values()).find((user) => user.email === normalized);
+      },
+      updateUser: async (id: string, payload: Partial<User>) => {
+        const existing = users.get(id);
+        if (!existing) return undefined;
+        const updated = { ...existing, ...payload };
+        users.set(id, updated);
+        return updated;
+      },
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const wrongCurrentRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: "WrongPassword123!",
+              newPassword,
+              confirmPassword: newPassword,
+            }),
+          });
+          assert.equal(wrongCurrentRes.status, 401);
+
+          const mismatchRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: oldPassword,
+              newPassword,
+              confirmPassword: "DifferentPassword123!",
+            }),
+          });
+          assert.equal(mismatchRes.status, 400);
+
+          const changeRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: oldPassword,
+              newPassword,
+              confirmPassword: newPassword,
+            }),
+          });
+          assert.equal(changeRes.status, 204);
+
+          const oldLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: "client@example.com",
+              password: oldPassword,
+            }),
+          });
+          assert.equal(oldLoginRes.status, 401);
+
+          const newLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: "client@example.com",
+              password: newPassword,
+            }),
+          });
+          assert.equal(newLoginRes.status, 200);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
           t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
           return;
         }

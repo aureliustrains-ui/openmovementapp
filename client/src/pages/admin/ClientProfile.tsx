@@ -1627,7 +1627,7 @@ export default function AdminClientProfile() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
                         <YAxis yAxisId="rpe" domain={[0, 10]} tick={{ fontSize: 11 }} />
-                        <YAxis yAxisId="sleep" orientation="right" domain={[1, 5]} tick={{ fontSize: 11 }} />
+                        <YAxis yAxisId="sleep" orientation="right" domain={[0, 10]} tick={{ fontSize: 11 }} />
                         <Tooltip
                           content={({ active, payload }) => {
                             if (!active || !payload || payload.length === 0) return null;

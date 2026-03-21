@@ -51,22 +51,14 @@ export function mapSessionCheckinTrendData<T extends SessionTrendEntryLike>(entr
     dateLabel: string;
     rpeOverall: number | null;
     sleepLastNight: number | null;
-    sleepLastNightScaled: number | null;
     feltOffMarker: number | null;
     feltOffSleepMarker: number | null;
   }
 > {
-  const scaleSleepToTenPoint = (sleepValue: number | null): number | null => {
-    if (typeof sleepValue !== "number") return null;
-    // Normalize 1..5 sleep score onto 0..10 so session metrics share one axis.
-    return Number((((sleepValue - 1) / 4) * 10).toFixed(2));
-  };
-
   return entries.map((entry) => ({
     ...entry,
     rpeOverall: toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe),
     sleepLastNight: toFiniteNumber((entry as any).sleepLastNight),
-    sleepLastNightScaled: scaleSleepToTenPoint(toFiniteNumber((entry as any).sleepLastNight)),
     dateLabel: entry.date ? new Date(entry.date).toLocaleDateString() : "—",
     feltOffMarker: entry.feltOff
       ? toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe) ?? 0

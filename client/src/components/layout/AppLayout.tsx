@@ -34,7 +34,7 @@ const getAdminNavItems = () => [
 
 const getClientPrimaryNavItems = () => [
   { href: "/app/client/home", label: "Home", icon: House },
-  { href: "/app/client/my-phase", label: "Phases", icon: Dumbbell },
+  { href: "/app/client/my-phase", label: "Current Phase", icon: Dumbbell },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {

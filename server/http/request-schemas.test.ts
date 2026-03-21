@@ -53,7 +53,7 @@ test("createSessionCheckinSchema validates the new session check-in fields", () 
   const valid = createSessionCheckinSchema.safeParse({
     sessionId: "session_1",
     sessionRpe: 7,
-    sleepLastNight: 4,
+    sleepLastNight: 8,
     feltOff: true,
     whatFeltOff: "Left knee felt unstable",
     optionalNote: "Anything to add?",
@@ -63,7 +63,7 @@ test("createSessionCheckinSchema validates the new session check-in fields", () 
   const invalid = createSessionCheckinSchema.safeParse({
     sessionId: "session_1",
     sessionRpe: 11,
-    sleepLastNight: 4,
+    sleepLastNight: 11,
   });
   assert.equal(invalid.success, false);
 });
