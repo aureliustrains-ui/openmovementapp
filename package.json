@@ -13,7 +13,7 @@
     "lint": "eslint server shared script",
     "format": "prettier --write \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
     "format:check": "prettier --check \"{server,shared,script}/**/*.{ts,tsx,js,json,md}\" \"*.{json,md}\" \".github/**/*.yml\"",
-    "test": "node --import tsx --test \"server/**/*.test.ts\"",
+    "test": "find server -type f -name '*.test.ts' | sort | xargs node --import tsx --test",
     "db:push": "npx drizzle-kit@0.31.9 push",
     "admin:bootstrap": "node script/bootstrap-admin.cjs"
   },
