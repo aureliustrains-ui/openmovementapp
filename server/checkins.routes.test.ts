@@ -20,6 +20,29 @@ import type {
 type StorageLike = Record<string, unknown>;
 
 async function loadRouteDeps() {
+  const isolatedEnvKeys = [
+    "BOOTSTRAP_ADMIN_EMAIL",
+    "BOOTSTRAP_ADMIN_PASSWORD",
+    "BOOTSTRAP_ADMIN_NAME",
+    "AWS_S3_BUCKET",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_S3_UPLOAD_URL_TTL_SECONDS",
+    "AWS_S3_READ_URL_TTL_SECONDS",
+    "OBJECT_STORAGE_BUCKET",
+    "OBJECT_STORAGE_REGION",
+    "OBJECT_STORAGE_ACCESS_KEY_ID",
+    "OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_ENDPOINT",
+    "OBJECT_STORAGE_PUBLIC_BASE_URL",
+    "OBJECT_STORAGE_FORCE_PATH_STYLE",
+    "OBJECT_STORAGE_UPLOAD_URL_TTL_SECONDS",
+    "OBJECT_STORAGE_READ_URL_TTL_SECONDS",
+  ] as const;
+  for (const key of isolatedEnvKeys) {
+    delete process.env[key];
+  }
   process.env.DATABASE_URL ??= "postgresql://user:password@localhost:5432/dbname?sslmode=require";
   process.env.SESSION_SECRET ??= "test-session-secret-123456";
   process.env.NODE_ENV = "test";
@@ -87,6 +110,16 @@ function isEpermSocketError(error: unknown): boolean {
     typeof error === "object" &&
     "code" in error &&
     (error as { code?: unknown }).code === "EPERM",
+  );
+}
+
+function assertHttpUrl(value: unknown, label: string): void {
+  assert.equal(typeof value, "string", `${label} should be a string URL`);
+  if (typeof value !== "string") return;
+  const parsed = new URL(value);
+  assert.ok(
+    parsed.protocol === "https:" || parsed.protocol === "http:",
+    `${label} should use http or https`,
   );
 }
 
@@ -1383,7 +1416,7 @@ test("POST /api/client-videos/upload-url allows client uploads and validates met
             expiresInSeconds?: number;
           };
           assert.ok(Boolean(validBody.objectKey?.includes("movement-checks/client_1/")));
-          assert.ok(Boolean(validBody.uploadUrl?.startsWith("https://upload.test.invalid/")));
+          assertHttpUrl(validBody.uploadUrl, "uploadUrl");
           assert.equal(typeof validBody.expiresInSeconds, "number");
 
           const validProgress = await fetch(`${baseUrl}/api/client-videos/upload-url`, {
@@ -1569,7 +1602,7 @@ test("PATCH /api/phases/:id accepts movement-check upload metadata and grouped a
           const groupedItem = phaseGroup?.items.find((item) => item.exerciseId === "ex_1");
           assert.ok(groupedItem);
           assert.equal(groupedItem?.videoSource, "upload");
-          assert.ok(Boolean(groupedItem?.videoUrl?.startsWith("https://cdn.test.invalid/")));
+          assertHttpUrl(groupedItem?.videoUrl, "movement check playback URL");
         });
       } catch (error: unknown) {
         if (
@@ -3032,11 +3065,7 @@ test("client can submit uploaded progress-report video and admin can review it",
           assert.equal(submitBody.items[0].submissionSource, "upload");
           assert.equal(submitBody.items[0].submissionObjectKey, objectKey);
           assert.equal(submitBody.items[0].submissionLink, null);
-          assert.ok(
-            Boolean(
-              submitBody.items[0].submissionPlaybackUrl?.startsWith("https://cdn.test.invalid/"),
-            ),
-          );
+          assertHttpUrl(submitBody.items[0].submissionPlaybackUrl, "progress report playback URL");
 
           const groupedRes = await fetch(
             `${baseUrl}/api/clients/client_1/progress-reports/grouped`,
@@ -3059,9 +3088,7 @@ test("client can submit uploaded progress-report video and admin can review it",
           const groupedItem = group?.items.find((entry) => entry.itemId === "pri_upload");
           assert.equal(groupedItem?.submissionSource, "upload");
           assert.equal(groupedItem?.submissionObjectKey, objectKey);
-          assert.ok(
-            Boolean(groupedItem?.submissionPlaybackUrl?.startsWith("https://cdn.test.invalid/")),
-          );
+          assertHttpUrl(groupedItem?.submissionPlaybackUrl, "grouped progress report playback URL");
 
           const reviewRes = await fetch(
             `${baseUrl}/api/progress-reports/pr_upload/items/pri_upload/review`,

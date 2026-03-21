@@ -24,14 +24,14 @@ test("My Profile binds query to session user id and does not use broad cache key
   assert.equal(source.includes("...myProfileQuery,"), false);
 });
 
-test("My Profile form includes first name, name, age and keeps bio/height/weight", () => {
+test("My Profile form includes first name, name, and bio while omitting removed metrics", () => {
   const source = fs.readFileSync(settingsPath, "utf8");
   assert.ok(source.includes("<Label>Name</Label>"));
   assert.ok(source.includes("<Label>First name</Label>"));
-  assert.ok(source.includes("<Label>Age</Label>"));
   assert.ok(source.includes("<Label>Bio</Label>"));
-  assert.ok(source.includes("<Label>Height</Label>"));
-  assert.ok(source.includes("<Label>Weight</Label>"));
+  assert.equal(source.includes("<Label>Age</Label>"), false);
+  assert.equal(source.includes("<Label>Height</Label>"), false);
+  assert.equal(source.includes("<Label>Weight</Label>"), false);
   assert.equal(source.includes("<Label>Goals</Label>"), false);
   assert.equal(source.includes("<Label>Infos</Label>"), false);
   assert.equal(source.includes("These details are saved to your signed-in account."), false);
@@ -40,20 +40,12 @@ test("My Profile form includes first name, name, age and keeps bio/height/weight
     "First name and Name should share one responsive row",
   );
   assert.ok(
-    source.includes('<div className="grid grid-cols-1 md:grid-cols-3 gap-4">'),
-    "Age, Weight, and Height should share one responsive row",
-  );
-  assert.ok(
     source.indexOf("<Label>Name</Label>") < source.indexOf("<Label>Bio</Label>"),
     "Bio should render lower on the form than Name",
   );
   assert.ok(
     source.indexOf("<Label>First name</Label>") < source.indexOf("<Label>Bio</Label>"),
     "Bio should render lower on the form than First name",
-  );
-  assert.ok(
-    source.indexOf("<Label>Age</Label>") < source.indexOf("<Label>Bio</Label>"),
-    "Bio should render lower on the form than Age",
   );
 });
 
