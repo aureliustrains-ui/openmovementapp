@@ -1142,9 +1142,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    const phase = await storage.updatePhase(req.params.id, updatePayload);
-    if (!phase) return res.status(404).json({ message: "Phase not found" });
-    res.json(phase);
+    const requestedStatus =
+      typeof (req.body as { status?: unknown } | undefined)?.status === "string"
+        ? String((req.body as { status: string }).status)
+        : null;
+    try {
+      const phase = await storage.updatePhase(req.params.id, updatePayload);
+      if (!phase) return res.status(404).json({ message: "Phase not found" });
+      res.json(phase);
+    } catch (error) {
+      logError("phase-update", "Failed to update phase", {
+        phaseId: req.params.id,
+        actorUserId: authUser.id,
+        actorRole: authUser.role,
+        requestedStatus,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   });
 
   app.delete("/api/phases/:id", async (req, res) => {

@@ -1381,6 +1381,94 @@ test("PATCH /api/phases/:id returns clear validation error for invalid movement-
   );
 });
 
+test("PATCH /api/phases/:id lets admin publish to Active or Waiting for Movement Check and persists status", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
+    ["client_1", buildUser({ id: "client_1", role: "Client", email: "client@example.com" })],
+  ]);
+  const phases = new Map<string, Phase>([
+    [
+      "phase_1",
+      buildPhase({
+        id: "phase_1",
+        clientId: "client_1",
+        name: "Publish target",
+        status: "Draft",
+        movementChecks: [],
+      }),
+    ],
+  ]);
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      updatePhase: async (id: string, data: Partial<Phase>) => {
+        const existing = phases.get(id);
+        if (!existing) return undefined;
+        const updated = { ...existing, ...data } as Phase;
+        phases.set(id, updated);
+        return updated;
+      },
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const publishActive = await fetch(`${baseUrl}/api/phases/phase_1`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              status: "Active",
+              movementChecks: [],
+            }),
+          });
+          assert.equal(publishActive.status, 200);
+          const activeBody = (await publishActive.json()) as Phase;
+          assert.equal(activeBody.status, "Active");
+          assert.equal(phases.get("phase_1")?.status, "Active");
+
+          const movementChecks = [
+            {
+              exerciseId: "ex_1",
+              name: "Back Squat",
+              status: "Not Submitted",
+              videoUrl: "",
+              clientNote: "",
+              submittedAt: "",
+            },
+          ];
+          const publishWaiting = await fetch(`${baseUrl}/api/phases/phase_1`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              status: "Waiting for Movement Check",
+              movementChecks,
+            }),
+          });
+          assert.equal(publishWaiting.status, 200);
+          const waitingBody = (await publishWaiting.json()) as Phase;
+          assert.equal(waitingBody.status, "Waiting for Movement Check");
+          assert.equal(phases.get("phase_1")?.status, "Waiting for Movement Check");
+          assert.deepEqual(waitingBody.movementChecks, movementChecks);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
+          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
 test("POST /api/client-videos/upload-url allows client uploads and validates metadata", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([

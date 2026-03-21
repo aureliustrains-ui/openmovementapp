@@ -28,6 +28,16 @@ function stableStringify(obj: any): string {
   return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(obj[k])).join(',') + '}';
 }
 
+function getUsefulErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.trim();
+  const apiMatch = message.match(/failed \(\d+\):\s*(.+)$/i);
+  if (apiMatch?.[1]) return apiMatch[1].trim();
+  const tailMatch = message.match(/:\s([^:]+)$/);
+  if (tailMatch?.[1]) return tailMatch[1].trim();
+  return message || fallback;
+}
+
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SLOTS = ["AM", "PM"];
 
@@ -465,7 +475,11 @@ export default function AdminPhaseBuilder() {
         toast({ title: "Phase Saved", description: `Phase and ${savedSessions.length} session(s) updated.` });
       }
     } catch (err) {
-      toast({ title: "Save Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
+      toast({
+        title: "Save Failed",
+        description: getUsefulErrorMessage(err, "Something went wrong. Please try again."),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -480,7 +494,11 @@ export default function AdminPhaseBuilder() {
       if (isNew || isDirty) {
         const result = await savePhase();
         if (!result) {
-          toast({ title: "Publish Failed", description: "Could not save the phase.", variant: "destructive" });
+          toast({
+            title: "Publish Failed",
+            description: "Could not save the phase.",
+            variant: "destructive",
+          });
           setPublishing(false);
           return;
         }
@@ -547,7 +565,11 @@ export default function AdminPhaseBuilder() {
       justSavedRef.current = true;
       setPublishDialogOpen(false);
     } catch (err) {
-      toast({ title: "Publish Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
+      toast({
+        title: "Publish Failed",
+        description: getUsefulErrorMessage(err, "Something went wrong. Please try again."),
+        variant: "destructive",
+      });
     } finally {
       setPublishing(false);
     }
