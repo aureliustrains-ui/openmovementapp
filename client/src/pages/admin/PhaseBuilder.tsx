@@ -112,6 +112,78 @@ function collectMovementCheckExercises(sessions: LocalSession[]): { id: string; 
   return result;
 }
 
+type MovementCheckEntry = {
+  exerciseId: string;
+  name: string;
+  status: string;
+  videoUrl?: string;
+  videoSource?: "link" | "upload" | null;
+  videoObjectKey?: string | null;
+  videoMimeType?: string | null;
+  videoOriginalFilename?: string | null;
+  feedback?: string;
+  clientNote?: string;
+  approvedNote?: string;
+  resubmitFeedback?: string;
+  submittedAt?: string;
+  decidedAt?: string;
+  decision?: string;
+};
+
+function parseMovementChecks(source: unknown): MovementCheckEntry[] {
+  let parsed = source;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((entry): entry is MovementCheckEntry => Boolean(entry && typeof entry === "object"))
+    .map((entry) => ({ ...entry }));
+}
+
+function buildMovementChecksForPublish(
+  exercises: Array<{ id: string; name: string }>,
+  existingChecksSource: unknown,
+): MovementCheckEntry[] {
+  const existingByExerciseId = new Map(
+    parseMovementChecks(existingChecksSource)
+      .map((entry) => {
+        const exerciseId = typeof entry.exerciseId === "string" ? entry.exerciseId : "";
+        return exerciseId ? [exerciseId, entry] : null;
+      })
+      .filter((entry): entry is [string, MovementCheckEntry] => Boolean(entry)),
+  );
+
+  return exercises.map((exercise) => {
+    const existing = existingByExerciseId.get(exercise.id);
+    if (!existing) {
+      return {
+        exerciseId: exercise.id,
+        name: exercise.name,
+        status: "Not Submitted",
+        videoUrl: "",
+        feedback: "",
+        clientNote: "",
+        submittedAt: "",
+      };
+    }
+
+    return {
+      ...existing,
+      exerciseId: exercise.id,
+      name: exercise.name,
+      status: typeof existing.status === "string" ? existing.status : "Not Submitted",
+      videoUrl: typeof existing.videoUrl === "string" ? existing.videoUrl : "",
+      feedback: typeof existing.feedback === "string" ? existing.feedback : "",
+      clientNote: typeof existing.clientNote === "string" ? existing.clientNote : "",
+    };
+  });
+}
+
 export default function AdminPhaseBuilder() {
   const [, params] = useRoute("/app/admin/clients/:clientId/builder/:phaseId");
   const [, setLocation] = useLocation();
@@ -583,31 +655,28 @@ export default function AdminPhaseBuilder() {
       const checkedExercises = collectMovementCheckExercises(localSessions);
 
       if (checkedExercises.length > 0) {
-        const movementChecks = checkedExercises.map(ex => ({
-          exerciseId: ex.id,
-          name: ex.name,
-          status: "Not Submitted",
-          videoUrl: "",
-          feedback: "",
-          clientNote: "",
-          submittedAt: "",
-        }));
+        const movementChecks = buildMovementChecksForPublish(
+          checkedExercises,
+          existingPhase?.movementChecks,
+        );
+        const needsMovementChecks = movementChecks.some((check) => check.status !== "Approved");
 
         await updatePhase.mutateAsync({
           id: phaseId,
-          status: "Waiting for Movement Check",
+          status: needsMovementChecks ? "Waiting for Movement Check" : "Active",
           movementChecks,
         });
 
         toast({
           title: "Phase Published",
-          description: `Phase is now waiting for movement check approval. ${movementChecks.length} exercise(s) require video review.`,
+          description: needsMovementChecks
+            ? `Phase is now waiting for movement check approval. ${movementChecks.length} exercise(s) require video review.`
+            : "Phase is now active and visible to the client.",
         });
       } else {
         await updatePhase.mutateAsync({
           id: phaseId,
           status: "Active",
-          movementChecks: [],
         });
 
         toast({
