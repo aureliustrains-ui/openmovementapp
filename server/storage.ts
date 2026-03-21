@@ -239,6 +239,159 @@ export class DatabaseStorage implements IStorage {
     return rows.map((row) => this.toCompatUser(row));
   }
 
+  private parseJsonArray(value: unknown): unknown[] {
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  private toCompatSession(row: {
+    id: string;
+    phase_id: string;
+    name: string;
+    description: string | null;
+    completed_instances: unknown;
+    sections: unknown;
+  }): Session {
+    return {
+      id: row.id,
+      phaseId: row.phase_id,
+      name: row.name,
+      description: row.description ?? null,
+      sessionVideoUrl: null,
+      completedInstances: this.parseJsonArray(row.completed_instances),
+      sections: this.parseJsonArray(row.sections),
+    };
+  }
+
+  private async getSessionsCompat(): Promise<Session[]> {
+    const result = await db.execute(sql`
+      select id, phase_id, name, description, completed_instances, sections
+      from sessions
+    `);
+    const rows = result.rows as Array<{
+      id: string;
+      phase_id: string;
+      name: string;
+      description: string | null;
+      completed_instances: unknown;
+      sections: unknown;
+    }>;
+    return rows.map((row) => this.toCompatSession(row));
+  }
+
+  private async getSessionsByPhaseCompat(phaseId: string): Promise<Session[]> {
+    const result = await db.execute(sql`
+      select id, phase_id, name, description, completed_instances, sections
+      from sessions
+      where phase_id = ${phaseId}
+    `);
+    const rows = result.rows as Array<{
+      id: string;
+      phase_id: string;
+      name: string;
+      description: string | null;
+      completed_instances: unknown;
+      sections: unknown;
+    }>;
+    return rows.map((row) => this.toCompatSession(row));
+  }
+
+  private async getSessionCompatById(id: string): Promise<Session | undefined> {
+    const result = await db.execute(sql`
+      select id, phase_id, name, description, completed_instances, sections
+      from sessions
+      where id = ${id}
+      limit 1
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          phase_id: string;
+          name: string;
+          description: string | null;
+          completed_instances: unknown;
+          sections: unknown;
+        }
+      | undefined;
+    return row ? this.toCompatSession(row) : undefined;
+  }
+
+  private async createSessionCompat(session: InsertSession): Promise<Session> {
+    const completedInstances = JSON.stringify(
+      Array.isArray(session.completedInstances) ? session.completedInstances : [],
+    );
+    const sectionsJson = JSON.stringify(Array.isArray(session.sections) ? session.sections : []);
+    const result = await db.execute(sql`
+      insert into sessions (phase_id, name, description, completed_instances, sections)
+      values (
+        ${session.phaseId},
+        ${session.name},
+        ${session.description ?? null},
+        ${completedInstances}::jsonb,
+        ${sectionsJson}::jsonb
+      )
+      returning id, phase_id, name, description, completed_instances, sections
+    `);
+    const row = result.rows[0] as {
+      id: string;
+      phase_id: string;
+      name: string;
+      description: string | null;
+      completed_instances: unknown;
+      sections: unknown;
+    };
+    return this.toCompatSession(row);
+  }
+
+  private async updateSessionCompat(
+    id: string,
+    data: Partial<InsertSession>,
+  ): Promise<Session | undefined> {
+    const existing = await this.getSessionCompatById(id);
+    if (!existing) return undefined;
+
+    const merged: Session = {
+      ...existing,
+      ...data,
+      sessionVideoUrl: null,
+      completedInstances: this.parseJsonArray(data.completedInstances ?? existing.completedInstances),
+      sections: this.parseJsonArray(data.sections ?? existing.sections),
+    };
+
+    const completedInstances = JSON.stringify(merged.completedInstances);
+    const sectionsJson = JSON.stringify(merged.sections);
+    const result = await db.execute(sql`
+      update sessions
+      set
+        phase_id = ${merged.phaseId},
+        name = ${merged.name},
+        description = ${merged.description ?? null},
+        completed_instances = ${completedInstances}::jsonb,
+        sections = ${sectionsJson}::jsonb
+      where id = ${id}
+      returning id, phase_id, name, description, completed_instances, sections
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          phase_id: string;
+          name: string;
+          description: string | null;
+          completed_instances: unknown;
+          sections: unknown;
+        }
+      | undefined;
+    return row ? this.toCompatSession(row) : undefined;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     try {
       const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -309,26 +462,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSessions(): Promise<Session[]> {
-    return db.select().from(sessions);
+    try {
+      return db.select().from(sessions);
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getSessionsCompat();
+    }
   }
 
   async getSessionsByPhase(phaseId: string): Promise<Session[]> {
-    return db.select().from(sessions).where(eq(sessions.phaseId, phaseId));
+    try {
+      return db.select().from(sessions).where(eq(sessions.phaseId, phaseId));
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getSessionsByPhaseCompat(phaseId);
+    }
   }
 
   async getSession(id: string): Promise<Session | undefined> {
-    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
-    return session;
+    try {
+      const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
+      return session;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.getSessionCompatById(id);
+    }
   }
 
   async createSession(session: InsertSession): Promise<Session> {
-    const [created] = await db.insert(sessions).values(session).returning();
-    return created;
+    try {
+      const [created] = await db.insert(sessions).values(session).returning();
+      return created;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.createSessionCompat(session);
+    }
   }
 
   async updateSession(id: string, data: Partial<InsertSession>): Promise<Session | undefined> {
-    const [updated] = await db.update(sessions).set(data).where(eq(sessions.id, id)).returning();
-    return updated;
+    try {
+      const [updated] = await db.update(sessions).set(data).where(eq(sessions.id, id)).returning();
+      return updated;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      return this.updateSessionCompat(id, data);
+    }
   }
 
   async deleteSession(id: string): Promise<boolean> {
