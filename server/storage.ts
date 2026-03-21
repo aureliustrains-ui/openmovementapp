@@ -362,7 +362,9 @@ export class DatabaseStorage implements IStorage {
       ...existing,
       ...data,
       sessionVideoUrl: null,
-      completedInstances: this.parseJsonArray(data.completedInstances ?? existing.completedInstances),
+      completedInstances: this.parseJsonArray(
+        data.completedInstances ?? existing.completedInstances,
+      ),
       sections: this.parseJsonArray(data.sections ?? existing.sections),
     };
 

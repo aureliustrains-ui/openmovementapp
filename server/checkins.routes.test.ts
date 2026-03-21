@@ -1460,7 +1460,247 @@ test("PATCH /api/phases/:id lets admin publish to Active or Waiting for Movement
         });
       } catch (error: unknown) {
         if (isEpermSocketError(error)) {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
+test("phase save + publish flow persists sessions and weekly schedule for admin and client reads", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  type CreatePhasePayload = {
+    clientId: string;
+    name: string;
+    goal?: string | null;
+    startDate?: string | null;
+    durationWeeks?: number;
+    status?: string;
+    movementChecks?: unknown[];
+    schedule?: unknown[];
+    completedScheduleInstances?: unknown[];
+  };
+  type CreateSessionPayload = {
+    phaseId: string;
+    name: string;
+    description?: string | null;
+    sessionVideoUrl?: string | null;
+    completedInstances?: unknown[];
+    sections?: unknown[];
+  };
+  const users = new Map<string, User>([
+    ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
+    ["client_1", buildUser({ id: "client_1", role: "Client", email: "client@example.com" })],
+  ]);
+  const phases = new Map<string, Phase>();
+  const sessions = new Map<string, Session>();
+  let phaseCounter = 1;
+  let sessionCounter = 1;
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getPhases: async () => Array.from(phases.values()),
+      getPhasesByClient: async (clientId: string) =>
+        Array.from(phases.values()).filter((phase) => phase.clientId === clientId),
+      getPhase: async (id: string) => phases.get(id),
+      createPhase: async (payload: CreatePhasePayload) => {
+        const id = `phase_${phaseCounter++}`;
+        const created = buildPhase({
+          id,
+          clientId: String(payload.clientId),
+          name: String(payload.name),
+          goal: payload.goal ?? null,
+          startDate: payload.startDate ?? null,
+          durationWeeks: Number(payload.durationWeeks || 4),
+          status: String(payload.status || "Draft"),
+          movementChecks: Array.isArray(payload.movementChecks) ? payload.movementChecks : [],
+          schedule: Array.isArray(payload.schedule) ? payload.schedule : [],
+          completedScheduleInstances: Array.isArray(payload.completedScheduleInstances)
+            ? payload.completedScheduleInstances
+            : [],
+        });
+        phases.set(created.id, created);
+        return created;
+      },
+      updatePhase: async (id: string, data: Partial<Phase>) => {
+        const existing = phases.get(id);
+        if (!existing) return undefined;
+        const updated = { ...existing, ...data } as Phase;
+        phases.set(id, updated);
+        return updated;
+      },
+      getSessions: async () => Array.from(sessions.values()),
+      getSessionsByPhase: async (phaseId: string) =>
+        Array.from(sessions.values()).filter((session) => session.phaseId === phaseId),
+      getSession: async (id: string) => sessions.get(id),
+      createSession: async (payload: CreateSessionPayload) => {
+        const id = `session_${sessionCounter++}`;
+        const created = buildSession({
+          id,
+          phaseId: String(payload.phaseId),
+          name: String(payload.name),
+          description: payload.description ?? null,
+          sessionVideoUrl: payload.sessionVideoUrl ?? null,
+          completedInstances: Array.isArray(payload.completedInstances)
+            ? payload.completedInstances
+            : [],
+          sections: Array.isArray(payload.sections) ? payload.sections : [],
+        });
+        sessions.set(created.id, created);
+        return created;
+      },
+      updateSession: async (id: string, data: Partial<Session>) => {
+        const existing = sessions.get(id);
+        if (!existing) return undefined;
+        const updated = { ...existing, ...data } as Session;
+        sessions.set(id, updated);
+        return updated;
+      },
+      deleteSession: async (id: string) => sessions.delete(id),
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const createPhaseRes = await fetch(`${baseUrl}/api/phases`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              clientId: "client_1",
+              name: "Persistence Flow",
+              goal: "Get stronger",
+              durationWeeks: 4,
+              status: "Draft",
+              movementChecks: [],
+              schedule: [],
+            }),
+          });
+          assert.equal(createPhaseRes.status, 201);
+          const createdPhase = (await createPhaseRes.json()) as Phase;
+
+          const createSessionRes = await fetch(`${baseUrl}/api/sessions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              phaseId: createdPhase.id,
+              name: "Session A",
+              description: "Main session",
+              sections: [],
+              completedInstances: [],
+            }),
+          });
+          assert.equal(createSessionRes.status, 201);
+          const createdSession = (await createSessionRes.json()) as Session;
+
+          const schedule = [
+            { day: "Monday", week: 1, slot: "AM", sessionId: createdSession.id },
+            { day: "Wednesday", week: 1, slot: "PM", sessionId: createdSession.id },
+          ];
+
+          const savePhaseRes = await fetch(`${baseUrl}/api/phases/${createdPhase.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              name: "Persistence Flow",
+              durationWeeks: 4,
+              schedule,
+            }),
+          });
+          assert.equal(savePhaseRes.status, 200);
+
+          const publishRes = await fetch(`${baseUrl}/api/phases/${createdPhase.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              status: "Active",
+              movementChecks: [],
+            }),
+          });
+          assert.equal(publishRes.status, 200);
+
+          const reloadPhaseRes = await fetch(`${baseUrl}/api/phases/${createdPhase.id}`, {
+            headers: { "x-test-user-id": "admin_1" },
+          });
+          assert.equal(reloadPhaseRes.status, 200);
+          const reloadedPhase = (await reloadPhaseRes.json()) as Phase;
+          const reloadedSchedule = Array.isArray(reloadedPhase.schedule)
+            ? (reloadedPhase.schedule as Array<{ sessionId?: string }>)
+            : [];
+          assert.equal(reloadedPhase.status, "Active");
+          assert.equal(reloadedSchedule.length, 2);
+          assert.equal(reloadedSchedule[0]?.sessionId, createdSession.id);
+
+          const adminSessionsByPhaseRes = await fetch(
+            `${baseUrl}/api/sessions?phaseId=${createdPhase.id}`,
+            {
+              headers: { "x-test-user-id": "admin_1" },
+            },
+          );
+          assert.equal(adminSessionsByPhaseRes.status, 200);
+          const adminSessionsByPhase = (await adminSessionsByPhaseRes.json()) as Session[];
+          assert.equal(adminSessionsByPhase.length, 1);
+          assert.equal(adminSessionsByPhase[0]?.id, createdSession.id);
+
+          const adminPhasesByClientRes = await fetch(`${baseUrl}/api/phases?clientId=client_1`, {
+            headers: { "x-test-user-id": "admin_1" },
+          });
+          assert.equal(adminPhasesByClientRes.status, 200);
+          const adminPhasesByClient = (await adminPhasesByClientRes.json()) as Phase[];
+          assert.equal(adminPhasesByClient.length, 1);
+          assert.equal(adminPhasesByClient[0]?.id, createdPhase.id);
+
+          const adminAllSessionsRes = await fetch(`${baseUrl}/api/sessions`, {
+            headers: { "x-test-user-id": "admin_1" },
+          });
+          assert.equal(adminAllSessionsRes.status, 200);
+          const adminAllSessions = (await adminAllSessionsRes.json()) as Session[];
+          const adminPhaseSessionCount = adminAllSessions.filter(
+            (session) => session.phaseId === createdPhase.id,
+          ).length;
+          assert.equal(adminPhaseSessionCount, 1);
+
+          const clientPhasesRes = await fetch(`${baseUrl}/api/phases`, {
+            headers: { "x-test-user-id": "client_1" },
+          });
+          assert.equal(clientPhasesRes.status, 200);
+          const clientPhases = (await clientPhasesRes.json()) as Phase[];
+          const clientSchedule = Array.isArray(clientPhases[0]?.schedule)
+            ? (clientPhases[0].schedule as unknown[])
+            : [];
+          assert.equal(clientPhases.length, 1);
+          assert.equal(clientPhases[0]?.id, createdPhase.id);
+          assert.equal(clientSchedule.length, 2);
+
+          const clientSessionsRes = await fetch(`${baseUrl}/api/sessions`, {
+            headers: { "x-test-user-id": "client_1" },
+          });
+          assert.equal(clientSessionsRes.status, 200);
+          const clientSessions = (await clientSessionsRes.json()) as Session[];
+          assert.equal(clientSessions.length, 1);
+          assert.equal(clientSessions[0]?.id, createdSession.id);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
