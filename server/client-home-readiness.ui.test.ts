@@ -46,7 +46,9 @@ test("client readiness empty state is only shown when transformed trends arrays 
   const clientSource = fs.readFileSync(clientHomePath, "utf8");
 
   assert.ok(
-    clientSource.includes("const hasAnyTrendData = hasAnySessionTrendData || hasAnyWeeklyTrendData;"),
+    clientSource.includes(
+      "const hasAnyTrendData = hasAnySessionTrendData || hasAnyWeeklyTrendData;",
+    ),
   );
   assert.ok(
     clientSource.includes(") : !hasAnyTrendData ? ("),
@@ -59,7 +61,9 @@ test("checkins trend mappers normalize numeric fields for chart rendering", () =
 
   assert.ok(checkinsSource.includes("function toFiniteNumber(value: unknown): number | null"));
   assert.ok(
-    checkinsSource.includes("rpeOverall: toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe)"),
+    checkinsSource.includes(
+      "rpeOverall: toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe)",
+    ),
   );
   assert.ok(
     checkinsSource.includes("sleepLastNight: toFiniteNumber((entry as any).sleepLastNight)"),

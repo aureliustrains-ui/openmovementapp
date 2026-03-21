@@ -18,7 +18,9 @@ export function installGracefulShutdown(options: GracefulShutdownOptions) {
     logInfo("lifecycle", `Received ${signal}, starting graceful shutdown`);
 
     const timeout = setTimeout(() => {
-      logError("lifecycle", "Graceful shutdown timed out; forcing exit", { timeoutMs: options.timeoutMs });
+      logError("lifecycle", "Graceful shutdown timed out; forcing exit", {
+        timeoutMs: options.timeoutMs,
+      });
       process.exit(1);
     }, options.timeoutMs);
 
@@ -45,4 +47,3 @@ export function installGracefulShutdown(options: GracefulShutdownOptions) {
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
-

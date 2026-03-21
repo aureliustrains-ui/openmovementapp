@@ -55,4 +55,3 @@ test("createRateLimitMiddleware blocks requests over the limit", () => {
   assert.deepEqual(res.body, { message: "Too many requests" });
   assert.equal(res.headers.has("Retry-After"), true);
 });
-

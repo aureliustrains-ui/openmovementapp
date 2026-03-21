@@ -115,12 +115,8 @@ test("weekly check-in enforces one submission per week", async () => {
 });
 
 test("admin and coach can read any client check-ins", () => {
-  assert.doesNotThrow(() =>
-    assertCanReadClientCheckins(buildUser({ role: "Admin" }), "client_1"),
-  );
-  assert.doesNotThrow(() =>
-    assertCanReadClientCheckins(buildUser({ role: "Coach" }), "client_1"),
-  );
+  assert.doesNotThrow(() => assertCanReadClientCheckins(buildUser({ role: "Admin" }), "client_1"));
+  assert.doesNotThrow(() => assertCanReadClientCheckins(buildUser({ role: "Coach" }), "client_1"));
 });
 
 test("client can read own check-ins", () => {

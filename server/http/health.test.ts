@@ -51,4 +51,3 @@ test("readiness returns degraded when dependency check fails", async () => {
   assert.equal(res.statusCode, 503);
   assert.equal((res.payload as { status: string }).status, "degraded");
 });
-

@@ -96,7 +96,11 @@ export async function changeAuthenticatedUserPassword(
 
   const user = await requireAuthenticatedUser(input.userId, { users: deps.users });
   if (!user.passwordHash) {
-    throw new AppError("Password change is unavailable for this account", 400, "PASSWORD_UNAVAILABLE");
+    throw new AppError(
+      "Password change is unavailable for this account",
+      400,
+      "PASSWORD_UNAVAILABLE",
+    );
   }
 
   const currentPasswordValid = await deps.verifyPassword(input.currentPassword, user.passwordHash);
@@ -105,7 +109,11 @@ export async function changeAuthenticatedUserPassword(
   }
 
   if (input.currentPassword === normalizedNewPassword) {
-    throw new AppError("New password must be different from current password", 400, "PASSWORD_UNCHANGED");
+    throw new AppError(
+      "New password must be different from current password",
+      400,
+      "PASSWORD_UNCHANGED",
+    );
   }
 
   const newPasswordHash = await deps.hashPassword(normalizedNewPassword);

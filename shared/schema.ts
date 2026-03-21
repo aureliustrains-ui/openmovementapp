@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, json, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  integer,
+  boolean,
+  json,
+  jsonb,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -191,10 +201,9 @@ export const progressReportItems = pgTable(
     reviewedAt: text("reviewed_at"),
   },
   (table) => ({
-    progressReportItemsReportExerciseUnique: uniqueIndex("progress_report_items_report_exercise_unique").on(
-      table.progressReportId,
-      table.exerciseId,
-    ),
+    progressReportItemsReportExerciseUnique: uniqueIndex(
+      "progress_report_items_report_exercise_unique",
+    ).on(table.progressReportId, table.exerciseId),
   }),
 );
 
@@ -232,7 +241,9 @@ export const insertWorkoutLogSchema = createInsertSchema(workoutLogs).omit({ id:
 export const insertSessionCheckinSchema = createInsertSchema(sessionCheckins).omit({ id: true });
 export const insertWeeklyCheckinSchema = createInsertSchema(weeklyCheckins).omit({ id: true });
 export const insertProgressReportSchema = createInsertSchema(progressReports).omit({ id: true });
-export const insertProgressReportItemSchema = createInsertSchema(progressReportItems).omit({ id: true });
+export const insertProgressReportItemSchema = createInsertSchema(progressReportItems).omit({
+  id: true,
+});
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
 export const insertChatReadStatusSchema = createInsertSchema(chatReadStatus).omit({ id: true });
 

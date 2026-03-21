@@ -49,7 +49,11 @@ export async function ensureWeeklyCheckinNotSubmitted(
   phaseWeekNumber: number,
   deps: WeeklyCheckinsPort,
 ): Promise<void> {
-  const existing = await deps.getWeeklyCheckinByClientAndPhaseWeek(clientId, phaseId, phaseWeekNumber);
+  const existing = await deps.getWeeklyCheckinByClientAndPhaseWeek(
+    clientId,
+    phaseId,
+    phaseWeekNumber,
+  );
   if (existing) {
     throw new AppError("Weekly check-in already submitted", 409, "WEEKLY_CHECKIN_EXISTS");
   }
@@ -78,7 +82,7 @@ export function normalizeWeeklyCheckinInput(
     sleepWeek: input.recoveryThisTrainingWeek,
     energyWeek: input.stressOutsideTrainingThisWeek,
     injuryAffectedTraining: input.injuryAffectedTraining,
-    injuryImpact: input.injuryAffectedTraining ? input.injuryImpact ?? 0 : null,
+    injuryImpact: input.injuryAffectedTraining ? (input.injuryImpact ?? 0) : null,
     coachNoteFromClient: input.optionalNote?.trim() || null,
   };
 }

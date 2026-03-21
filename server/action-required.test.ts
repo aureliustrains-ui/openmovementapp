@@ -36,7 +36,10 @@ test("Action Required hides weekly check-in after submission for that week", () 
     weeklyWeekNumber: 2,
     progressReport: null,
   });
-  assert.equal(items.some((item) => item.kind === "weekly_checkin"), false);
+  assert.equal(
+    items.some((item) => item.kind === "weekly_checkin"),
+    false,
+  );
 });
 
 test("Action Required hides progress report after client submission", () => {

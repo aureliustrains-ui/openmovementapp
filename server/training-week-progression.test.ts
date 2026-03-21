@@ -3,10 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  getCurrentLifecycleWeek,
-  getTrainingWeekLifecycle,
-} from "../client/src/lib/trainingWeek";
+import { getCurrentLifecycleWeek, getTrainingWeekLifecycle } from "../client/src/lib/trainingWeek";
 
 test("when week 1 is completed, week 2 becomes the recommended visible week", () => {
   const lifecycle = getTrainingWeekLifecycle(
@@ -62,13 +59,7 @@ test("week with all sessions completed but no weekly check-in is ready_for_check
 });
 
 test("zero scheduled sessions never produce ready_for_checkin state", () => {
-  const lifecycle = getTrainingWeekLifecycle(
-    2,
-    [],
-    [],
-    "phase_1",
-    [],
-  );
+  const lifecycle = getTrainingWeekLifecycle(2, [], [], "phase_1", []);
 
   assert.equal(
     lifecycle.weeks.some((week) => week.state === "ready_for_checkin"),
@@ -159,7 +150,9 @@ test("client dashboard defaults selected phase to active phase with deterministi
     "Shared client phase helper should expose deterministic default visible phase selection",
   );
   assert.ok(
-    helperSource.includes('const activePhases = phases.filter((phase) => phase.status === "Active");'),
+    helperSource.includes(
+      'const activePhases = phases.filter((phase) => phase.status === "Active");',
+    ),
     "Default phase should prioritize active phases",
   );
   assert.ok(
@@ -167,7 +160,9 @@ test("client dashboard defaults selected phase to active phase with deterministi
     "When multiple phases are active, ordering should be deterministic",
   );
   assert.ok(
-    helperSource.includes("parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)"),
+    helperSource.includes(
+      "parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)",
+    ),
     "Deterministic active-phase fallback should prefer most recently started phase",
   );
   assert.ok(
@@ -204,11 +199,15 @@ test("client check-in actions are gated by real session identity and impersonati
   const sessionViewSource = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(
-    myPhaseSource.includes("const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;"),
+    myPhaseSource.includes(
+      "const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;",
+    ),
     "MyPhase should treat client check-ins as read-only outside a real client session context",
   );
   assert.ok(
-    sessionViewSource.includes("const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;"),
+    sessionViewSource.includes(
+      "const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;",
+    ),
     "SessionView should treat after-session check-ins as read-only outside a real client session context",
   );
 });
@@ -218,13 +217,13 @@ test("client dashboard keeps core main items rendered in the same conditional fl
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
   const source = fs.readFileSync(myPhasePath, "utf8");
 
-  assert.ok(source.includes("data-testid=\"card-start-next-session\""));
-  assert.ok(source.includes("data-testid=\"button-start-next-session\""));
-  assert.ok(source.includes("data-testid=\"section-action-required\""));
-  assert.ok(source.includes("testId=\"card-action-weekly-checkin\""));
-  assert.ok(source.includes("testId=\"card-action-progress-report\""));
-  assert.ok(source.includes("data-testid=\"card-schedule-grid\""));
-  assert.ok(source.includes("data-testid=\"text-week-progress\""));
+  assert.ok(source.includes('data-testid="card-start-next-session"'));
+  assert.ok(source.includes('data-testid="button-start-next-session"'));
+  assert.ok(source.includes('data-testid="section-action-required"'));
+  assert.ok(source.includes('testId="card-action-weekly-checkin"'));
+  assert.ok(source.includes('testId="card-action-progress-report"'));
+  assert.ok(source.includes('data-testid="card-schedule-grid"'));
+  assert.ok(source.includes('data-testid="text-week-progress"'));
 });
 
 test("week area is compact and non-horizontal-scroll while keeping schedule content", () => {

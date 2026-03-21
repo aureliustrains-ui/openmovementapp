@@ -24,15 +24,21 @@ test("standard exercise details renderer is reused across plan, movement check, 
   const progressReportSource = fs.readFileSync(progressReportPath, "utf8");
 
   assert.ok(
-    sessionViewSource.includes('import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";'),
+    sessionViewSource.includes(
+      'import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";',
+    ),
     "Session view should import the shared exercise details component",
   );
   assert.ok(
-    myPhaseSource.includes('import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";'),
+    myPhaseSource.includes(
+      'import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";',
+    ),
     "Movement check flow should import the shared exercise details component",
   );
   assert.ok(
-    progressReportSource.includes('import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";'),
+    progressReportSource.includes(
+      'import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";',
+    ),
     "Progress report flow should import the shared exercise details component",
   );
   assert.ok(sessionViewSource.includes("<ExerciseStandardDetails"));
@@ -43,7 +49,9 @@ test("standard exercise details renderer is reused across plan, movement check, 
     "Progress report submission should label the client field as Achieved parameters",
   );
   assert.ok(
-    progressReportSource.includes("<ExerciseStandardDetails exercise={{ ...exercise, name }} showName={false} />"),
+    progressReportSource.includes(
+      "<ExerciseStandardDetails exercise={{ ...exercise, name }} showName={false} />",
+    ),
     "Progress report should render one exercise title/header and avoid duplicate in details block",
   );
   assert.ok(
@@ -126,7 +134,9 @@ test("movement and progress report use inline embedded playback instead of raw-l
   const exerciseDetailsSource = fs.readFileSync(exerciseStandardDetailsPath, "utf8");
 
   assert.ok(
-    progressSource.includes('import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";'),
+    progressSource.includes(
+      'import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";',
+    ),
     "Progress report page should use shared inline player for submission playback",
   );
   assert.ok(

@@ -9,7 +9,10 @@ const settingsPath = path.resolve(serverDir, "../client/src/pages/app/Settings.t
 const apiPath = path.resolve(serverDir, "../client/src/lib/api.ts");
 const chatDisplayNamePath = path.resolve(serverDir, "../client/src/lib/chatDisplayName.ts");
 const clientChatPath = path.resolve(serverDir, "../client/src/pages/client/Chat.tsx");
-const adminClientProfilePath = path.resolve(serverDir, "../client/src/pages/admin/ClientProfile.tsx");
+const adminClientProfilePath = path.resolve(
+  serverDir,
+  "../client/src/pages/admin/ClientProfile.tsx",
+);
 const avatarPath = path.resolve(serverDir, "../client/src/components/ui/avatar.tsx");
 const routesPath = path.resolve(serverDir, "../server/routes.ts");
 
@@ -96,18 +99,20 @@ test("chat read API sends only clientId in payload", () => {
 test("client chat marks unread as read on open using session identity", () => {
   const source = fs.readFileSync(clientChatPath, "utf8");
   assert.ok(source.includes("const { sessionUser, viewedUser } = useAuth();"));
-  assert.ok(source.includes("markRead.mutate({ userId: sessionUser.id, clientId: chatClientId });"));
+  assert.ok(
+    source.includes("markRead.mutate({ userId: sessionUser.id, clientId: chatClientId });"),
+  );
 });
 
 test("chat uses Enter to send and Shift+Enter for newline in both client and admin composers", () => {
   const clientSource = fs.readFileSync(clientChatPath, "utf8");
   const adminSource = fs.readFileSync(adminClientProfilePath, "utf8");
 
-  assert.ok(clientSource.includes("if (e.key !== \"Enter\") return;"));
+  assert.ok(clientSource.includes('if (e.key !== "Enter") return;'));
   assert.ok(clientSource.includes("if (e.shiftKey) return;"));
   assert.ok(clientSource.includes("submitMessage();"));
 
-  assert.ok(adminSource.includes("if (e.key !== \"Enter\") return;"));
+  assert.ok(adminSource.includes('if (e.key !== "Enter") return;'));
   assert.ok(adminSource.includes("if (e.shiftKey) return;"));
   assert.ok(adminSource.includes("submitChatMessage();"));
 });
@@ -164,6 +169,10 @@ test("message API includes sender profile summary for chat preview", () => {
 
 test("avatar upload route persists avatar and returns updated user payload", () => {
   const source = fs.readFileSync(routesPath, "utf8");
-  assert.ok(source.includes("const updated = await storage.updateUser(authUser.id, { avatar: avatarPath });"));
+  assert.ok(
+    source.includes(
+      "const updated = await storage.updateUser(authUser.id, { avatar: avatarPath });",
+    ),
+  );
   assert.ok(source.includes("res.json({ avatar: updated.avatar, user: toPublicUser(updated) });"));
 });

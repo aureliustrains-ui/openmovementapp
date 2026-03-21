@@ -90,7 +90,8 @@ export const submitProgressReportSchema = z
           .strict()
           .refine(
             (value) =>
-              (typeof value.submissionLink === "string" && value.submissionLink.trim().length > 0) ||
+              (typeof value.submissionLink === "string" &&
+                value.submissionLink.trim().length > 0) ||
               (typeof value.submissionObjectKey === "string" &&
                 value.submissionObjectKey.trim().length > 0),
             "Each item must include a submissionLink or submissionObjectKey.",
