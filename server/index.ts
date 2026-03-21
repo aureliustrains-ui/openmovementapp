@@ -18,6 +18,10 @@ const httpServer = createServer(app);
 const config = getConfig();
 const isProductionBuild = process.env.NODE_ENV === "production";
 
+// API consumers expect JSON bodies for successful reads; disable ETag-based 304s
+// to avoid browser revalidation returning empty-body Not Modified responses.
+app.set("etag", false);
+
 async function loadDevViteModule() {
   const viteModulePath = "./vite";
   return import(viteModulePath);

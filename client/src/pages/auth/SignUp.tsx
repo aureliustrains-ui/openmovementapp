@@ -38,7 +38,7 @@ export default function SignUp() {
 
       const payload = await response.json();
       login(payload.user);
-      setLocation("/app/client/my-phase");
+      setLocation("/app/client/home");
     } catch {
       setError("Could not create account.");
     } finally {

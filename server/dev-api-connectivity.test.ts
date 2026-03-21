@@ -11,7 +11,11 @@ const routesPath = path.resolve(serverDir, "../server/routes.ts");
 
 test("vite dev config proxies /api to backend and defaults to port 5099", () => {
   const source = fs.readFileSync(viteConfigPath, "utf8");
-  assert.ok(source.includes('const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:5099";'));
+  assert.ok(
+    source.includes(
+      'const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:5099";',
+    ),
+  );
   assert.ok(source.includes('"/api": {'));
   assert.ok(source.includes("target: apiProxyTarget"));
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
+import { hashPassword } from "./auth";
 import { getWeekStartDateUtc } from "./modules/checkins/checkins.service";
 import type {
   InsertSessionCheckin,
@@ -19,6 +20,29 @@ import type {
 type StorageLike = Record<string, unknown>;
 
 async function loadRouteDeps() {
+  const isolatedEnvKeys = [
+    "BOOTSTRAP_ADMIN_EMAIL",
+    "BOOTSTRAP_ADMIN_PASSWORD",
+    "BOOTSTRAP_ADMIN_NAME",
+    "AWS_S3_BUCKET",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_S3_UPLOAD_URL_TTL_SECONDS",
+    "AWS_S3_READ_URL_TTL_SECONDS",
+    "OBJECT_STORAGE_BUCKET",
+    "OBJECT_STORAGE_REGION",
+    "OBJECT_STORAGE_ACCESS_KEY_ID",
+    "OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "OBJECT_STORAGE_ENDPOINT",
+    "OBJECT_STORAGE_PUBLIC_BASE_URL",
+    "OBJECT_STORAGE_FORCE_PATH_STYLE",
+    "OBJECT_STORAGE_UPLOAD_URL_TTL_SECONDS",
+    "OBJECT_STORAGE_READ_URL_TTL_SECONDS",
+  ] as const;
+  for (const key of isolatedEnvKeys) {
+    delete process.env[key];
+  }
   process.env.DATABASE_URL ??= "postgresql://user:password@localhost:5432/dbname?sslmode=require";
   process.env.SESSION_SECRET ??= "test-session-secret-123456";
   process.env.NODE_ENV = "test";
@@ -57,6 +81,7 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     phaseId: "phase_1",
     name: "Session 1",
     description: null,
+    sessionVideoUrl: null,
     completedInstances: [],
     sections: [],
     ...overrides,
@@ -79,6 +104,25 @@ function buildPhase(overrides: Partial<Phase> = {}): Phase {
   };
 }
 
+function isEpermSocketError(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "EPERM",
+  );
+}
+
+function assertHttpUrl(value: unknown, label: string): void {
+  assert.equal(typeof value, "string", `${label} should be a string URL`);
+  if (typeof value !== "string") return;
+  const parsed = new URL(value);
+  assert.ok(
+    parsed.protocol === "https:" || parsed.protocol === "http:",
+    `${label} should use http or https`,
+  );
+}
+
 async function withPatchedStorage<T>(
   storage: StorageLike,
   patches: Record<string, unknown>,
@@ -98,7 +142,10 @@ async function withPatchedStorage<T>(
 }
 
 async function withTestServer<T>(
-  registerRoutes: (httpServer: ReturnType<typeof createServer>, app: express.Express) => Promise<unknown>,
+  registerRoutes: (
+    httpServer: ReturnType<typeof createServer>,
+    app: express.Express,
+  ) => Promise<unknown>,
   fn: (baseUrl: string) => Promise<T>,
 ): Promise<T> {
   const app = express();
@@ -106,8 +153,17 @@ async function withTestServer<T>(
   app.use((req, _res, next) => {
     const userIdHeader = req.headers["x-test-user-id"];
     const userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
-    (req as { session?: { userId?: string; destroy: (cb: () => void) => void } }).session = {
+    (
+      req as {
+        session?: {
+          userId?: string;
+          save: (cb: (error?: unknown) => void) => void;
+          destroy: (cb: () => void) => void;
+        };
+      }
+    ).session = {
       userId: userId || undefined,
+      save: (cb) => cb(),
       destroy: (cb: () => void) => cb(),
     };
     next();
@@ -147,8 +203,12 @@ test("POST /api/session-checkins inserts row and admin recent endpoint returns i
     ["client_1", buildUser({ id: "client_1", role: "Client" })],
     ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
   ]);
-  const sessionRows = new Map<string, Session>([["session_1", buildSession({ id: "session_1", phaseId: "phase_1" })]]);
-  const phaseRows = new Map<string, Phase>([["phase_1", buildPhase({ id: "phase_1", clientId: "client_1" })]]);
+  const sessionRows = new Map<string, Session>([
+    ["session_1", buildSession({ id: "session_1", phaseId: "phase_1" })],
+  ]);
+  const phaseRows = new Map<string, Phase>([
+    ["phase_1", buildPhase({ id: "phase_1", clientId: "client_1" })],
+  ]);
   const sessionCheckins: SessionCheckin[] = [];
   const weeklyCheckins: WeeklyCheckin[] = [];
 
@@ -201,8 +261,135 @@ test("POST /api/session-checkins inserts row and admin recent endpoint returns i
           assert.ok(recent.sessions.some((entry) => entry.id === created.id));
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
+test("session video URL persists via /api/sessions create/update and is returned on read", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
+  ]);
+  const sessionRows = new Map<string, Session>();
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      createSession: async (payload: {
+        phaseId: string;
+        name: string;
+        description?: string | null;
+        sessionVideoUrl?: string | null;
+        completedInstances?: unknown[];
+        sections?: unknown[];
+      }) => {
+        const row = buildSession({
+          id: "session_created",
+          phaseId: payload.phaseId,
+          name: payload.name,
+          description: payload.description ?? null,
+          sessionVideoUrl: payload.sessionVideoUrl ?? null,
+          completedInstances: Array.isArray(payload.completedInstances)
+            ? payload.completedInstances
+            : [],
+          sections: Array.isArray(payload.sections) ? payload.sections : [],
+        });
+        sessionRows.set(row.id, row);
+        return row;
+      },
+      updateSession: async (
+        id: string,
+        payload: {
+          name?: string;
+          description?: string | null;
+          sessionVideoUrl?: string | null;
+          completedInstances?: unknown[];
+          sections?: unknown[];
+        },
+      ) => {
+        const existing = sessionRows.get(id);
+        if (!existing) return undefined;
+        const updated = {
+          ...existing,
+          ...payload,
+          description:
+            payload.description !== undefined ? payload.description : existing.description,
+          sessionVideoUrl:
+            payload.sessionVideoUrl !== undefined
+              ? payload.sessionVideoUrl
+              : existing.sessionVideoUrl,
+        } as Session;
+        sessionRows.set(id, updated);
+        return updated;
+      },
+      getSession: async (id: string) => sessionRows.get(id),
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const createdVideo = "https://www.youtube.com/watch?v=abc123xyz00";
+          const createRes = await fetch(`${baseUrl}/api/sessions`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              phaseId: "phase_1",
+              name: "Session 1",
+              description: "Session intro",
+              sessionVideoUrl: createdVideo,
+              sections: [],
+              completedInstances: [],
+            }),
+          });
+          assert.equal(createRes.status, 201);
+          const created = (await createRes.json()) as Session;
+          assert.equal(created.sessionVideoUrl, createdVideo);
+
+          const updatedVideo = "https://drive.google.com/file/d/demo/view";
+          const updateRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              sessionVideoUrl: updatedVideo,
+            }),
+          });
+          assert.equal(updateRes.status, 200);
+          const updated = (await updateRes.json()) as Session;
+          assert.equal(updated.sessionVideoUrl, updatedVideo);
+
+          const readRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
+            headers: {
+              "x-test-user-id": "admin_1",
+            },
+          });
+          assert.equal(readRes.status, 200);
+          const readBack = (await readRes.json()) as Session;
+          assert.equal(readBack.sessionVideoUrl, updatedVideo);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -229,14 +416,133 @@ test("GET /api/auth/me is reachable and returns authenticated user payload", asy
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(response.status, 200);
-          const body = (await response.json()) as { user?: { id?: string; email?: string; passwordHash?: string } };
+          const body = (await response.json()) as {
+            user?: { id?: string; email?: string; passwordHash?: string };
+          };
           assert.equal(body.user?.id, "client_1");
           assert.equal(body.user?.email, "client@example.com");
           assert.equal(Boolean(body.user && "passwordHash" in body.user), false);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
+test("POST /api/account/change-password updates credentials and login accepts only new password", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const oldPassword = "OldPassword123!";
+  const newPassword = "NewPassword123!";
+  const users = new Map<string, User>([
+    [
+      "client_1",
+      buildUser({
+        id: "client_1",
+        email: "client@example.com",
+        role: "Client",
+        passwordHash: await hashPassword(oldPassword),
+      }),
+    ],
+  ]);
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getUserByEmail: async (email: string) => {
+        const normalized = email.trim().toLowerCase();
+        return Array.from(users.values()).find((user) => user.email === normalized);
+      },
+      updateUser: async (id: string, payload: Partial<User>) => {
+        const existing = users.get(id);
+        if (!existing) return undefined;
+        const updated = { ...existing, ...payload };
+        users.set(id, updated);
+        return updated;
+      },
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const wrongCurrentRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: "WrongPassword123!",
+              newPassword,
+              confirmPassword: newPassword,
+            }),
+          });
+          assert.equal(wrongCurrentRes.status, 401);
+
+          const mismatchRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: oldPassword,
+              newPassword,
+              confirmPassword: "DifferentPassword123!",
+            }),
+          });
+          assert.equal(mismatchRes.status, 400);
+
+          const changeRes = await fetch(`${baseUrl}/api/account/change-password`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              currentPassword: oldPassword,
+              newPassword,
+              confirmPassword: newPassword,
+            }),
+          });
+          assert.equal(changeRes.status, 204);
+
+          const oldLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: "client@example.com",
+              password: oldPassword,
+            }),
+          });
+          assert.equal(oldLoginRes.status, 401);
+
+          const newLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: "client@example.com",
+              password: newPassword,
+            }),
+          });
+          assert.equal(newLoginRes.status, 200);
+        });
+      } catch (error: unknown) {
+        if (isEpermSocketError(error)) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -302,15 +608,27 @@ test("POST /api/users allows admin to create a client account", async (t) => {
           });
 
           assert.equal(response.status, 201);
-          const body = (await response.json()) as { id?: string; email?: string; role?: string; passwordHash?: string };
+          const body = (await response.json()) as {
+            id?: string;
+            email?: string;
+            role?: string;
+            passwordHash?: string;
+          };
           assert.equal(body.email, "newclient@example.com");
           assert.equal(body.role, "Client");
           assert.equal("passwordHash" in body, false);
           assert.equal(createdUsers.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -331,7 +649,9 @@ test("POST /api/users returns duplicate email error for admin", async (t) => {
     {
       getUser: async (id: string) => users.get(id),
       getUserByEmail: async (email: string) =>
-        Array.from(users.values()).find((entry) => entry.email.toLowerCase() === email.toLowerCase()),
+        Array.from(users.values()).find(
+          (entry) => entry.email.toLowerCase() === email.toLowerCase(),
+        ),
       createUser: async () => {
         throw new Error("should not be called when duplicate email exists");
       },
@@ -358,8 +678,15 @@ test("POST /api/users returns duplicate email error for admin", async (t) => {
           assert.equal(body.message, "Email already in use");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -406,8 +733,15 @@ test("POST /api/users returns validation details for admin invalid payload", asy
           assert.notEqual(body.message, "Invalid user payload");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -452,8 +786,15 @@ test("POST /api/users rejects client sessions", async (t) => {
           assert.equal(body.message, "Forbidden");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -512,8 +853,15 @@ test("PATCH /api/users/:id/status deactivates client and archives client phases"
           assert.equal(phases.get("phase_2")?.status, "Archived");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -526,7 +874,15 @@ test("DELETE /api/users/:id soft-removes client and deletes phases", async (t) =
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([
     ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
-    ["client_1", buildUser({ id: "client_1", role: "Client", status: "Inactive", email: "client@example.com" })],
+    [
+      "client_1",
+      buildUser({
+        id: "client_1",
+        role: "Client",
+        status: "Inactive",
+        email: "client@example.com",
+      }),
+    ],
   ]);
   const phases = new Map<string, Phase>([
     ["phase_1", buildPhase({ id: "phase_1", clientId: "client_1", status: "Active" })],
@@ -562,7 +918,10 @@ test("DELETE /api/users/:id soft-removes client and deletes phases", async (t) =
             },
           });
           assert.equal(response.status, 200);
-          const body = (await response.json()) as { removed?: boolean; user?: { status?: string; email?: string } };
+          const body = (await response.json()) as {
+            removed?: boolean;
+            user?: { status?: string; email?: string };
+          };
           assert.equal(body.removed, true);
           assert.equal(body.user?.status, "Removed");
           assert.ok(Boolean(body.user?.email?.includes("#removed#")));
@@ -570,8 +929,15 @@ test("DELETE /api/users/:id soft-removes client and deletes phases", async (t) =
           assert.equal(phases.size, 0);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -621,8 +987,15 @@ test("POST /api/phase-templates allows admin to create a phase template", async 
           assert.equal(createdRows.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -669,8 +1042,15 @@ test("POST /api/session-templates allows admin to create a session template", as
           assert.equal(createdRows.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -717,8 +1097,15 @@ test("POST /api/section-templates allows admin to create a section template", as
           assert.equal(createdRows.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -774,8 +1161,15 @@ test("POST /api/exercise-templates allows admin to create an exercise template",
           assert.equal(createdRows.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -879,7 +1273,9 @@ test("PATCH /api/phases/:id allows client to update completed schedule instances
             exerciseId?: string;
             videoUrl?: string;
           }>;
-          const adminMovementCheck = adminMovementChecks.find((entry) => entry.exerciseId === "ex_1");
+          const adminMovementCheck = adminMovementChecks.find(
+            (entry) => entry.exerciseId === "ex_1",
+          );
           assert.equal(adminMovementCheck?.videoUrl, "https://youtube.com/watch?v=demo");
 
           const forbiddenRes = await fetch(`${baseUrl}/api/phases/phase_1`, {
@@ -895,8 +1291,15 @@ test("PATCH /api/phases/:id allows client to update completed schedule instances
           assert.equal(forbiddenRes.status, 403);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -961,8 +1364,15 @@ test("PATCH /api/phases/:id returns clear validation error for invalid movement-
           assert.equal(body.message, "Invalid movement check video URL for ex_1");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1006,7 +1416,7 @@ test("POST /api/client-videos/upload-url allows client uploads and validates met
             expiresInSeconds?: number;
           };
           assert.ok(Boolean(validBody.objectKey?.includes("movement-checks/client_1/")));
-          assert.ok(Boolean(validBody.uploadUrl?.startsWith("https://upload.test.invalid/")));
+          assertHttpUrl(validBody.uploadUrl, "uploadUrl");
           assert.equal(typeof validBody.expiresInSeconds, "number");
 
           const validProgress = await fetch(`${baseUrl}/api/client-videos/upload-url`, {
@@ -1041,7 +1451,10 @@ test("POST /api/client-videos/upload-url allows client uploads and validates met
           });
           assert.equal(invalidType.status, 400);
           const invalidTypeBody = (await invalidType.json()) as { message?: string };
-          assert.equal(invalidTypeBody.message, "Invalid video file type. Use mp4, mov, webm, mkv, or 3gp.");
+          assert.equal(
+            invalidTypeBody.message,
+            "Invalid video file type. Use mp4, mov, webm, mkv, or 3gp.",
+          );
 
           const tooLarge = await fetch(`${baseUrl}/api/client-videos/upload-url`, {
             method: "POST",
@@ -1076,8 +1489,15 @@ test("POST /api/client-videos/upload-url allows client uploads and validates met
           assert.equal(adminForbidden.status, 403);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1166,9 +1586,12 @@ test("PATCH /api/phases/:id accepts movement-check upload metadata and grouped a
           assert.equal(movementCheck?.videoObjectKey, objectKey);
           assert.equal(movementCheck?.videoUrl, null);
 
-          const groupedRes = await fetch(`${baseUrl}/api/clients/client_1/movement-checks/grouped`, {
-            headers: { "x-test-user-id": "admin_1" },
-          });
+          const groupedRes = await fetch(
+            `${baseUrl}/api/clients/client_1/movement-checks/grouped`,
+            {
+              headers: { "x-test-user-id": "admin_1" },
+            },
+          );
           assert.equal(groupedRes.status, 200);
           const grouped = (await groupedRes.json()) as Array<{
             phaseId: string;
@@ -1179,11 +1602,18 @@ test("PATCH /api/phases/:id accepts movement-check upload metadata and grouped a
           const groupedItem = phaseGroup?.items.find((item) => item.exerciseId === "ex_1");
           assert.ok(groupedItem);
           assert.equal(groupedItem?.videoSource, "upload");
-          assert.ok(Boolean(groupedItem?.videoUrl?.startsWith("https://cdn.test.invalid/")));
+          assertHttpUrl(groupedItem?.videoUrl, "movement check playback URL");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1197,8 +1627,12 @@ test("POST /api/session-checkins rejects admin users with client-only write erro
   const users = new Map<string, User>([
     ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
   ]);
-  const sessionRows = new Map<string, Session>([["session_1", buildSession({ id: "session_1", phaseId: "phase_1" })]]);
-  const phaseRows = new Map<string, Phase>([["phase_1", buildPhase({ id: "phase_1", clientId: "client_1" })]]);
+  const sessionRows = new Map<string, Session>([
+    ["session_1", buildSession({ id: "session_1", phaseId: "phase_1" })],
+  ]);
+  const phaseRows = new Map<string, Phase>([
+    ["phase_1", buildPhase({ id: "phase_1", clientId: "client_1" })],
+  ]);
 
   await withPatchedStorage(
     storage,
@@ -1231,8 +1665,15 @@ test("POST /api/session-checkins rejects admin users with client-only write erro
           assert.equal(body.message, "Only client accounts can submit session check-ins");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1243,7 +1684,9 @@ test("POST /api/session-checkins rejects admin users with client-only write erro
 
 test("POST /api/weekly-checkins enforces one weekly check-in per client + phase + training week", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const weeklyCheckins: WeeklyCheckin[] = [];
   const currentWeekStart = getWeekStartDateUtc();
   const phase = buildPhase({
@@ -1260,7 +1703,11 @@ test("POST /api/weekly-checkins enforces one weekly check-in per client + phase 
       getUser: async (id: string) => users.get(id),
       getPhasesByClient: async (_clientId: string) => [phase],
       getWeeklyCheckinsByClient: async (_clientId: string) => weeklyCheckins,
-      getWeeklyCheckinByClientAndPhaseWeek: async (clientId: string, phaseId: string, phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
         weeklyCheckins.find(
           (entry) =>
             entry.clientId === clientId &&
@@ -1307,8 +1754,15 @@ test("POST /api/weekly-checkins enforces one weekly check-in per client + phase 
           assert.equal(weeklyCheckins.length, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1352,8 +1806,15 @@ test("POST /api/weekly-checkins rejects admin users with client-only write error
           assert.equal(body.message, "Only client accounts can submit weekly check-ins");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1364,7 +1825,9 @@ test("POST /api/weekly-checkins rejects admin users with client-only write error
 
 test("POST /api/weekly-checkins allows submissions for different training weeks of the same phase", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const weeklyCheckins: WeeklyCheckin[] = [];
   const phase = buildPhase({
     id: "phase_1",
@@ -1403,7 +1866,11 @@ test("POST /api/weekly-checkins allows submissions for different training weeks 
         ];
       },
       getWeeklyCheckinsByClient: async (_clientId: string) => weeklyCheckins,
-      getWeeklyCheckinByClientAndPhaseWeek: async (clientId: string, phaseId: string, phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
         weeklyCheckins.find(
           (entry) =>
             entry.clientId === clientId &&
@@ -1460,8 +1927,15 @@ test("POST /api/weekly-checkins allows submissions for different training weeks 
           );
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1472,7 +1946,9 @@ test("POST /api/weekly-checkins allows submissions for different training weeks 
 
 test("POST /api/weekly-checkins targets requested phase/week and does not use another phase submission", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const weeklyCheckins: WeeklyCheckin[] = [
     {
       id: "wc_phase_1_w1",
@@ -1509,7 +1985,11 @@ test("POST /api/weekly-checkins targets requested phase/week and does not use an
       getUser: async (id: string) => users.get(id),
       getPhasesByClient: async (_clientId: string) => [phaseOne, phaseTwo],
       getWeeklyCheckinsByClient: async (_clientId: string) => weeklyCheckins,
-      getWeeklyCheckinByClientAndPhaseWeek: async (clientId: string, phaseId: string, phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
         weeklyCheckins.find(
           (entry) =>
             entry.clientId === clientId &&
@@ -1549,8 +2029,15 @@ test("POST /api/weekly-checkins targets requested phase/week and does not use an
           assert.equal(body.phaseWeekNumber, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1561,7 +2048,9 @@ test("POST /api/weekly-checkins targets requested phase/week and does not use an
 
 test("GET /api/weekly-checkins/me/current-or-due does not treat week 1 submission as submitted for week 2", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const phase = buildPhase({
     id: "phase_1",
     clientId: "client_1",
@@ -1639,7 +2128,9 @@ test("GET /api/weekly-checkins/me/current-or-due does not treat week 1 submissio
           "code" in error &&
           (error as { code?: unknown }).code === "EPERM"
         ) {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1650,7 +2141,9 @@ test("GET /api/weekly-checkins/me/current-or-due does not treat week 1 submissio
 
 test("GET /api/weekly-checkins/me/current-or-due advances to next week only after previous week check-in is submitted", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const weeklyRows: WeeklyCheckin[] = [];
   const phase = buildPhase({
     id: "phase_1",
@@ -1669,7 +2162,11 @@ test("GET /api/weekly-checkins/me/current-or-due advances to next week only afte
       getUser: async (id: string) => users.get(id),
       getPhasesByClient: async (_clientId: string) => [phase],
       getWeeklyCheckinsByClient: async (_clientId: string) => weeklyRows,
-      getWeeklyCheckinByClientAndPhaseWeek: async (clientId: string, phaseId: string, phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
         weeklyRows.find(
           (entry) =>
             entry.clientId === clientId &&
@@ -1687,7 +2184,10 @@ test("GET /api/weekly-checkins/me/current-or-due advances to next week only afte
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(before.status, 200);
-          const beforeBody = (await before.json()) as { phaseWeekNumber: number | null; due: boolean };
+          const beforeBody = (await before.json()) as {
+            phaseWeekNumber: number | null;
+            due: boolean;
+          };
           assert.equal(beforeBody.phaseWeekNumber, 1);
           assert.equal(beforeBody.due, true);
 
@@ -1709,7 +2209,10 @@ test("GET /api/weekly-checkins/me/current-or-due advances to next week only afte
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(after.status, 200);
-          const afterBody = (await after.json()) as { phaseWeekNumber: number | null; due: boolean };
+          const afterBody = (await after.json()) as {
+            phaseWeekNumber: number | null;
+            due: boolean;
+          };
           assert.equal(afterBody.phaseWeekNumber, 2);
           assert.equal(afterBody.due, false);
         });
@@ -1720,7 +2223,9 @@ test("GET /api/weekly-checkins/me/current-or-due advances to next week only afte
           "code" in error &&
           (error as { code?: unknown }).code === "EPERM"
         ) {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1731,7 +2236,9 @@ test("GET /api/weekly-checkins/me/current-or-due advances to next week only afte
 
 test("POST /api/weekly-checkins allows submissions for different phases", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const weeklyCheckins: WeeklyCheckin[] = [];
   const phaseOne = buildPhase({
     id: "phase_1",
@@ -1758,7 +2265,11 @@ test("POST /api/weekly-checkins allows submissions for different phases", async 
         return [call === 1 ? phaseOne : phaseTwo];
       },
       getWeeklyCheckinsByClient: async (_clientId: string) => weeklyCheckins,
-      getWeeklyCheckinByClientAndPhaseWeek: async (clientId: string, phaseId: string, phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
         weeklyCheckins.find(
           (entry) =>
             entry.clientId === clientId &&
@@ -1803,8 +2314,15 @@ test("POST /api/weekly-checkins allows submissions for different phases", async 
           assert.notEqual(weeklyCheckins[0].phaseId, weeklyCheckins[1].phaseId);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1815,7 +2333,9 @@ test("POST /api/weekly-checkins allows submissions for different phases", async 
 
 test("GET /api/weekly-checkins/me/current-or-due returns due when current week schedule is fully completed", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const currentWeekStart = getWeekStartDateUtc();
   const phase = buildPhase({
     id: "phase_1",
@@ -1826,10 +2346,7 @@ test("GET /api/weekly-checkins/me/current-or-due returns due when current week s
       { week: 1, day: "Monday", slot: "AM", sessionId: "session_1" },
       { week: 1, day: "Wednesday", slot: "PM", sessionId: "session_2" },
     ],
-    completedScheduleInstances: [
-      "w1_Monday_AM_session_1",
-      "w1_Wednesday_PM_session_2",
-    ],
+    completedScheduleInstances: ["w1_Monday_AM_session_1", "w1_Wednesday_PM_session_2"],
   });
 
   await withPatchedStorage(
@@ -1837,8 +2354,13 @@ test("GET /api/weekly-checkins/me/current-or-due returns due when current week s
     {
       getUser: async (id: string) => users.get(id),
       getWeeklyCheckinsByClient: async (_clientId: string) => [],
-      getWeeklyCheckinByClientAndPhaseWeek: async (_clientId: string, _phaseId: string, _phaseWeekNumber: number) => undefined,
-      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) => undefined,
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        _clientId: string,
+        _phaseId: string,
+        _phaseWeekNumber: number,
+      ) => undefined,
+      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) =>
+        undefined,
       getPhasesByClient: async (_clientId: string) => [phase],
     },
     async () => {
@@ -1853,8 +2375,15 @@ test("GET /api/weekly-checkins/me/current-or-due returns due when current week s
           assert.equal(body.phaseWeekNumber, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1865,7 +2394,9 @@ test("GET /api/weekly-checkins/me/current-or-due returns due when current week s
 
 test("GET /api/weekly-checkins/me/current-or-due returns not due when current week has incomplete scheduled sessions", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const currentWeekStart = getWeekStartDateUtc();
   const phase = buildPhase({
     id: "phase_1",
@@ -1884,8 +2415,13 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current we
     {
       getUser: async (id: string) => users.get(id),
       getWeeklyCheckinsByClient: async (_clientId: string) => [],
-      getWeeklyCheckinByClientAndPhaseWeek: async (_clientId: string, _phaseId: string, _phaseWeekNumber: number) => undefined,
-      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) => undefined,
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        _clientId: string,
+        _phaseId: string,
+        _phaseWeekNumber: number,
+      ) => undefined,
+      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) =>
+        undefined,
       getPhasesByClient: async (_clientId: string) => [phase],
     },
     async () => {
@@ -1895,13 +2431,24 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current we
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(response.status, 200);
-          const body = (await response.json()) as { due: boolean; current: WeeklyCheckin | null; phaseWeekNumber?: number | null };
+          const body = (await response.json()) as {
+            due: boolean;
+            current: WeeklyCheckin | null;
+            phaseWeekNumber?: number | null;
+          };
           assert.equal(body.due, false);
           assert.equal(body.phaseWeekNumber, 1);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1912,7 +2459,9 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current we
 
 test("GET /api/weekly-checkins/me/current-or-due returns not due when current training week check-in already exists", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const currentWeekStart = getWeekStartDateUtc();
   const phase = buildPhase({
     id: "phase_1",
@@ -1942,7 +2491,11 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current tr
           coachNoteFromClient: null,
         } as WeeklyCheckin,
       ],
-      getWeeklyCheckinByClientAndPhaseWeek: async (_clientId: string, _phaseId: string, _phaseWeekNumber: number) =>
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        _clientId: string,
+        _phaseId: string,
+        _phaseWeekNumber: number,
+      ) =>
         ({
           id: "wc_1",
           clientId: "client_1",
@@ -1956,7 +2509,8 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current tr
           injuryImpact: null,
           coachNoteFromClient: null,
         }) as WeeklyCheckin,
-      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) => undefined,
+      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) =>
+        undefined,
       getPhasesByClient: async (_clientId: string) => [phase],
     },
     async () => {
@@ -1970,8 +2524,15 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current tr
           assert.equal(body.due, false);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -1982,7 +2543,9 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when current tr
 
 test("GET /api/weekly-checkins/me/current-or-due returns not due when zero sessions are scheduled for the current training week", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const phase = buildPhase({
     id: "phase_1",
     clientId: "client_1",
@@ -1996,8 +2559,13 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when zero sessi
     {
       getUser: async (id: string) => users.get(id),
       getWeeklyCheckinsByClient: async (_clientId: string) => [],
-      getWeeklyCheckinByClientAndPhaseWeek: async (_clientId: string, _phaseId: string, _phaseWeekNumber: number) => undefined,
-      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) => undefined,
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        _clientId: string,
+        _phaseId: string,
+        _phaseWeekNumber: number,
+      ) => undefined,
+      getWeeklyCheckinByClientAndWeek: async (_clientId: string, _weekStartDate: string) =>
+        undefined,
       getPhasesByClient: async (_clientId: string) => [phase],
     },
     async () => {
@@ -2011,8 +2579,15 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when zero sessi
           assert.equal(body.due, false);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2023,7 +2598,9 @@ test("GET /api/weekly-checkins/me/current-or-due returns not due when zero sessi
 
 test("GET /api/weekly-checkins/me/current-or-due ignores legacy/calendar rows and only checks exact phase week submission", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
-  const users = new Map<string, User>([["client_1", buildUser({ id: "client_1", role: "Client" })]]);
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
   const phase = buildPhase({
     id: "phase_1",
     clientId: "client_1",
@@ -2053,7 +2630,11 @@ test("GET /api/weekly-checkins/me/current-or-due ignores legacy/calendar rows an
           coachNoteFromClient: null,
         } as WeeklyCheckin,
       ],
-      getWeeklyCheckinByClientAndPhaseWeek: async (_clientId: string, _phaseId: string, _phaseWeekNumber: number) => undefined,
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        _clientId: string,
+        _phaseId: string,
+        _phaseWeekNumber: number,
+      ) => undefined,
       getWeeklyCheckinByClientAndWeek: async () => {
         throw new Error("calendar-week lookup should not be used");
       },
@@ -2071,8 +2652,15 @@ test("GET /api/weekly-checkins/me/current-or-due ignores legacy/calendar rows an
           assert.equal(body.current, null);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2102,8 +2690,54 @@ test("client cannot access admin client analytics endpoints", async (t) => {
           assert.equal(response.status, 403);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
+test("client can access own client analytics endpoint", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getSessionCheckinsByClient: async () => [],
+      getWeeklyCheckinsByClient: async () => [],
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const response = await fetch(`${baseUrl}/api/clients/client_1/checkins/summary`, {
+            headers: { "x-test-user-id": "client_1" },
+          });
+          assert.equal(response.status, 200);
+        });
+      } catch (error: unknown) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2158,7 +2792,8 @@ test("POST /api/clients/:clientId/progress-reports allows admin to create reques
         items.push(created);
         return created;
       },
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
     },
     async () => {
       try {
@@ -2192,8 +2827,15 @@ test("POST /api/clients/:clientId/progress-reports allows admin to create reques
           assert.equal(invalid.status, 400);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2238,9 +2880,11 @@ test("client can submit progress report and admin can read submitted data withou
     storage,
     {
       getUser: async (id: string) => users.get(id),
-      getProgressReportsByClient: async (clientId: string) => reports.filter((report) => report.clientId === clientId),
+      getProgressReportsByClient: async (clientId: string) =>
+        reports.filter((report) => report.clientId === clientId),
       getProgressReport: async (id: string) => reports.find((report) => report.id === id),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
       updateProgressReport: async (id: string, data: Partial<ProgressReport>) => {
         const row = reports.find((report) => report.id === id);
         if (!row) return undefined;
@@ -2262,7 +2906,9 @@ test("client can submit progress report and admin can read submitted data withou
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(openRes.status, 200);
-          const openBody = (await openRes.json()) as Array<ProgressReport & { items: ProgressReportItem[] }>;
+          const openBody = (await openRes.json()) as Array<
+            ProgressReport & { items: ProgressReportItem[] }
+          >;
           assert.equal(openBody.length, 1);
           assert.equal(openBody[0].status, "requested");
 
@@ -2283,7 +2929,9 @@ test("client can submit progress report and admin can read submitted data withou
             }),
           });
           assert.equal(submitRes.status, 200);
-          const submitBody = (await submitRes.json()) as ProgressReport & { items: ProgressReportItem[] };
+          const submitBody = (await submitRes.json()) as ProgressReport & {
+            items: ProgressReportItem[];
+          };
           assert.equal(submitBody.status, "submitted");
           assert.equal(submitBody.items[0].submissionLink, "https://youtube.com/watch?v=demo");
 
@@ -2291,7 +2939,9 @@ test("client can submit progress report and admin can read submitted data withou
             headers: { "x-test-user-id": "admin_1" },
           });
           assert.equal(adminReadRes.status, 200);
-          const adminReports = (await adminReadRes.json()) as Array<ProgressReport & { items: ProgressReportItem[] }>;
+          const adminReports = (await adminReadRes.json()) as Array<
+            ProgressReport & { items: ProgressReportItem[] }
+          >;
           assert.equal(adminReports[0].items[0].submissionNote, "Depth feels stronger");
 
           const phasesRes = await fetch(`${baseUrl}/api/phases`, {
@@ -2303,8 +2953,15 @@ test("client can submit progress report and admin can read submitted data withou
           assert.equal(clientPhases[0].status, "Active");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2319,7 +2976,12 @@ test("client can submit uploaded progress-report video and admin can review it",
     ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
     ["client_1", buildUser({ id: "client_1", role: "Client", email: "client@example.com" })],
   ]);
-  const phase = buildPhase({ id: "phase_1", clientId: "client_1", status: "Active", name: "Active phase" });
+  const phase = buildPhase({
+    id: "phase_1",
+    clientId: "client_1",
+    status: "Active",
+    name: "Active phase",
+  });
   const reports: ProgressReport[] = [
     {
       id: "pr_upload",
@@ -2354,8 +3016,10 @@ test("client can submit uploaded progress-report video and admin can review it",
     {
       getUser: async (id: string) => users.get(id),
       getProgressReport: async (id: string) => reports.find((report) => report.id === id),
-      getProgressReportsByClient: async (clientId: string) => reports.filter((report) => report.clientId === clientId),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportsByClient: async (clientId: string) =>
+        reports.filter((report) => report.clientId === clientId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
       updateProgressReportItem: async (id: string, data: Partial<ProgressReportItem>) => {
         const row = items.find((item) => item.id === id);
         if (!row) return undefined;
@@ -2401,11 +3065,14 @@ test("client can submit uploaded progress-report video and admin can review it",
           assert.equal(submitBody.items[0].submissionSource, "upload");
           assert.equal(submitBody.items[0].submissionObjectKey, objectKey);
           assert.equal(submitBody.items[0].submissionLink, null);
-          assert.ok(Boolean(submitBody.items[0].submissionPlaybackUrl?.startsWith("https://cdn.test.invalid/")));
+          assertHttpUrl(submitBody.items[0].submissionPlaybackUrl, "progress report playback URL");
 
-          const groupedRes = await fetch(`${baseUrl}/api/clients/client_1/progress-reports/grouped`, {
-            headers: { "x-test-user-id": "admin_1" },
-          });
+          const groupedRes = await fetch(
+            `${baseUrl}/api/clients/client_1/progress-reports/grouped`,
+            {
+              headers: { "x-test-user-id": "admin_1" },
+            },
+          );
           assert.equal(groupedRes.status, 200);
           const groupedBody = (await groupedRes.json()) as Array<{
             phaseId: string;
@@ -2421,19 +3088,22 @@ test("client can submit uploaded progress-report video and admin can review it",
           const groupedItem = group?.items.find((entry) => entry.itemId === "pri_upload");
           assert.equal(groupedItem?.submissionSource, "upload");
           assert.equal(groupedItem?.submissionObjectKey, objectKey);
-          assert.ok(Boolean(groupedItem?.submissionPlaybackUrl?.startsWith("https://cdn.test.invalid/")));
+          assertHttpUrl(groupedItem?.submissionPlaybackUrl, "grouped progress report playback URL");
 
-          const reviewRes = await fetch(`${baseUrl}/api/progress-reports/pr_upload/items/pri_upload/review`, {
-            method: "PATCH",
-            headers: {
-              "content-type": "application/json",
-              "x-test-user-id": "admin_1",
+          const reviewRes = await fetch(
+            `${baseUrl}/api/progress-reports/pr_upload/items/pri_upload/review`,
+            {
+              method: "PATCH",
+              headers: {
+                "content-type": "application/json",
+                "x-test-user-id": "admin_1",
+              },
+              body: JSON.stringify({
+                decision: "approve",
+                feedbackNote: "Great progress this week.",
+              }),
             },
-            body: JSON.stringify({
-              decision: "approve",
-              feedbackNote: "Great progress this week.",
-            }),
-          });
+          );
           assert.equal(reviewRes.status, 200);
           const reviewed = (await reviewRes.json()) as ProgressReport & {
             items: Array<ProgressReportItem>;
@@ -2443,8 +3113,15 @@ test("client can submit uploaded progress-report video and admin can review it",
           assert.equal(reviewed.items[0].feedbackNote, "Great progress this week.");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2489,7 +3166,8 @@ test("admin can approve progress report item and feedback is visible to client",
     {
       getUser: async (id: string) => users.get(id),
       getProgressReport: async (id: string) => reports.find((report) => report.id === id),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
       updateProgressReportItem: async (id: string, data: Partial<ProgressReportItem>) => {
         const row = items.find((item) => item.id === id);
         if (!row) return undefined;
@@ -2518,7 +3196,9 @@ test("admin can approve progress report item and feedback is visible to client",
             }),
           });
           assert.equal(reviewRes.status, 200);
-          const reviewed = (await reviewRes.json()) as ProgressReport & { items: ProgressReportItem[] };
+          const reviewed = (await reviewRes.json()) as ProgressReport & {
+            items: ProgressReportItem[];
+          };
           assert.equal(reviewed.status, "approved");
           assert.equal(reviewed.items[0].reviewStatus, "approved");
           assert.equal(reviewed.items[0].feedbackNote, "Great improvement in control and range");
@@ -2527,13 +3207,22 @@ test("admin can approve progress report item and feedback is visible to client",
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(clientReadRes.status, 200);
-          const clientRead = (await clientReadRes.json()) as ProgressReport & { items: ProgressReportItem[] };
+          const clientRead = (await clientReadRes.json()) as ProgressReport & {
+            items: ProgressReportItem[];
+          };
           assert.equal(clientRead.items[0].feedbackNote, "Great improvement in control and range");
           assert.equal(clientRead.items[0].reviewStatus, "approved");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2578,7 +3267,8 @@ test("admin can request progress report resubmission and client can submit again
     {
       getUser: async (id: string) => users.get(id),
       getProgressReport: async (id: string) => reports.find((report) => report.id === id),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
       updateProgressReportItem: async (id: string, data: Partial<ProgressReportItem>) => {
         const row = items.find((item) => item.id === id);
         if (!row) return undefined;
@@ -2607,7 +3297,9 @@ test("admin can request progress report resubmission and client can submit again
             }),
           });
           assert.equal(reviewRes.status, 200);
-          const reviewed = (await reviewRes.json()) as ProgressReport & { items: ProgressReportItem[] };
+          const reviewed = (await reviewRes.json()) as ProgressReport & {
+            items: ProgressReportItem[];
+          };
           assert.equal(reviewed.status, "resubmission_requested");
           assert.equal(reviewed.items[0].reviewStatus, "resubmission_requested");
 
@@ -2634,8 +3326,15 @@ test("admin can request progress report resubmission and client can submit again
           assert.equal(body.items[0].feedbackNote, null);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2650,7 +3349,12 @@ test("GET /api/progress-reports/me/active-phase keeps submitted progress reports
     ["client_1", buildUser({ id: "client_1", role: "Client", email: "client@example.com" })],
   ]);
   const phases: Phase[] = [
-    buildPhase({ id: "phase_active", clientId: "client_1", status: "Active", name: "Active phase" }),
+    buildPhase({
+      id: "phase_active",
+      clientId: "client_1",
+      status: "Active",
+      name: "Active phase",
+    }),
     buildPhase({ id: "phase_old", clientId: "client_1", status: "Completed", name: "Old phase" }),
   ];
   const reports: ProgressReport[] = [
@@ -2723,8 +3427,10 @@ test("GET /api/progress-reports/me/active-phase keeps submitted progress reports
     {
       getUser: async (id: string) => users.get(id),
       getPhasesByClient: async (clientId: string) => (clientId === "client_1" ? phases : []),
-      getProgressReportsByClient: async (clientId: string) => reports.filter((report) => report.clientId === clientId),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportsByClient: async (clientId: string) =>
+        reports.filter((report) => report.clientId === clientId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
     },
     async () => {
       try {
@@ -2733,7 +3439,9 @@ test("GET /api/progress-reports/me/active-phase keeps submitted progress reports
             headers: { "x-test-user-id": "client_1" },
           });
           assert.equal(response.status, 200);
-          const body = (await response.json()) as Array<ProgressReport & { items: ProgressReportItem[] }>;
+          const body = (await response.json()) as Array<
+            ProgressReport & { items: ProgressReportItem[] }
+          >;
           assert.equal(body.length, 2);
           assert.deepEqual(
             body.map((report) => report.id),
@@ -2743,8 +3451,15 @@ test("GET /api/progress-reports/me/active-phase keeps submitted progress reports
           assert.equal(body[1].phaseId, "phase_active");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2793,7 +3508,8 @@ test("progress report auth boundaries are enforced", async (t) => {
       getPhasesByClient: async (clientId: string) => (clientId === "client_1" ? [phase] : []),
       getSessionsByPhase: async () => [],
       getProgressReport: async (id: string) => reports.find((report) => report.id === id),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
     },
     async () => {
       try {
@@ -2833,8 +3549,15 @@ test("progress report auth boundaries are enforced", async (t) => {
           assert.equal(otherClientSubmit.status, 403);
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2910,10 +3633,7 @@ test("GET /api/clients/:clientId/movement-checks/grouped keeps movement checks s
           }>;
 
           assert.equal(body.length, 2);
-          assert.deepEqual(
-            body.map((group) => group.phaseId).sort(),
-            ["phase_1", "phase_3"],
-          );
+          assert.deepEqual(body.map((group) => group.phaseId).sort(), ["phase_1", "phase_3"]);
           const alpha = body.find((group) => group.phaseId === "phase_1");
           assert.ok(alpha);
           assert.equal(alpha.items[0].exerciseId, "ex_1");
@@ -2924,8 +3644,15 @@ test("GET /api/clients/:clientId/movement-checks/grouped keeps movement checks s
           assert.equal(gamma.items[0].status, "reviewed");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -2983,8 +3710,10 @@ test("GET /api/clients/:clientId/progress-reports/grouped returns phase-grouped 
     {
       getUser: async (id: string) => users.get(id),
       getPhasesByClient: async (clientId: string) => (clientId === "client_1" ? phases : []),
-      getProgressReportsByClient: async (clientId: string) => reports.filter((report) => report.clientId === clientId),
-      getProgressReportItems: async (reportId: string) => items.filter((item) => item.progressReportId === reportId),
+      getProgressReportsByClient: async (clientId: string) =>
+        reports.filter((report) => report.clientId === clientId),
+      getProgressReportItems: async (reportId: string) =>
+        items.filter((item) => item.progressReportId === reportId),
     },
     async () => {
       try {
@@ -2996,7 +3725,12 @@ test("GET /api/clients/:clientId/progress-reports/grouped returns phase-grouped 
           const body = (await response.json()) as Array<{
             phaseId: string;
             phaseName: string;
-            items: Array<{ exerciseId: string; reportStatus: string; reviewStatus: string; submissionNote: string | null }>;
+            items: Array<{
+              exerciseId: string;
+              reportStatus: string;
+              reviewStatus: string;
+              submissionNote: string | null;
+            }>;
           }>;
 
           assert.equal(body.length, 1);
@@ -3009,8 +3743,15 @@ test("GET /api/clients/:clientId/progress-reports/grouped returns phase-grouped 
           assert.equal(body[0].items[0].submissionNote, "2 more reps this week");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;
@@ -3109,7 +3850,12 @@ test("movement checks remain phase-siloed when client submits checks in parallel
           const body = (await grouped.json()) as Array<{
             phaseId: string;
             phaseName: string;
-            items: Array<{ exerciseId: string; videoUrl: string | null; status: string; note?: string }>;
+            items: Array<{
+              exerciseId: string;
+              videoUrl: string | null;
+              status: string;
+              note?: string;
+            }>;
           }>;
 
           const phaseOne = body.find((entry) => entry.phaseId === "phase_1");
@@ -3122,8 +3868,15 @@ test("movement checks remain phase-siloed when client submits checks in parallel
           assert.equal(phaseTwo.items[0].status, "submitted");
         });
       } catch (error: unknown) {
-        if (error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "EPERM") {
-          t.skip("Sandbox blocks local socket binding; run on local machine to execute API route test.");
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
           return;
         }
         throw error;

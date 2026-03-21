@@ -1,5 +1,6 @@
 import type { BlueprintExercise, BlueprintSection } from "@/lib/blueprintClone";
 import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal";
+import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +13,7 @@ type SessionLike = {
   id: string;
   name: string;
   description: string;
+  sessionVideoUrl?: string;
   sections: BlueprintSection[];
 };
 
@@ -27,6 +29,7 @@ type SessionEditorCardProps<TSession extends SessionLike> = {
   onCreateSection: () => BlueprintSection;
   onCloneSectionTemplate: (template: any) => BlueprintSection;
   onCloneExerciseTemplate: (template: any) => BlueprintExercise;
+  showSessionVideoField?: boolean;
 };
 
 export function SessionEditorCard<TSession extends SessionLike>({
@@ -41,6 +44,7 @@ export function SessionEditorCard<TSession extends SessionLike>({
   onCreateSection,
   onCloneSectionTemplate,
   onCloneExerciseTemplate,
+  showSessionVideoField = false,
 }: SessionEditorCardProps<TSession>) {
   const [collapsed, setCollapsed] = useState(false);
   const [addSectionModalOpen, setAddSectionModalOpen] = useState(false);
@@ -113,6 +117,28 @@ export function SessionEditorCard<TSession extends SessionLike>({
             placeholder="Session description"
             className="bg-slate-50 border-slate-200"
           />
+
+          {showSessionVideoField ? (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-600">Session video (optional)</label>
+              <Input
+                value={session.sessionVideoUrl || ""}
+                onChange={(e) =>
+                  onSessionChange((prev) => ({ ...prev, sessionVideoUrl: e.target.value }))
+                }
+                placeholder="https://youtube.com/watch?v=..."
+                className="bg-slate-50 border-slate-200"
+              />
+              {session.sessionVideoUrl?.trim() ? (
+                <InlineVideoPlayer
+                  url={session.sessionVideoUrl}
+                  sourceType="link"
+                  openLinkLabel="Open session video"
+                  testId={`session-video-preview-${session.id}`}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           {session.sections.map((section, sectionIdx) => (
             <SectionEditorCard

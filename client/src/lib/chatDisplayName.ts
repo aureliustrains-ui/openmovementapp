@@ -1,11 +1,12 @@
-type ChatSenderProfileLike = {
-  firstName?: string | null;
-  infos?: string | null;
-  name?: string | null;
-};
+import { resolveUserFirstName } from "@/lib/userDisplayName";
 
 type ChatSenderLike = {
-  senderProfile?: ChatSenderProfileLike | null;
+  senderProfile?: {
+    firstName?: string | null;
+    infos?: string | null;
+    name?: string | null;
+    email?: string | null;
+  } | null;
   senderName?: string | null;
   sender?: string | null;
 };
@@ -23,10 +24,12 @@ function firstToken(value: string | null | undefined): string {
 
 export function getChatDisplayFirstName(sender: ChatSenderLike): string {
   const profile = sender?.senderProfile || null;
-  const explicitFirstName = normalize(profile?.firstName || profile?.infos);
-  if (explicitFirstName) return explicitFirstName;
+  const explicitProfileFirstName = normalize(profile?.firstName || profile?.infos);
+  if (explicitProfileFirstName) return explicitProfileFirstName;
 
-  const fallback = firstToken(sender?.senderName || profile?.name || sender?.sender);
+  const profileName = resolveUserFirstName(profile);
+  if (profileName && profileName !== "there") return profileName;
+
+  const fallback = firstToken(sender?.senderName || sender?.sender);
   return fallback || "Profile";
 }
-

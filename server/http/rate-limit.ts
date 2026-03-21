@@ -47,4 +47,3 @@ export function createRateLimitMiddleware(options: RateLimitOptions) {
 export function clearRateLimitState() {
   counters.clear();
 }
-

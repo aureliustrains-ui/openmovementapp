@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,9 +20,10 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Slider } from "@/components/ui/slider";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
+import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { normalizeVideoSource } from "@/lib/video";
+import { requiresMovementCheckBeforeSession } from "@/lib/sessionEntry";
 
 type SetLog = { weight: string; reps: string };
 
@@ -47,6 +48,8 @@ export default function ClientSessionView() {
 
   const session = allSessions.find((s: any) => s.id === sessionId);
   const phase = allPhases.find((p: any) => p.id === session?.phaseId);
+  const movementCheckBlocked = requiresMovementCheckBeforeSession(phase as any);
+  const redirectedForMovementCheckRef = useRef(false);
 
   const { data: workoutLogs = [] } = useQuery({
     ...workoutLogsQuery(viewedUser?.id || ''),
@@ -60,7 +63,7 @@ export default function ClientSessionView() {
   const [finishing, setFinishing] = useState(false);
   const [afterSessionOpen, setAfterSessionOpen] = useState(false);
   const [afterSessionRpe, setAfterSessionRpe] = useState(6);
-  const [afterSessionSleep, setAfterSessionSleep] = useState(3);
+  const [afterSessionSleep, setAfterSessionSleep] = useState(6);
   const [afterSessionFeltOff, setAfterSessionFeltOff] = useState(false);
   const [afterSessionWhatFeltOff, setAfterSessionWhatFeltOff] = useState("");
   const [afterSessionOptionalNote, setAfterSessionOptionalNote] = useState("");
@@ -71,6 +74,24 @@ export default function ClientSessionView() {
   );
   const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;
 
+  useEffect(() => {
+    if (
+      isLoading ||
+      !session ||
+      !phase ||
+      !movementCheckBlocked ||
+      redirectedForMovementCheckRef.current
+    ) {
+      return;
+    }
+    redirectedForMovementCheckRef.current = true;
+    toast({
+      title: "Movement check required",
+      description: "Complete your movement check before starting this session.",
+    });
+    setLocation("/app/client/my-phase");
+  }, [isLoading, movementCheckBlocked, phase, session, setLocation, toast]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -80,12 +101,23 @@ export default function ClientSessionView() {
   }
 
   if (!session) return <div>Session not found</div>;
+  if (session && phase && movementCheckBlocked) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-700" />
+      </div>
+    );
+  }
 
   const instanceKey = `w${week}_${day}_${slot}_${session.id}`;
   const completedInstances: string[] = (phase?.completedScheduleInstances as string[]) || [];
   const isSessionComplete = completedInstances.includes(instanceKey);
 
   const schedule: any[] = (phase?.schedule as any[]) || [];
+  const sessionDescription =
+    typeof session.description === "string" ? session.description.trim() : "";
+  const sessionVideoUrl =
+    typeof session.sessionVideoUrl === "string" ? session.sessionVideoUrl.trim() : "";
   const sessionSections = useMemo(() => (session.sections as any[]) || [], [session.sections]);
 
   useEffect(() => {
@@ -209,7 +241,7 @@ export default function ClientSessionView() {
         description: "Your workout has been saved.",
       });
       setAfterSessionRpe(6);
-      setAfterSessionSleep(3);
+      setAfterSessionSleep(6);
       setAfterSessionFeltOff(false);
       setAfterSessionWhatFeltOff("");
       setAfterSessionOptionalNote("");
@@ -230,7 +262,7 @@ export default function ClientSessionView() {
       toast({
         title: "Read-only client context",
         description:
-          "After-session check-ins can be submitted only in a real client session for this client.",
+          "Session reviews can be submitted only in a real client session for this client.",
         variant: "destructive",
       });
       return;
@@ -252,19 +284,19 @@ export default function ClientSessionView() {
         ? checkins.some((entry: any) => entry.id === created?.id || (entry.sessionId === session.id && entry.rpeOverall === afterSessionRpe))
         : false;
       if (!confirmed) {
-        throw new Error("Check-in write could not be verified");
+        throw new Error("Session review write could not be verified");
       }
 
       toast({
-        title: "Check-in saved",
-        description: "Your after-session check-in was saved successfully.",
+        title: "Session review saved",
+        description: "Your after-session review was saved successfully.",
       });
       setAfterSessionOpen(false);
       setLocation("/app/client/my-phase");
     } catch (error: any) {
-      const message = error?.message || "Could not save check-in";
+      const message = error?.message || "Could not save session review";
       toast({
-        title: "Could not save check-in",
+        title: "Could not save session review",
         description: message,
         variant: "destructive",
       });
@@ -293,7 +325,7 @@ export default function ClientSessionView() {
           Client check-ins are read-only unless you are logged in as this client account.
         </div>
       )}
-      <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md border-b border-slate-200 py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center gap-4">
+      <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center gap-4">
         <Link href="/app/client/my-phase">
           <Button variant="ghost" size="icon" className="rounded-full bg-white border border-slate-200 shadow-sm" data-testid="button-back-phase">
             <ArrowLeft className="h-5 w-5" />
@@ -302,8 +334,24 @@ export default function ClientSessionView() {
         <div>
           <h1 className="font-display font-bold text-lg text-slate-900 leading-tight" data-testid="text-session-name">{session.name}</h1>
           <p className="text-xs text-slate-500">{phase?.name}{day ? ` \u2022 Week ${week} \u2022 ${day} ${slot}` : ''}</p>
+          {sessionDescription ? (
+            <p className="mt-1 text-sm leading-relaxed text-slate-700" data-testid="text-session-description">
+              {sessionDescription}
+            </p>
+          ) : null}
+          {sessionVideoUrl ? (
+            <div className="mt-3 max-w-lg" data-testid="session-header-video-wrap">
+              <InlineVideoPlayer
+                url={sessionVideoUrl}
+                sourceType="link"
+                openLinkLabel="Open session video"
+                testId="session-header-video"
+              />
+            </div>
+          ) : null}
         </div>
       </div>
+      <div className="border-b border-slate-200" />
 
       <div className="mt-5 space-y-1.5 lg:hidden" data-testid="list-session-sections-mobile">
         {sessionSections.map((section: any) => (
@@ -544,45 +592,21 @@ export default function ClientSessionView() {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Quick session check-in</DialogTitle>
+            <DialogTitle>Quick session review</DialogTitle>
             <DialogDescription>This takes about 10–20 seconds.</DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
             <div className="space-y-3">
-              <div className="text-sm font-semibold text-slate-900">How hard was this session overall?</div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-baseline justify-between">
-                  <span className="text-xs uppercase tracking-wider text-slate-500">Session RPE</span>
-                  <span className="text-2xl font-bold text-slate-900">{afterSessionRpe}</span>
-                </div>
-                <Slider
-                  min={0}
-                  max={10}
-                  step={1}
-                  value={[afterSessionRpe]}
-                  onValueChange={(value) => setAfterSessionRpe(value[0] ?? 6)}
-                />
-                <div className="mt-3 grid grid-cols-5 text-[10px] text-slate-500">
-                  <span>0 Rest</span>
-                  <span>2 Very easy</span>
-                  <span>4 Moderate</span>
-                  <span>6 Hard</span>
-                  <span className="text-right">10 Max</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="text-sm font-semibold text-slate-900">Sleep last night</div>
-              <div className="grid grid-cols-5 gap-2">
-                {[1, 2, 3, 4, 5].map((value) => (
+              <div className="text-sm font-semibold text-slate-900">Session effort</div>
+              <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
                   <button
-                    key={`sleep-last-night-${value}`}
+                    key={`session-effort-${value}`}
                     type="button"
-                    onClick={() => setAfterSessionSleep(value)}
+                    onClick={() => setAfterSessionRpe(value)}
                     className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
-                      afterSessionSleep === value
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                      afterSessionRpe === value
+                        ? "border-slate-900 bg-slate-900 text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
@@ -590,7 +614,28 @@ export default function ClientSessionView() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-slate-500">1 Very poor · 2 Poor · 3 OK · 4 Good · 5 Excellent</p>
+              <p className="text-xs text-slate-500">1 Very easy · 10 Max effort</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-slate-900">Sleep last night</div>
+              <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
+                  <button
+                    key={`sleep-last-night-${value}`}
+                    type="button"
+                    onClick={() => setAfterSessionSleep(value)}
+                    className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
+                      afterSessionSleep === value
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">1 Very poor · 10 Excellent</p>
             </div>
 
             <div className="space-y-3">
@@ -647,7 +692,7 @@ export default function ClientSessionView() {
           <DialogFooter>
             <Button onClick={handleSubmitAfterSessionCheckin} disabled={savingAfterSession || isCheckinReadOnly}>
               {savingAfterSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Save check-in
+              Save session review
             </Button>
           </DialogFooter>
         </DialogContent>

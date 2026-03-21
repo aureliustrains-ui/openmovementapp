@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  integer,
+  boolean,
+  json,
+  jsonb,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -23,6 +33,12 @@ export const users = pgTable("users", {
   specificsUpdatedBy: text("specifics_updated_by"),
 });
 
+export const sessionStore = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { mode: "string" }).notNull(),
+});
+
 export const phases = pgTable("phases", {
   id: varchar("id", { length: 64 })
     .primaryKey()
@@ -36,6 +52,7 @@ export const phases = pgTable("phases", {
   movementChecks: jsonb("movement_checks").notNull().default([]),
   schedule: jsonb("schedule").notNull().default([]),
   completedScheduleInstances: jsonb("completed_schedule_instances").notNull().default([]),
+  homeIntroVideoUrl: text("home_intro_video_url"),
 });
 
 export const sessions = pgTable("sessions", {
@@ -45,6 +62,7 @@ export const sessions = pgTable("sessions", {
   phaseId: varchar("phase_id", { length: 64 }).notNull(),
   name: text("name").notNull(),
   description: text("description"),
+  sessionVideoUrl: text("session_video_url"),
   completedInstances: jsonb("completed_instances").notNull().default([]),
   sections: jsonb("sections").notNull().default([]),
 });
@@ -183,10 +201,9 @@ export const progressReportItems = pgTable(
     reviewedAt: text("reviewed_at"),
   },
   (table) => ({
-    progressReportItemsReportExerciseUnique: uniqueIndex("progress_report_items_report_exercise_unique").on(
-      table.progressReportId,
-      table.exerciseId,
-    ),
+    progressReportItemsReportExerciseUnique: uniqueIndex(
+      "progress_report_items_report_exercise_unique",
+    ).on(table.progressReportId, table.exerciseId),
   }),
 );
 
@@ -224,7 +241,9 @@ export const insertWorkoutLogSchema = createInsertSchema(workoutLogs).omit({ id:
 export const insertSessionCheckinSchema = createInsertSchema(sessionCheckins).omit({ id: true });
 export const insertWeeklyCheckinSchema = createInsertSchema(weeklyCheckins).omit({ id: true });
 export const insertProgressReportSchema = createInsertSchema(progressReports).omit({ id: true });
-export const insertProgressReportItemSchema = createInsertSchema(progressReportItems).omit({ id: true });
+export const insertProgressReportItemSchema = createInsertSchema(progressReportItems).omit({
+  id: true,
+});
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true });
 export const insertChatReadStatusSchema = createInsertSchema(chatReadStatus).omit({ id: true });
 

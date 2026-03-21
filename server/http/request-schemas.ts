@@ -37,8 +37,8 @@ export const markChatReadSchema = z
 export const createSessionCheckinSchema = z
   .object({
     sessionId: z.string().min(1).max(64),
-    sessionRpe: z.number().int().min(0).max(10),
-    sleepLastNight: z.number().int().min(1).max(5),
+    sessionRpe: z.number().int().min(1).max(10),
+    sleepLastNight: z.number().int().min(1).max(10),
     feltOff: z.boolean().optional().default(false),
     whatFeltOff: z.string().max(2000).nullable().optional(),
     optionalNote: z.string().max(4000).nullable().optional(),
@@ -90,7 +90,8 @@ export const submitProgressReportSchema = z
           .strict()
           .refine(
             (value) =>
-              (typeof value.submissionLink === "string" && value.submissionLink.trim().length > 0) ||
+              (typeof value.submissionLink === "string" &&
+                value.submissionLink.trim().length > 0) ||
               (typeof value.submissionObjectKey === "string" &&
                 value.submissionObjectKey.trim().length > 0),
             "Each item must include a submissionLink or submissionObjectKey.",

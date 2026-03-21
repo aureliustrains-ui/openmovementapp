@@ -39,7 +39,7 @@ export default function Login() {
       if (payload.user.role === "Admin") {
         setLocation("/app/admin/clients");
       } else {
-        setLocation("/app/client/my-phase");
+        setLocation("/app/client/home");
       }
     } catch {
       setError("Could not sign in. Please try again.");

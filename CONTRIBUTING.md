@@ -3,11 +3,28 @@
 ## Local setup
 
 1. Copy env template and set secrets locally:
-   - `cp .env.example .env` (or export variables in your shell)
+   - `cp .env.example .env.local`
 2. Install dependencies:
    - `npm install`
 3. Start the app:
    - `npm run dev`
+
+## Local env safety
+
+- Local runtime and db tooling now load env files in this order:
+  1. explicit shell env vars (highest priority)
+  2. `.env.local`
+  3. `.env`
+- Keep local secrets in `.env.local` only.
+- `.env.local` and `.env.*.local` are gitignored and must never be committed.
+- Railway uses its own service Variables at runtime. Do not commit DB URLs/secrets to GitHub.
+
+## Local database commands
+
+- Apply schema to your local dev DB target:
+  - `npm run db:push`
+- Create/update a local dev admin account (uses env vars + local DB target):
+  - `BOOTSTRAP_ADMIN_EMAIL=<your-email> BOOTSTRAP_ADMIN_PASSWORD=<set-in-shell> BOOTSTRAP_ADMIN_NAME="Dev Admin" npm run admin:bootstrap`
 
 ## Quality checks (must pass before PR)
 

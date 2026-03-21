@@ -3,10 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  getCurrentLifecycleWeek,
-  getTrainingWeekLifecycle,
-} from "../client/src/lib/trainingWeek";
+import { getCurrentLifecycleWeek, getTrainingWeekLifecycle } from "../client/src/lib/trainingWeek";
 
 test("when week 1 is completed, week 2 becomes the recommended visible week", () => {
   const lifecycle = getTrainingWeekLifecycle(
@@ -62,13 +59,7 @@ test("week with all sessions completed but no weekly check-in is ready_for_check
 });
 
 test("zero scheduled sessions never produce ready_for_checkin state", () => {
-  const lifecycle = getTrainingWeekLifecycle(
-    2,
-    [],
-    [],
-    "phase_1",
-    [],
-  );
+  const lifecycle = getTrainingWeekLifecycle(2, [], [], "phase_1", []);
 
   assert.equal(
     lifecycle.weeks.some((week) => week.state === "ready_for_checkin"),
@@ -146,26 +137,36 @@ test("client dashboard keeps selected week synced to the active lifecycle week",
 test("client dashboard defaults selected phase to active phase with deterministic fallback", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
-  const source = fs.readFileSync(myPhasePath, "utf8");
+  const helperPath = path.resolve(serverDir, "../client/src/lib/clientPhase.ts");
+  const myPhaseSource = fs.readFileSync(myPhasePath, "utf8");
+  const helperSource = fs.readFileSync(helperPath, "utf8");
 
   assert.ok(
-    source.includes("function pickDefaultVisiblePhase(phases: any[]): any | null {"),
-    "MyPhase should centralize default visible phase selection in one helper",
+    myPhaseSource.includes('import { pickDefaultVisiblePhase } from "@/lib/clientPhase";'),
+    "MyPhase should import default visible phase logic from shared helper",
   );
   assert.ok(
-    source.includes('const activePhases = phases.filter((phase: any) => phase.status === "Active");'),
+    helperSource.includes("export function pickDefaultVisiblePhase"),
+    "Shared client phase helper should expose deterministic default visible phase selection",
+  );
+  assert.ok(
+    helperSource.includes(
+      'const activePhases = phases.filter((phase) => phase.status === "Active");',
+    ),
     "Default phase should prioritize active phases",
   );
   assert.ok(
-    source.includes("const orderedActivePhases = [...activePhases].sort((a: any, b: any) => {"),
+    helperSource.includes("const orderedActivePhases = [...activePhases].sort((a, b) => {"),
     "When multiple phases are active, ordering should be deterministic",
   );
   assert.ok(
-    source.includes("parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)"),
+    helperSource.includes(
+      "parsePhaseStartDateForSort(b.startDate) - parsePhaseStartDateForSort(a.startDate)",
+    ),
     "Deterministic active-phase fallback should prefer most recently started phase",
   );
   assert.ok(
-    source.includes("return pendingPhase || phases[0];"),
+    helperSource.includes("return pendingPhase || phases[0];"),
     "When no active phase exists, keep existing safe fallback behavior",
   );
 });
@@ -198,11 +199,15 @@ test("client check-in actions are gated by real session identity and impersonati
   const sessionViewSource = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(
-    myPhaseSource.includes("const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;"),
+    myPhaseSource.includes(
+      "const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;",
+    ),
     "MyPhase should treat client check-ins as read-only outside a real client session context",
   );
   assert.ok(
-    sessionViewSource.includes("const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;"),
+    sessionViewSource.includes(
+      "const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;",
+    ),
     "SessionView should treat after-session check-ins as read-only outside a real client session context",
   );
 });
@@ -212,13 +217,13 @@ test("client dashboard keeps core main items rendered in the same conditional fl
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
   const source = fs.readFileSync(myPhasePath, "utf8");
 
-  assert.ok(source.includes("data-testid=\"card-start-next-session\""));
-  assert.ok(source.includes("data-testid=\"button-start-next-session\""));
-  assert.ok(source.includes("data-testid=\"section-action-required\""));
-  assert.ok(source.includes("testId=\"card-action-weekly-checkin\""));
-  assert.ok(source.includes("testId=\"card-action-progress-report\""));
-  assert.ok(source.includes("data-testid=\"card-schedule-grid\""));
-  assert.ok(source.includes("data-testid=\"text-week-progress\""));
+  assert.ok(source.includes('data-testid="card-start-next-session"'));
+  assert.ok(source.includes('data-testid="button-start-next-session"'));
+  assert.ok(source.includes('data-testid="section-action-required"'));
+  assert.ok(source.includes('testId="card-action-weekly-checkin"'));
+  assert.ok(source.includes('testId="card-action-progress-report"'));
+  assert.ok(source.includes('data-testid="card-schedule-grid"'));
+  assert.ok(source.includes('data-testid="text-week-progress"'));
 });
 
 test("week area is compact and non-horizontal-scroll while keeping schedule content", () => {

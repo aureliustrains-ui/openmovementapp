@@ -57,6 +57,7 @@ type LocalSession = {
   dbId?: string;
   name: string;
   description: string;
+  sessionVideoUrl: string;
   sections: Section[];
   isNew?: boolean;
 };
@@ -77,7 +78,14 @@ function makeSection(name = "New Section"): Section {
 }
 
 function makeSession(name = "New Session"): LocalSession {
-  return { id: generateId(), name, description: "", sections: [makeSection("A. Main")], isNew: true };
+  return {
+    id: generateId(),
+    name,
+    description: "",
+    sessionVideoUrl: "",
+    sections: [makeSection("A. Main")],
+    isNew: true,
+  };
 }
 
 function collectMovementCheckExercises(sessions: LocalSession[]): { id: string; name: string }[] {
@@ -154,6 +162,7 @@ export default function AdminPhaseBuilder() {
       if (!ps) return true;
       if (ls.name !== ps.name) return true;
       if (ls.description !== (ps.description || "")) return true;
+      if (ls.sessionVideoUrl !== (ps.sessionVideoUrl || "")) return true;
       if (stableStringify(ls.sections) !== stableStringify(ps.sections)) return true;
     }
 
@@ -240,6 +249,7 @@ export default function AdminPhaseBuilder() {
         dbId: s.id,
         name: s.name,
         description: s.description || "",
+        sessionVideoUrl: s.sessionVideoUrl || "",
         sections: ((s.sections as any[]) || []).map((sec: any) => ({
           ...sec,
           exercises: (sec.exercises || []).map((ex: any) => ({
@@ -294,7 +304,15 @@ export default function AdminPhaseBuilder() {
 
   const addSessionFromTemplate = (template: any) => {
     const cloned = cloneSessionFromTemplate(template);
-    setLocalSessions((prev) => [...prev, { ...cloned, dbId: undefined, isNew: true }]);
+    setLocalSessions((prev) => [
+      ...prev,
+      {
+        ...cloned,
+        sessionVideoUrl: (cloned as { sessionVideoUrl?: string }).sessionVideoUrl || "",
+        dbId: undefined,
+        isNew: true,
+      },
+    ]);
   };
 
   const removeSession = (idx: number) => {
@@ -376,7 +394,8 @@ export default function AdminPhaseBuilder() {
         const updated = await updateSession.mutateAsync({
           id: ls.dbId,
           name: ls.name,
-          description: ls.description,
+          description: ls.description.trim() || null,
+          sessionVideoUrl: ls.sessionVideoUrl.trim() || null,
           sections: ls.sections,
         });
         savedSessions.push(updated);
@@ -384,7 +403,8 @@ export default function AdminPhaseBuilder() {
         const created = await createSession.mutateAsync({
           phaseId,
           name: ls.name,
-          description: ls.description,
+          description: ls.description.trim() || null,
+          sessionVideoUrl: ls.sessionVideoUrl.trim() || null,
           sections: ls.sections,
           completedInstances: [],
         });
@@ -572,6 +592,7 @@ export default function AdminPhaseBuilder() {
     const hasContent = localSchedule.length > 0 || localSessions.some((session) =>
       session.name.trim() !== "" ||
       session.description.trim() !== "" ||
+      session.sessionVideoUrl.trim() !== "" ||
       session.sections.some((section) => section.exercises.length > 0),
     );
     if (hasContent && !window.confirm("Apply template and replace current phase builder content?")) return;
@@ -582,6 +603,7 @@ export default function AdminPhaseBuilder() {
     });
     const nextSessions: LocalSession[] = cloned.sessions.map((session) => ({
       ...session,
+      sessionVideoUrl: (session as { sessionVideoUrl?: string }).sessionVideoUrl || "",
       dbId: undefined,
       isNew: true,
     }));
@@ -598,7 +620,12 @@ export default function AdminPhaseBuilder() {
     const sourceSession = selectedTemplateSessions.find((session: any) => session.id === selectedTemplateSessionId);
     if (!sourceSession) return;
     const cloned = cloneSessionFromTemplate(sourceSession as any);
-    const nextSession: LocalSession = { ...cloned, dbId: undefined, isNew: true };
+    const nextSession: LocalSession = {
+      ...cloned,
+      sessionVideoUrl: (cloned as { sessionVideoUrl?: string }).sessionVideoUrl || "",
+      dbId: undefined,
+      isNew: true,
+    };
     setLocalSessions((prev) => [...prev, nextSession]);
     setInsertTemplateOpen(false);
     toast({ title: "Session inserted", description: "Template session was inserted into this phase." });
@@ -830,6 +857,7 @@ export default function AdminPhaseBuilder() {
           }}
           onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
           onCloneExerciseTemplate={(templateExercise) => cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))}
+          showSessionVideoField
         />
       ))}
 

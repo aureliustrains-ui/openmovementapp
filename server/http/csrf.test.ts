@@ -83,4 +83,3 @@ test("enforceSameOriginForApi allows same-origin mutating calls", () => {
   assert.equal(called, true);
   assert.equal(res.statusCode, 200);
 });
-

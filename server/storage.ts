@@ -151,7 +151,8 @@ export class DatabaseStorage implements IStorage {
     if (!error || typeof error !== "object") return false;
     const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
     if (code === "42703") return true;
-    const message = "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
+    const message =
+      "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
     return /column .* does not exist/i.test(message);
   }
 
@@ -498,7 +499,9 @@ export class DatabaseStorage implements IStorage {
     const [existing] = await db
       .select()
       .from(weeklyCheckins)
-      .where(and(eq(weeklyCheckins.clientId, clientId), eq(weeklyCheckins.weekStartDate, weekStartDate)));
+      .where(
+        and(eq(weeklyCheckins.clientId, clientId), eq(weeklyCheckins.weekStartDate, weekStartDate)),
+      );
     return existing;
   }
 
@@ -511,7 +514,11 @@ export class DatabaseStorage implements IStorage {
     id: string,
     data: Pick<InsertWeeklyCheckin, "phaseId" | "phaseWeekNumber" | "weekStartDate">,
   ): Promise<WeeklyCheckin | undefined> {
-    const [updated] = await db.update(weeklyCheckins).set(data).where(eq(weeklyCheckins.id, id)).returning();
+    const [updated] = await db
+      .update(weeklyCheckins)
+      .set(data)
+      .where(eq(weeklyCheckins.id, id))
+      .returning();
     return updated;
   }
 
@@ -533,12 +540,19 @@ export class DatabaseStorage implements IStorage {
     id: string,
     data: Partial<InsertProgressReport>,
   ): Promise<ProgressReport | undefined> {
-    const [updated] = await db.update(progressReports).set(data).where(eq(progressReports.id, id)).returning();
+    const [updated] = await db
+      .update(progressReports)
+      .set(data)
+      .where(eq(progressReports.id, id))
+      .returning();
     return updated;
   }
 
   async getProgressReportItems(reportId: string): Promise<ProgressReportItem[]> {
-    return db.select().from(progressReportItems).where(eq(progressReportItems.progressReportId, reportId));
+    return db
+      .select()
+      .from(progressReportItems)
+      .where(eq(progressReportItems.progressReportId, reportId));
   }
 
   async createProgressReportItem(item: InsertProgressReportItem): Promise<ProgressReportItem> {
@@ -550,7 +564,11 @@ export class DatabaseStorage implements IStorage {
     id: string,
     data: Partial<InsertProgressReportItem>,
   ): Promise<ProgressReportItem | undefined> {
-    const [updated] = await db.update(progressReportItems).set(data).where(eq(progressReportItems.id, id)).returning();
+    const [updated] = await db
+      .update(progressReportItems)
+      .set(data)
+      .where(eq(progressReportItems.id, id))
+      .returning();
     return updated;
   }
 

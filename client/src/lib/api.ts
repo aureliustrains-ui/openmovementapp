@@ -78,6 +78,7 @@ async function requestJson(url: string, method: string, options?: RequestInit) {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
     credentials: "include",
+    cache: "no-store",
     ...options,
   });
   if (!res.ok) {
@@ -190,7 +191,7 @@ async function fetchApi(url: string, options?: RequestInit) {
 async function fetchApiForm(url: string, options?: RequestInit) {
   const method = options?.method ?? "GET";
   const resolvedUrl = resolveApiUrl(url);
-  const res = await fetch(resolvedUrl, { credentials: "include", ...options });
+  const res = await fetch(resolvedUrl, { credentials: "include", cache: "no-store", ...options });
   if (!res.ok) {
     if (isJsonContentType(res.headers.get("content-type"))) {
       try {
@@ -841,6 +842,20 @@ export function useUpdateMyProfile() {
       qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["auth"] });
     },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: {
+      currentPassword: string;
+      newPassword: string;
+      confirmPassword: string;
+    }) =>
+      fetchApi("/api/account/change-password", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
   });
 }
 

@@ -31,8 +31,8 @@ function hasObjectStorageConfig() {
   const config = getConfig();
   return Boolean(
     config.OBJECT_STORAGE_BUCKET &&
-      config.OBJECT_STORAGE_ACCESS_KEY_ID &&
-      config.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    config.OBJECT_STORAGE_ACCESS_KEY_ID &&
+    config.OBJECT_STORAGE_SECRET_ACCESS_KEY,
   );
 }
 
@@ -60,8 +60,16 @@ export function validateClientVideoMetadata(input: {
   fileSize: number;
 }) {
   const normalizedType = input.contentType.trim().toLowerCase();
-  if (!allowedClientVideoMimeTypes.includes(normalizedType as (typeof allowedClientVideoMimeTypes)[number])) {
-    throw new AppError("Invalid video file type. Use mp4, mov, webm, mkv, or 3gp.", 400, "INVALID_VIDEO_TYPE");
+  if (
+    !allowedClientVideoMimeTypes.includes(
+      normalizedType as (typeof allowedClientVideoMimeTypes)[number],
+    )
+  ) {
+    throw new AppError(
+      "Invalid video file type. Use mp4, mov, webm, mkv, or 3gp.",
+      400,
+      "INVALID_VIDEO_TYPE",
+    );
   }
   const maxBytes = getClientVideoMaxBytes();
   if (!Number.isFinite(input.fileSize) || input.fileSize <= 0 || input.fileSize > maxBytes) {

@@ -1,5 +1,8 @@
 const { randomUUID, randomBytes, scryptSync } = require("node:crypto");
 const { Client } = require("pg");
+const loadLocalEnv = require("./load-local-env.cjs");
+
+loadLocalEnv();
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");

@@ -6,9 +6,21 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import { hashPassword, verifyPassword } from "./auth";
-import type { Phase, User, WeeklyCheckin, Session, ProgressReport, ProgressReportItem } from "@shared/schema";
+import type {
+  Phase,
+  User,
+  WeeklyCheckin,
+  Session,
+  ProgressReport,
+  ProgressReportItem,
+  InsertPhase,
+} from "@shared/schema";
 import { createUserAccount } from "./modules/users/users.service";
-import { loginWithEmailPassword, requireAuthenticatedUser } from "./modules/auth/auth.service";
+import {
+  changeAuthenticatedUserPassword,
+  loginWithEmailPassword,
+  requireAuthenticatedUser,
+} from "./modules/auth/auth.service";
 import { updateMyProfile } from "./modules/profile/profile.service";
 import {
   assertCoachCanManageSpecifics,
@@ -76,6 +88,12 @@ const updateMyProfileSchema = z.object({
   infos: z.string().max(4000).nullable().optional(),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(1).max(128),
+  confirmPassword: z.string().min(1).max(128),
+});
+
 const updateClientSpecificsSchema = z.object({
   specifics: z.string().max(8000).nullable(),
 });
@@ -108,7 +126,8 @@ const avatarUpload = multer({
         return;
       }
       const ext = path.extname(file.originalname).toLowerCase();
-      const safeBase = sanitizeFilename(path.basename(file.originalname, ext)).slice(0, 64) || "avatar";
+      const safeBase =
+        sanitizeFilename(path.basename(file.originalname, ext)).slice(0, 64) || "avatar";
       cb(null, `${Date.now()}-${safeBase}${ext}`);
     },
   }),
@@ -145,6 +164,27 @@ function getProfileFirstName(user: User | undefined): string {
   return getFirstToken(user.name);
 }
 
+function parseOptionalPhaseHomeIntroVideoUrl(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new AppError("homeIntroVideoUrl must be a string", 400);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new AppError("Invalid home intro video URL", 400);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new AppError("Invalid home intro video URL protocol", 400);
+  }
+  return parsed.toString();
+}
+
 function toPublicMessage(
   message: {
     id: string;
@@ -158,10 +198,7 @@ function toPublicMessage(
   senderUser: User | undefined,
   clientUser: User | undefined,
 ) {
-  const profileSource =
-    senderUser ||
-    (message.isClient ? clientUser : undefined) ||
-    undefined;
+  const profileSource = senderUser || (message.isClient ? clientUser : undefined) || undefined;
   const senderFirstName = getProfileFirstName(profileSource) || getFirstToken(message.sender);
   const senderName = senderFirstName || message.sender || "Coach";
   const senderAvatar = profileSource?.avatar || null;
@@ -277,9 +314,13 @@ async function deleteClientPhases(clientId: string) {
   await Promise.all(clientPhases.map((phase) => storage.deletePhase(phase.id)));
 }
 
-function getWeekCompletionForPhase(phase: Phase, phaseWeek: number): { scheduledCount: number; completedCount: number } {
+function getWeekCompletionForPhase(
+  phase: Phase,
+  phaseWeek: number,
+): { scheduledCount: number; completedCount: number } {
   const scheduleEntries = (
-    (phase.schedule as Array<{ week?: number; day?: string; slot?: string; sessionId?: string }>) || []
+    (phase.schedule as Array<{ week?: number; day?: string; slot?: string; sessionId?: string }>) ||
+    []
   ).filter((entry) => entry.week === phaseWeek && typeof entry.sessionId === "string");
 
   if (scheduleEntries.length === 0) {
@@ -287,7 +328,9 @@ function getWeekCompletionForPhase(phase: Phase, phaseWeek: number): { scheduled
   }
 
   const completed = new Set(
-    ((phase.completedScheduleInstances as string[]) || []).filter((entry) => typeof entry === "string"),
+    ((phase.completedScheduleInstances as string[]) || []).filter(
+      (entry) => typeof entry === "string",
+    ),
   );
   const completedCount = scheduleEntries.filter((entry) => {
     const day = entry.day || "Monday";
@@ -313,7 +356,8 @@ function getCurrentPhaseWeekByProgress(phase: Phase, weeklyCheckins: WeeklyCheck
   for (let week = 1; week <= duration; week += 1) {
     const { scheduledCount, completedCount } = getWeekCompletionForPhase(phase, week);
     const sessionsDone = scheduledCount > 0 && completedCount >= scheduledCount;
-    const isCompleted = sessionsDone && hasWeeklyCheckinForPhaseWeek(weeklyCheckins, phase.id, week);
+    const isCompleted =
+      sessionsDone && hasWeeklyCheckinForPhaseWeek(weeklyCheckins, phase.id, week);
     if (scheduledCount > 0 && !isCompleted) {
       return week;
     }
@@ -322,7 +366,8 @@ function getCurrentPhaseWeekByProgress(phase: Phase, weeklyCheckins: WeeklyCheck
   for (let week = 1; week <= duration; week += 1) {
     const { scheduledCount, completedCount } = getWeekCompletionForPhase(phase, week);
     const sessionsDone = scheduledCount > 0 && completedCount >= scheduledCount;
-    const isCompleted = sessionsDone && hasWeeklyCheckinForPhaseWeek(weeklyCheckins, phase.id, week);
+    const isCompleted =
+      sessionsDone && hasWeeklyCheckinForPhaseWeek(weeklyCheckins, phase.id, week);
     if (!isCompleted) {
       return week;
     }
@@ -347,12 +392,14 @@ function getPhaseExerciseSnapshots(phaseSessions: Session[]): PhaseExerciseSnaps
       const exercises = Array.isArray(maybeExercises) ? maybeExercises : [];
       for (const exercise of exercises) {
         if (!exercise || typeof exercise !== "object") continue;
-        const exerciseId = typeof (exercise as { id?: unknown }).id === "string"
-          ? String((exercise as { id: string }).id)
-          : "";
-        const exerciseName = typeof (exercise as { name?: unknown }).name === "string"
-          ? String((exercise as { name: string }).name)
-          : "";
+        const exerciseId =
+          typeof (exercise as { id?: unknown }).id === "string"
+            ? String((exercise as { id: string }).id)
+            : "";
+        const exerciseName =
+          typeof (exercise as { name?: unknown }).name === "string"
+            ? String((exercise as { name: string }).name)
+            : "";
         if (!exerciseId || !exerciseName || seen.has(exerciseId)) continue;
         seen.add(exerciseId);
         snapshots.push({ exerciseId, exerciseName });
@@ -364,7 +411,9 @@ function getPhaseExerciseSnapshots(phaseSessions: Session[]): PhaseExerciseSnaps
 
 async function hydrateProgressReport(
   report: ProgressReport,
-): Promise<ProgressReport & { items: Array<ProgressReportItem & { submissionPlaybackUrl: string | null }> }> {
+): Promise<
+  ProgressReport & { items: Array<ProgressReportItem & { submissionPlaybackUrl: string | null }> }
+> {
   const items = await storage.getProgressReportItems(report.id);
   const hydratedItems = await Promise.all(
     items.map(async (item) => {
@@ -407,9 +456,7 @@ function normalizeProgressItemReviewStatus(
 
 function deriveProgressReportStatusFromItems(items: Array<ProgressReportItem>): string {
   if (items.length === 0) return "requested";
-  const normalized = items.map((item) =>
-    normalizeProgressItemReviewStatus(item, "requested"),
-  );
+  const normalized = items.map((item) => normalizeProgressItemReviewStatus(item, "requested"));
   if (normalized.some((status) => status === "resubmission_requested")) {
     return "resubmission_requested";
   }
@@ -446,7 +493,10 @@ async function maybeBootstrapAdminUser(): Promise<void> {
   const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || "Admin";
 
   if (!email || !password) {
-    logInfo("bootstrap", "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD missing");
+    logInfo(
+      "bootstrap",
+      "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD missing",
+    );
     return;
   }
 
@@ -488,18 +538,20 @@ async function maybeBootstrapAdminUser(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const pgCode =
-      typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : null;
+      typeof error === "object" && error && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : null;
     logError("bootstrap", "Failed to bootstrap admin user", { message });
     if (pgCode === "42P01") {
-      logError("bootstrap", "users table missing. Run migrations (npm run db:push) on DATABASE_URL.");
+      logError(
+        "bootstrap",
+        "users table missing. Run migrations (npm run db:push) on DATABASE_URL.",
+      );
     }
   }
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await maybeBootstrapAdminUser();
 
   app.use(
@@ -655,6 +707,39 @@ export async function registerRoutes(
     res.json(toPublicUser(updated));
   });
 
+  app.post("/api/account/change-password", async (req, res) => {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid change password payload" });
+    }
+
+    try {
+      await changeAuthenticatedUserPassword(
+        {
+          userId: authUser.id,
+          currentPassword: parsed.data.currentPassword,
+          newPassword: parsed.data.newPassword,
+          confirmPassword: parsed.data.confirmPassword,
+        },
+        {
+          users: storage,
+          verifyPassword,
+          hashPassword,
+        },
+      );
+    } catch (error) {
+      if (error instanceof AppError) {
+        return res.status(error.status || 400).json({ message: error.message, code: error.code });
+      }
+      throw error;
+    }
+
+    res.status(204).send();
+  });
+
   app.post("/api/me/avatar", (req, res, next) => {
     avatarUpload.single("avatar")(req, res, async (err: unknown) => {
       if (err) {
@@ -681,9 +766,10 @@ export async function registerRoutes(
         const normalizedPath = file.path.replaceAll("\\", "/");
         const marker = `/uploads/avatars/${authUser.id}/`;
         const markerIndex = normalizedPath.indexOf(marker);
-        const avatarPath = markerIndex >= 0
-          ? normalizedPath.slice(markerIndex)
-          : `/uploads/avatars/${authUser.id}/${file.filename}`;
+        const avatarPath =
+          markerIndex >= 0
+            ? normalizedPath.slice(markerIndex)
+            : `/uploads/avatars/${authUser.id}/${file.filename}`;
         const updated = await storage.updateUser(authUser.id, { avatar: avatarPath });
         if (!updated) return res.status(404).json({ message: "User not found" });
         res.json({ avatar: updated.avatar, user: toPublicUser(updated) });
@@ -778,10 +864,14 @@ export async function registerRoutes(
     const target = await storage.getUser(req.params.id);
     if (!target) return res.status(404).json({ message: "User not found" });
     if (target.role !== "Client") {
-      return res.status(400).json({ message: "Only client accounts can be activated or deactivated" });
+      return res
+        .status(400)
+        .json({ message: "Only client accounts can be activated or deactivated" });
     }
     if (target.status === "Removed") {
-      return res.status(400).json({ message: "Removed clients cannot be reactivated. Create a new client account." });
+      return res
+        .status(400)
+        .json({ message: "Removed clients cannot be reactivated. Create a new client account." });
     }
 
     if (parsed.data.status === "Inactive") {
@@ -854,14 +944,19 @@ export async function registerRoutes(
 
   app.post("/api/phases", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const client = await storage.getUser(req.body.clientId);
+    const payload = { ...(req.body || {}) } as Record<string, unknown>;
+    const client = await storage.getUser(String(payload.clientId || ""));
     if (!client || client.role !== "Client") {
       return res.status(400).json({ message: "Client not found" });
     }
     if (client.status === "Removed") {
       return res.status(400).json({ message: "Cannot create phases for removed clients" });
     }
-    const phase = await storage.createPhase(req.body);
+    const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(payload.homeIntroVideoUrl);
+    if (parsedHomeIntroVideoUrl !== undefined) {
+      payload.homeIntroVideoUrl = parsedHomeIntroVideoUrl;
+    }
+    const phase = await storage.createPhase(payload as InsertPhase);
     res.status(201).json(phase);
   });
 
@@ -916,9 +1011,10 @@ export async function registerRoutes(
           if (!rawEntry || typeof rawEntry !== "object") {
             return res.status(400).json({ message: "Invalid movement check entry" });
           }
-          const exerciseId = typeof (rawEntry as { exerciseId?: unknown }).exerciseId === "string"
-            ? String((rawEntry as { exerciseId: string }).exerciseId)
-            : "";
+          const exerciseId =
+            typeof (rawEntry as { exerciseId?: unknown }).exerciseId === "string"
+              ? String((rawEntry as { exerciseId: string }).exerciseId)
+              : "";
           if (!exerciseId) {
             return res.status(400).json({ message: "Movement check exerciseId is required" });
           }
@@ -929,30 +1025,35 @@ export async function registerRoutes(
             typeof videoObjectKeyRaw === "string" ? String(videoObjectKeyRaw).trim() : "";
           const videoSourceRaw = (rawEntry as { videoSource?: unknown }).videoSource;
           const videoSource =
-            videoSourceRaw === "link" || videoSourceRaw === "upload"
-              ? videoSourceRaw
-              : null;
+            videoSourceRaw === "link" || videoSourceRaw === "upload" ? videoSourceRaw : null;
           const videoMimeTypeRaw = (rawEntry as { videoMimeType?: unknown }).videoMimeType;
           const videoMimeType =
             typeof videoMimeTypeRaw === "string" ? String(videoMimeTypeRaw).trim() : "";
-          const videoOriginalFilenameRaw =
-            (rawEntry as { videoOriginalFilename?: unknown }).videoOriginalFilename;
+          const videoOriginalFilenameRaw = (rawEntry as { videoOriginalFilename?: unknown })
+            .videoOriginalFilename;
           const videoOriginalFilename =
             typeof videoOriginalFilenameRaw === "string"
               ? String(videoOriginalFilenameRaw).trim()
               : "";
-          const clientNote = typeof (rawEntry as { clientNote?: unknown }).clientNote === "string"
-            ? String((rawEntry as { clientNote: string }).clientNote).trim()
-            : "";
+          const clientNote =
+            typeof (rawEntry as { clientNote?: unknown }).clientNote === "string"
+              ? String((rawEntry as { clientNote: string }).clientNote).trim()
+              : "";
 
           if (videoSource === "link" && !videoUrl) {
-            return res.status(400).json({ message: `Movement check link is required for ${exerciseId}` });
+            return res
+              .status(400)
+              .json({ message: `Movement check link is required for ${exerciseId}` });
           }
           if (videoSource === "upload" && !videoObjectKey) {
-            return res.status(400).json({ message: `Movement check upload key is required for ${exerciseId}` });
+            return res
+              .status(400)
+              .json({ message: `Movement check upload key is required for ${exerciseId}` });
           }
           if (videoUrl && videoObjectKey) {
-            return res.status(400).json({ message: `Movement check cannot include both link and upload for ${exerciseId}` });
+            return res.status(400).json({
+              message: `Movement check cannot include both link and upload for ${exerciseId}`,
+            });
           }
           if (videoObjectKey && !isClientOwnedObjectKey(authUser.id, videoObjectKey)) {
             return res.status(403).json({ message: "Invalid movement check upload key ownership" });
@@ -962,10 +1063,14 @@ export async function registerRoutes(
             try {
               parsedUrl = new URL(videoUrl);
             } catch {
-              return res.status(400).json({ message: `Invalid movement check video URL for ${exerciseId}` });
+              return res
+                .status(400)
+                .json({ message: `Invalid movement check video URL for ${exerciseId}` });
             }
             if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-              return res.status(400).json({ message: `Invalid movement check video URL protocol for ${exerciseId}` });
+              return res
+                .status(400)
+                .json({ message: `Invalid movement check video URL protocol for ${exerciseId}` });
             }
           }
 
@@ -981,9 +1086,7 @@ export async function registerRoutes(
 
         const validExerciseIds = new Set(
           existingChecks
-            .map((entry) =>
-              typeof entry.exerciseId === "string" ? String(entry.exerciseId) : "",
-            )
+            .map((entry) => (typeof entry.exerciseId === "string" ? String(entry.exerciseId) : ""))
             .filter(Boolean),
         );
         let unknownExerciseId: string | null = null;
@@ -993,7 +1096,9 @@ export async function registerRoutes(
           }
         });
         if (unknownExerciseId) {
-          return res.status(400).json({ message: `Unknown movement check exercise: ${unknownExerciseId}` });
+          return res
+            .status(400)
+            .json({ message: `Unknown movement check exercise: ${unknownExerciseId}` });
         }
 
         const submittedAt = new Date().toISOString();
@@ -1025,6 +1130,16 @@ export async function registerRoutes(
       }
 
       updatePayload = nextClientPayload;
+    } else {
+      const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(
+        (req.body || {}).homeIntroVideoUrl,
+      );
+      if (parsedHomeIntroVideoUrl !== undefined) {
+        updatePayload = {
+          ...(req.body || {}),
+          homeIntroVideoUrl: parsedHomeIntroVideoUrl,
+        };
+      }
     }
 
     const phase = await storage.updatePhase(req.params.id, updatePayload);
@@ -1043,12 +1158,12 @@ export async function registerRoutes(
     const authUser = requireUser(req, res);
     if (!authUser) return;
     const phaseId = req.query.phaseId as string | undefined;
-    let result = phaseId
-      ? await storage.getSessionsByPhase(phaseId)
-      : await storage.getSessions();
+    let result = phaseId ? await storage.getSessionsByPhase(phaseId) : await storage.getSessions();
 
     if (!isAdmin(authUser)) {
-      const allowedPhaseIds = new Set((await storage.getPhasesByClient(authUser.id)).map((p) => p.id));
+      const allowedPhaseIds = new Set(
+        (await storage.getPhasesByClient(authUser.id)).map((p) => p.id),
+      );
       result = result.filter((session) => allowedPhaseIds.has(session.phaseId));
     }
     res.json(result);
@@ -1258,7 +1373,7 @@ export async function registerRoutes(
         parsed.data.specifics ?? null,
         authUser.name,
         {
-        users: storage,
+          users: storage,
         },
       );
       res.json(specifics);
@@ -1362,7 +1477,9 @@ export async function registerRoutes(
         "code" in error &&
         (error as { code?: unknown }).code === "42P01"
       ) {
-        return res.status(500).json({ message: "Database not ready for check-ins. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for check-ins. Run npm run db:push." });
       }
       throw error;
     }
@@ -1409,7 +1526,10 @@ export async function registerRoutes(
     ) {
       return res.status(409).json({ message: "Weekly check-in is not due for this training week" });
     }
-    const { scheduledCount, completedCount } = getWeekCompletionForPhase(targetPhase, phaseWeekNumber);
+    const { scheduledCount, completedCount } = getWeekCompletionForPhase(
+      targetPhase,
+      phaseWeekNumber,
+    );
     const sessionsDone = scheduledCount > 0 && completedCount >= scheduledCount;
     if (!sessionsDone) {
       return res.status(409).json({ message: "Weekly check-in is not due for this training week" });
@@ -1417,18 +1537,27 @@ export async function registerRoutes(
 
     try {
       await ensureWeeklyCheckinNotSubmitted(authUser.id, targetPhase.id, phaseWeekNumber, {
-        getWeeklyCheckinByClientAndPhaseWeek: storage.getWeeklyCheckinByClientAndPhaseWeek.bind(storage),
+        getWeeklyCheckinByClientAndPhaseWeek:
+          storage.getWeeklyCheckinByClientAndPhaseWeek.bind(storage),
       });
     } catch (error) {
       if (error instanceof AppError && error.code === "WEEKLY_CHECKIN_EXISTS") {
-        return res.status(409).json({ message: "Weekly check-in already submitted for this training week" });
+        return res
+          .status(409)
+          .json({ message: "Weekly check-in already submitted for this training week" });
       }
       throw error;
     }
 
     try {
       const created = await storage.createWeeklyCheckin(
-        normalizeWeeklyCheckinInput(parsed.data, authUser.id, targetPhase.id, phaseWeekNumber, weekStartDate),
+        normalizeWeeklyCheckinInput(
+          parsed.data,
+          authUser.id,
+          targetPhase.id,
+          phaseWeekNumber,
+          weekStartDate,
+        ),
       );
       res.status(201).json(created);
     } catch (error: unknown) {
@@ -1438,7 +1567,9 @@ export async function registerRoutes(
         "code" in error &&
         (error as { code?: unknown }).code === "23505"
       ) {
-        return res.status(409).json({ message: "Weekly check-in already submitted for this training week" });
+        return res
+          .status(409)
+          .json({ message: "Weekly check-in already submitted for this training week" });
       }
       throw error;
     }
@@ -1461,24 +1592,28 @@ export async function registerRoutes(
       storage.getWeeklyCheckinsByClient(authUser.id),
     ]);
     const activePhase = getActivePhase(phases);
-    const phaseWeekNumber = activePhase ? getCurrentPhaseWeekByProgress(activePhase, weeklyCheckins) : null;
+    const phaseWeekNumber = activePhase
+      ? getCurrentPhaseWeekByProgress(activePhase, weeklyCheckins)
+      : null;
 
     let existing;
     if (activePhase && phaseWeekNumber !== null) {
-      existing = await storage.getWeeklyCheckinByClientAndPhaseWeek(authUser.id, activePhase.id, phaseWeekNumber);
+      existing = await storage.getWeeklyCheckinByClientAndPhaseWeek(
+        authUser.id,
+        activePhase.id,
+        phaseWeekNumber,
+      );
     }
 
     let due = false;
     if (!existing && activePhase && phaseWeekNumber !== null) {
-      const { scheduledCount, completedCount } = getWeekCompletionForPhase(activePhase, phaseWeekNumber);
+      const { scheduledCount, completedCount } = getWeekCompletionForPhase(
+        activePhase,
+        phaseWeekNumber,
+      );
       due = scheduledCount > 0 && completedCount >= scheduledCount;
     }
-    const weekState =
-      existing
-        ? "completed"
-        : due
-          ? "ready_for_checkin"
-          : "current";
+    const weekState = existing ? "completed" : due ? "ready_for_checkin" : "current";
 
     res.json({
       phaseId: activePhase?.id || null,
@@ -1503,7 +1638,9 @@ export async function registerRoutes(
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1533,88 +1670,102 @@ export async function registerRoutes(
     const groups = (
       await Promise.all(
         orderedPhases.map(async (phase) => {
-        let checksSource: unknown = phase.movementChecks;
-        if (typeof checksSource === "string") {
-          try {
-            checksSource = JSON.parse(checksSource);
-          } catch {
-            checksSource = [];
+          let checksSource: unknown = phase.movementChecks;
+          if (typeof checksSource === "string") {
+            try {
+              checksSource = JSON.parse(checksSource);
+            } catch {
+              checksSource = [];
+            }
           }
-        }
-        const checks = Array.isArray(checksSource) ? checksSource : [];
-        const items = (
-          await Promise.all(
-          checks
-            .filter((entry) => entry && typeof entry === "object")
-            .map(async (entry) => {
-            const rawStatus = typeof (entry as { status?: unknown }).status === "string"
-              ? String((entry as { status: string }).status)
-              : "Not Submitted";
-            const status =
-              rawStatus === "Approved"
-                ? "reviewed"
-                : rawStatus === "Pending"
-                  ? "submitted"
-                  : "requested";
-            const linkUrl =
-              typeof (entry as { videoUrl?: unknown }).videoUrl === "string"
-                ? String((entry as { videoUrl: string }).videoUrl)
-                : null;
-            const objectKey =
-              typeof (entry as { videoObjectKey?: unknown }).videoObjectKey === "string"
-                ? String((entry as { videoObjectKey: string }).videoObjectKey).trim()
-                : "";
-            const playbackUrl = objectKey ? await resolveClientVideoPlaybackUrl(objectKey) : linkUrl;
-            return {
-              exerciseId: typeof (entry as { exerciseId?: unknown }).exerciseId === "string"
-                ? String((entry as { exerciseId: string }).exerciseId)
-                : "",
-              exerciseName: typeof (entry as { name?: unknown }).name === "string"
-                ? String((entry as { name: string }).name)
-                : "Exercise",
-              rawStatus,
-              status,
-              videoUrl: playbackUrl,
-              videoSource:
-                typeof (entry as { videoSource?: unknown }).videoSource === "string"
-                  ? String((entry as { videoSource: string }).videoSource)
-                  : objectKey
-                    ? "upload"
-                    : "link",
-              videoObjectKey: objectKey || null,
-              clientNote: typeof (entry as { clientNote?: unknown }).clientNote === "string"
-                ? String((entry as { clientNote: string }).clientNote)
-                : null,
-              approvedNote: typeof (entry as { approvedNote?: unknown }).approvedNote === "string"
-                ? String((entry as { approvedNote: string }).approvedNote)
-                : null,
-              resubmitFeedback: typeof (entry as { resubmitFeedback?: unknown }).resubmitFeedback === "string"
-                ? String((entry as { resubmitFeedback: string }).resubmitFeedback)
-                : null,
-              submittedAt: typeof (entry as { submittedAt?: unknown }).submittedAt === "string"
-                ? String((entry as { submittedAt: string }).submittedAt)
-                : null,
-              decidedAt: typeof (entry as { decidedAt?: unknown }).decidedAt === "string"
-                ? String((entry as { decidedAt: string }).decidedAt)
-                : null,
-            };
-            }),
-        ))
-          .sort((a: { decidedAt: string | null; submittedAt: string | null }, b: { decidedAt: string | null; submittedAt: string | null }) => {
-            const aTime = a.decidedAt || a.submittedAt || "";
-            const bTime = b.decidedAt || b.submittedAt || "";
-            return bTime.localeCompare(aTime);
-          });
-        return {
-          phaseId: phase.id,
-          phaseName: phase.name,
-          phaseStatus: phase.status,
-          items,
-        };
+          const checks = Array.isArray(checksSource) ? checksSource : [];
+          const items = (
+            await Promise.all(
+              checks
+                .filter((entry) => entry && typeof entry === "object")
+                .map(async (entry) => {
+                  const rawStatus =
+                    typeof (entry as { status?: unknown }).status === "string"
+                      ? String((entry as { status: string }).status)
+                      : "Not Submitted";
+                  const status =
+                    rawStatus === "Approved"
+                      ? "reviewed"
+                      : rawStatus === "Pending"
+                        ? "submitted"
+                        : "requested";
+                  const linkUrl =
+                    typeof (entry as { videoUrl?: unknown }).videoUrl === "string"
+                      ? String((entry as { videoUrl: string }).videoUrl)
+                      : null;
+                  const objectKey =
+                    typeof (entry as { videoObjectKey?: unknown }).videoObjectKey === "string"
+                      ? String((entry as { videoObjectKey: string }).videoObjectKey).trim()
+                      : "";
+                  const playbackUrl = objectKey
+                    ? await resolveClientVideoPlaybackUrl(objectKey)
+                    : linkUrl;
+                  return {
+                    exerciseId:
+                      typeof (entry as { exerciseId?: unknown }).exerciseId === "string"
+                        ? String((entry as { exerciseId: string }).exerciseId)
+                        : "",
+                    exerciseName:
+                      typeof (entry as { name?: unknown }).name === "string"
+                        ? String((entry as { name: string }).name)
+                        : "Exercise",
+                    rawStatus,
+                    status,
+                    videoUrl: playbackUrl,
+                    videoSource:
+                      typeof (entry as { videoSource?: unknown }).videoSource === "string"
+                        ? String((entry as { videoSource: string }).videoSource)
+                        : objectKey
+                          ? "upload"
+                          : "link",
+                    videoObjectKey: objectKey || null,
+                    clientNote:
+                      typeof (entry as { clientNote?: unknown }).clientNote === "string"
+                        ? String((entry as { clientNote: string }).clientNote)
+                        : null,
+                    approvedNote:
+                      typeof (entry as { approvedNote?: unknown }).approvedNote === "string"
+                        ? String((entry as { approvedNote: string }).approvedNote)
+                        : null,
+                    resubmitFeedback:
+                      typeof (entry as { resubmitFeedback?: unknown }).resubmitFeedback === "string"
+                        ? String((entry as { resubmitFeedback: string }).resubmitFeedback)
+                        : null,
+                    submittedAt:
+                      typeof (entry as { submittedAt?: unknown }).submittedAt === "string"
+                        ? String((entry as { submittedAt: string }).submittedAt)
+                        : null,
+                    decidedAt:
+                      typeof (entry as { decidedAt?: unknown }).decidedAt === "string"
+                        ? String((entry as { decidedAt: string }).decidedAt)
+                        : null,
+                  };
+                }),
+            )
+          ).sort(
+            (
+              a: { decidedAt: string | null; submittedAt: string | null },
+              b: { decidedAt: string | null; submittedAt: string | null },
+            ) => {
+              const aTime = a.decidedAt || a.submittedAt || "";
+              const bTime = b.decidedAt || b.submittedAt || "";
+              return bTime.localeCompare(aTime);
+            },
+          );
+          return {
+            phaseId: phase.id,
+            phaseName: phase.name,
+            phaseStatus: phase.status,
+            items,
+          };
         }),
       )
-    )
-      .filter((group) => group.items.length > 0);
+    ).filter((group) => group.items.length > 0);
 
     res.json(groups);
   });
@@ -1667,7 +1818,8 @@ export async function registerRoutes(
         const items = await storage.getProgressReportItems(report.id);
         for (const item of items) {
           const hasObjectKey =
-            typeof item.submissionObjectKey === "string" && item.submissionObjectKey.trim().length > 0;
+            typeof item.submissionObjectKey === "string" &&
+            item.submissionObjectKey.trim().length > 0;
           const playbackUrl = hasObjectKey
             ? await resolveClientVideoPlaybackUrl(item.submissionObjectKey!)
             : item.submissionLink;
@@ -1696,7 +1848,9 @@ export async function registerRoutes(
       res.json(groups);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1719,7 +1873,9 @@ export async function registerRoutes(
 
       const clientPhases = await storage.getPhasesByClient(req.params.clientId);
       const activePhase = parsed.data.phaseId
-        ? clientPhases.find((phase) => phase.id === parsed.data.phaseId && phase.status === "Active")
+        ? clientPhases.find(
+            (phase) => phase.id === parsed.data.phaseId && phase.status === "Active",
+          )
         : clientPhases.find((phase) => phase.status === "Active");
       if (!activePhase) {
         return res.status(400).json({ message: "No active phase found for this client" });
@@ -1731,11 +1887,17 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Active phase has no exercises to request" });
       }
 
-      const availableById = new Map(availableExercises.map((exercise) => [exercise.exerciseId, exercise]));
+      const availableById = new Map(
+        availableExercises.map((exercise) => [exercise.exerciseId, exercise]),
+      );
       const selectedExerciseIds = Array.from(new Set(parsed.data.exerciseIds));
-      const invalidExerciseId = selectedExerciseIds.find((exerciseId) => !availableById.has(exerciseId));
+      const invalidExerciseId = selectedExerciseIds.find(
+        (exerciseId) => !availableById.has(exerciseId),
+      );
       if (invalidExerciseId) {
-        return res.status(400).json({ message: `Exercise is not part of the active phase: ${invalidExerciseId}` });
+        return res
+          .status(400)
+          .json({ message: `Exercise is not part of the active phase: ${invalidExerciseId}` });
       }
 
       const created = await storage.createProgressReport({
@@ -1770,7 +1932,9 @@ export async function registerRoutes(
       res.status(201).json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1785,13 +1949,17 @@ export async function registerRoutes(
     try {
       const reports = await storage.getProgressReportsByClient(authUser.id);
       const requested = reports
-        .filter((report) => report.status === "requested" || report.status === "resubmission_requested")
+        .filter(
+          (report) => report.status === "requested" || report.status === "resubmission_requested",
+        )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const hydrated = await Promise.all(requested.map((report) => hydrateProgressReport(report)));
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1815,11 +1983,15 @@ export async function registerRoutes(
       const forActivePhase = reports
         .filter((report) => report.phaseId === activePhase.id)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      const hydrated = await Promise.all(forActivePhase.map((report) => hydrateProgressReport(report)));
+      const hydrated = await Promise.all(
+        forActivePhase.map((report) => hydrateProgressReport(report)),
+      );
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1838,7 +2010,9 @@ export async function registerRoutes(
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1855,7 +2029,9 @@ export async function registerRoutes(
       report = await storage.getProgressReport(req.params.id);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1870,7 +2046,9 @@ export async function registerRoutes(
     const parsed = submitProgressReportSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
-      return res.status(400).json({ message: details || "Invalid progress report submission payload" });
+      return res
+        .status(400)
+        .json({ message: details || "Invalid progress report submission payload" });
     }
 
     try {
@@ -1885,7 +2063,9 @@ export async function registerRoutes(
       for (const itemSubmission of parsed.data.items) {
         const existing = existingById.get(itemSubmission.itemId);
         if (!existing) {
-          return res.status(400).json({ message: `Unknown progress report item: ${itemSubmission.itemId}` });
+          return res
+            .status(400)
+            .json({ message: `Unknown progress report item: ${itemSubmission.itemId}` });
         }
         const submissionLink =
           typeof itemSubmission.submissionLink === "string"
@@ -1896,7 +2076,9 @@ export async function registerRoutes(
             ? itemSubmission.submissionObjectKey.trim()
             : "";
         if (!submissionLink && !submissionObjectKey) {
-          return res.status(400).json({ message: `Missing submission video for item: ${itemSubmission.itemId}` });
+          return res
+            .status(400)
+            .json({ message: `Missing submission video for item: ${itemSubmission.itemId}` });
         }
         if (submissionLink && submissionObjectKey) {
           return res.status(400).json({
@@ -1908,29 +2090,40 @@ export async function registerRoutes(
           try {
             parsedUrl = new URL(submissionLink);
           } catch {
-            return res.status(400).json({ message: `Invalid submissionLink for item: ${itemSubmission.itemId}` });
+            return res
+              .status(400)
+              .json({ message: `Invalid submissionLink for item: ${itemSubmission.itemId}` });
           }
           if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
-            return res.status(400).json({ message: `Invalid submissionLink protocol for item: ${itemSubmission.itemId}` });
+            return res.status(400).json({
+              message: `Invalid submissionLink protocol for item: ${itemSubmission.itemId}`,
+            });
           }
         }
         if (submissionObjectKey && !isClientOwnedObjectKey(authUser.id, submissionObjectKey)) {
           return res.status(403).json({ message: "Invalid upload key ownership" });
         }
         if (itemSubmission.submissionSource === "link" && !submissionLink) {
-          return res.status(400).json({ message: `submissionLink is required for item: ${itemSubmission.itemId}` });
+          return res
+            .status(400)
+            .json({ message: `submissionLink is required for item: ${itemSubmission.itemId}` });
         }
         if (itemSubmission.submissionSource === "upload" && !submissionObjectKey) {
-          return res.status(400).json({ message: `submissionObjectKey is required for item: ${itemSubmission.itemId}` });
+          return res.status(400).json({
+            message: `submissionObjectKey is required for item: ${itemSubmission.itemId}`,
+          });
         }
 
         await storage.updateProgressReportItem(itemSubmission.itemId, {
           submissionSource:
             itemSubmission.submissionSource || (submissionObjectKey ? "upload" : "link"),
           submissionObjectKey: submissionObjectKey || null,
-          submissionMimeType: submissionObjectKey ? itemSubmission.submissionMimeType?.trim() || null : null,
-          submissionOriginalFilename:
-            submissionObjectKey ? itemSubmission.submissionOriginalFilename?.trim() || null : null,
+          submissionMimeType: submissionObjectKey
+            ? itemSubmission.submissionMimeType?.trim() || null
+            : null,
+          submissionOriginalFilename: submissionObjectKey
+            ? itemSubmission.submissionOriginalFilename?.trim() || null
+            : null,
           submissionLink: submissionLink || null,
           submissionNote: itemSubmission.submissionNote?.trim() || null,
           reviewStatus: "submitted",
@@ -1948,7 +2141,9 @@ export async function registerRoutes(
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -1972,9 +2167,12 @@ export async function registerRoutes(
       if (!target) return res.status(404).json({ message: "Progress report item not found" });
       const hasSubmission =
         (typeof target.submissionLink === "string" && target.submissionLink.trim().length > 0) ||
-        (typeof target.submissionObjectKey === "string" && target.submissionObjectKey.trim().length > 0);
+        (typeof target.submissionObjectKey === "string" &&
+          target.submissionObjectKey.trim().length > 0);
       if (!hasSubmission) {
-        return res.status(409).json({ message: "Cannot review item before client submits a video" });
+        return res
+          .status(409)
+          .json({ message: "Cannot review item before client submits a video" });
       }
 
       const nowIso = new Date().toISOString();
@@ -1992,17 +2190,16 @@ export async function registerRoutes(
       const nextReportStatus = deriveProgressReportStatusFromItems(refreshedItems);
       const updatedReport = await storage.updateProgressReport(report.id, {
         status: nextReportStatus,
-        submittedAt:
-          nextReportStatus === "requested"
-            ? null
-            : report.submittedAt || nowIso,
+        submittedAt: nextReportStatus === "requested" ? null : report.submittedAt || nowIso,
       });
       if (!updatedReport) return res.status(404).json({ message: "Progress report not found" });
       const hydrated = await hydrateProgressReport(updatedReport);
       res.json(hydrated);
     } catch (error) {
       if (isProgressReportSchemaError(error)) {
-        return res.status(500).json({ message: "Database not ready for progress reports. Run npm run db:push." });
+        return res
+          .status(500)
+          .json({ message: "Database not ready for progress reports. Run npm run db:push." });
       }
       throw error;
     }
@@ -2173,18 +2370,25 @@ export async function registerRoutes(
 
     const clientIds = Array.from(new Set(result.map((message) => message.clientId)));
     const senderIds = Array.from(
-      new Set(result.map((message) => message.senderUserId).filter((id): id is string => Boolean(id))),
+      new Set(
+        result.map((message) => message.senderUserId).filter((id): id is string => Boolean(id)),
+      ),
     );
     const [clientUsers, senderUsers] = await Promise.all([
       Promise.all(clientIds.map((id) => storage.getUser(id))),
       Promise.all(senderIds.map((id) => storage.getUser(id))),
     ]);
 
-    const clientById = new Map(clientUsers.filter((user): user is User => Boolean(user)).map((user) => [user.id, user]));
-    const senderById = new Map(senderUsers.filter((user): user is User => Boolean(user)).map((user) => [user.id, user]));
+    const clientById = new Map(
+      clientUsers.filter((user): user is User => Boolean(user)).map((user) => [user.id, user]),
+    );
+    const senderById = new Map(
+      senderUsers.filter((user): user is User => Boolean(user)).map((user) => [user.id, user]),
+    );
 
     const hasLegacyCoachMessages = result.some(
-      (message) => !message.isClient && (!message.senderUserId || !senderById.has(message.senderUserId)),
+      (message) =>
+        !message.isClient && (!message.senderUserId || !senderById.has(message.senderUserId)),
     );
     let soleAdminUser: User | undefined;
     const adminByAlias = new Map<string, User>();
@@ -2228,11 +2432,7 @@ export async function registerRoutes(
 
     res.json(
       result.map((message) =>
-        toPublicMessage(
-          message,
-          resolveMessageSender(message),
-          clientById.get(message.clientId),
-        ),
+        toPublicMessage(message, resolveMessageSender(message), clientById.get(message.clientId)),
       ),
     );
   });
@@ -2268,20 +2468,20 @@ export async function registerRoutes(
     const allMessages = await storage.getMessages();
 
     if (role === "Client") {
-      const clientMessages = allMessages.filter(m => m.clientId === userId && !m.isClient);
-      const readStatus = readStatuses.find(s => s.clientId === userId);
+      const clientMessages = allMessages.filter((m) => m.clientId === userId && !m.isClient);
+      const readStatus = readStatuses.find((s) => s.clientId === userId);
       const lastReadAt = readStatus?.lastReadAt || "1970-01-01T00:00:00.000Z";
-      const unread = clientMessages.filter(m => m.time > lastReadAt).length;
+      const unread = clientMessages.filter((m) => m.time > lastReadAt).length;
       res.json({ total: unread, conversations: [{ clientId: userId, unread }] });
     } else {
-      const clientIds = Array.from(new Set(allMessages.map(m => m.clientId)));
+      const clientIds = Array.from(new Set(allMessages.map((m) => m.clientId)));
       let total = 0;
       const conversations: { clientId: string; unread: number }[] = [];
       for (const cid of clientIds) {
-        const clientMsgs = allMessages.filter(m => m.clientId === cid && m.isClient);
-        const readStatus = readStatuses.find(s => s.clientId === cid);
+        const clientMsgs = allMessages.filter((m) => m.clientId === cid && m.isClient);
+        const readStatus = readStatuses.find((s) => s.clientId === cid);
         const lastReadAt = readStatus?.lastReadAt || "1970-01-01T00:00:00.000Z";
-        const unread = clientMsgs.filter(m => m.time > lastReadAt).length;
+        const unread = clientMsgs.filter((m) => m.time > lastReadAt).length;
         if (unread > 0) {
           conversations.push({ clientId: cid, unread });
           total += unread;

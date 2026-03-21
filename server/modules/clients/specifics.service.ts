@@ -17,7 +17,11 @@ export async function saveClientSpecifics(
   specifics: string | null,
   updatedBy: string,
   deps: { users: UsersPort },
-): Promise<{ specifics: string; specificsUpdatedAt: string | null; specificsUpdatedBy: string | null }> {
+): Promise<{
+  specifics: string;
+  specificsUpdatedAt: string | null;
+  specificsUpdatedBy: string | null;
+}> {
   const client = await deps.users.getUser(clientId);
   if (!client) {
     throw new AppError("Client not found", 404, "CLIENT_NOT_FOUND");

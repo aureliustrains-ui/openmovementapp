@@ -91,6 +91,6 @@ test("session view supports section jump navigation with anchors", () => {
   const source = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(source.includes("jumpToSection"));
-  assert.ok(source.includes("scrollIntoView({ behavior: \"smooth\", block: \"start\" })"));
+  assert.ok(source.includes('scrollIntoView({ behavior: "smooth", block: "start" })'));
   assert.ok(source.includes("id={`section-${section.id}`}"));
 });

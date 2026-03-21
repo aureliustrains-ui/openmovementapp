@@ -27,6 +27,7 @@ import SectionTemplateEditor from "@/pages/admin/SectionTemplateEditor";
 import ExerciseTemplateEditor from "@/pages/admin/ExerciseTemplateEditor";
 
 // Client
+import ClientHome from "@/pages/client/Home";
 import ClientMyPhase from "@/pages/client/MyPhase";
 import ClientSessionView from "@/pages/client/SessionView";
 import ClientChat from "@/pages/client/Chat";
@@ -42,7 +43,7 @@ function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
   
   const canAccessAsImpersonatedClient = allowedRole === "Client" && impersonating && sessionUser.role === "Admin";
   if (allowedRole && sessionUser.role !== allowedRole && !canAccessAsImpersonatedClient) {
-    return <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />;
+    return <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />;
   }
   
   return <Component {...rest} />;
@@ -67,7 +68,7 @@ function Router() {
     <Switch>
       <Route path="/">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Redirect to="/login" />
         )}
@@ -75,7 +76,7 @@ function Router() {
 
       <Route path="/login">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Login />
         )}
@@ -83,7 +84,7 @@ function Router() {
 
       <Route path="/signup">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/my-phase"} />
+          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <SignUp />
         )}
@@ -124,6 +125,9 @@ function Router() {
                 </Route>
                 
                 {/* Client Routes */}
+                <Route path="/app/client/home">
+                  {() => <ProtectedRoute component={ClientHome} allowedRole="Client" />}
+                </Route>
                 <Route path="/app/client/my-phase">
                   {() => <ProtectedRoute component={ClientMyPhase} allowedRole="Client" />}
                 </Route>
