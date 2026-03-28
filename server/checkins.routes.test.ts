@@ -81,6 +81,7 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     phaseId: "phase_1",
     name: "Session 1",
     description: null,
+    durationMinutes: null,
     sessionVideoUrl: null,
     completedInstances: [],
     sections: [],
@@ -293,6 +294,7 @@ test("session video URL persists via /api/sessions create/update and is returned
         phaseId: string;
         name: string;
         description?: string | null;
+        durationMinutes?: number | null;
         sessionVideoUrl?: string | null;
         completedInstances?: unknown[];
         sections?: unknown[];
@@ -302,6 +304,10 @@ test("session video URL persists via /api/sessions create/update and is returned
           phaseId: payload.phaseId,
           name: payload.name,
           description: payload.description ?? null,
+          durationMinutes:
+            typeof payload.durationMinutes === "number" && Number.isFinite(payload.durationMinutes)
+              ? payload.durationMinutes
+              : null,
           sessionVideoUrl: payload.sessionVideoUrl ?? null,
           completedInstances: Array.isArray(payload.completedInstances)
             ? payload.completedInstances
@@ -316,6 +322,7 @@ test("session video URL persists via /api/sessions create/update and is returned
         payload: {
           name?: string;
           description?: string | null;
+          durationMinutes?: number | null;
           sessionVideoUrl?: string | null;
           completedInstances?: unknown[];
           sections?: unknown[];
@@ -328,6 +335,10 @@ test("session video URL persists via /api/sessions create/update and is returned
           ...payload,
           description:
             payload.description !== undefined ? payload.description : existing.description,
+          durationMinutes:
+            payload.durationMinutes !== undefined
+              ? payload.durationMinutes
+              : existing.durationMinutes,
           sessionVideoUrl:
             payload.sessionVideoUrl !== undefined
               ? payload.sessionVideoUrl
@@ -352,6 +363,7 @@ test("session video URL persists via /api/sessions create/update and is returned
               phaseId: "phase_1",
               name: "Session 1",
               description: "Session intro",
+              durationMinutes: 60,
               sessionVideoUrl: createdVideo,
               sections: [],
               completedInstances: [],
@@ -360,6 +372,7 @@ test("session video URL persists via /api/sessions create/update and is returned
           assert.equal(createRes.status, 201);
           const created = (await createRes.json()) as Session;
           assert.equal(created.sessionVideoUrl, createdVideo);
+          assert.equal(created.durationMinutes, 60);
 
           const updatedVideo = "https://drive.google.com/file/d/demo/view";
           const updateRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
@@ -370,11 +383,13 @@ test("session video URL persists via /api/sessions create/update and is returned
             },
             body: JSON.stringify({
               sessionVideoUrl: updatedVideo,
+              durationMinutes: 75,
             }),
           });
           assert.equal(updateRes.status, 200);
           const updated = (await updateRes.json()) as Session;
           assert.equal(updated.sessionVideoUrl, updatedVideo);
+          assert.equal(updated.durationMinutes, 75);
 
           const readRes = await fetch(`${baseUrl}/api/sessions/${created.id}`, {
             headers: {
@@ -384,6 +399,7 @@ test("session video URL persists via /api/sessions create/update and is returned
           assert.equal(readRes.status, 200);
           const readBack = (await readRes.json()) as Session;
           assert.equal(readBack.sessionVideoUrl, updatedVideo);
+          assert.equal(readBack.durationMinutes, 75);
         });
       } catch (error: unknown) {
         if (isEpermSocketError(error)) {
@@ -1488,6 +1504,7 @@ test("phase save + publish flow persists sessions and weekly schedule for admin 
     phaseId: string;
     name: string;
     description?: string | null;
+    durationMinutes?: number | null;
     sessionVideoUrl?: string | null;
     completedInstances?: unknown[];
     sections?: unknown[];
@@ -1546,6 +1563,10 @@ test("phase save + publish flow persists sessions and weekly schedule for admin 
           phaseId: String(payload.phaseId),
           name: String(payload.name),
           description: payload.description ?? null,
+          durationMinutes:
+            typeof payload.durationMinutes === "number" && Number.isFinite(payload.durationMinutes)
+              ? payload.durationMinutes
+              : null,
           sessionVideoUrl: payload.sessionVideoUrl ?? null,
           completedInstances: Array.isArray(payload.completedInstances)
             ? payload.completedInstances
@@ -1596,6 +1617,7 @@ test("phase save + publish flow persists sessions and weekly schedule for admin 
               phaseId: createdPhase.id,
               name: "Session A",
               description: "Main session",
+              durationMinutes: 45,
               sections: [],
               completedInstances: [],
             }),
@@ -1657,6 +1679,7 @@ test("phase save + publish flow persists sessions and weekly schedule for admin 
           const adminSessionsByPhase = (await adminSessionsByPhaseRes.json()) as Session[];
           assert.equal(adminSessionsByPhase.length, 1);
           assert.equal(adminSessionsByPhase[0]?.id, createdSession.id);
+          assert.equal(adminSessionsByPhase[0]?.durationMinutes, 45);
 
           const adminPhasesByClientRes = await fetch(`${baseUrl}/api/phases?clientId=client_1`, {
             headers: { "x-test-user-id": "admin_1" },
@@ -1695,6 +1718,7 @@ test("phase save + publish flow persists sessions and weekly schedule for admin 
           const clientSessions = (await clientSessionsRes.json()) as Session[];
           assert.equal(clientSessions.length, 1);
           assert.equal(clientSessions[0]?.id, createdSession.id);
+          assert.equal(clientSessions[0]?.durationMinutes, 45);
         });
       } catch (error: unknown) {
         if (isEpermSocketError(error)) {
@@ -2153,7 +2177,7 @@ test("POST /api/weekly-checkins persists injury impact and returns it in weekly 
               recoveryThisTrainingWeek: 4,
               stressOutsideTrainingThisWeek: 2,
               injuryAffectedTraining: true,
-              injuryImpact: 3,
+              injuryImpact: 5,
               optionalNote: "Left knee pain limited loaded squat depth",
             }),
           });
@@ -2161,7 +2185,7 @@ test("POST /api/weekly-checkins persists injury impact and returns it in weekly 
           assert.equal(createRes.status, 201);
           const created = (await createRes.json()) as WeeklyCheckin;
           assert.equal(created.injuryAffectedTraining, true);
-          assert.equal(created.injuryImpact, 3);
+          assert.equal(created.injuryImpact, 5);
 
           const meRes = await fetch(`${baseUrl}/api/weekly-checkins/me`, {
             headers: { "x-test-user-id": "client_1" },
@@ -2169,7 +2193,7 @@ test("POST /api/weekly-checkins persists injury impact and returns it in weekly 
           assert.equal(meRes.status, 200);
           const meBody = (await meRes.json()) as WeeklyCheckin[];
           assert.equal(meBody.length, 1);
-          assert.equal(meBody[0]?.injuryImpact, 3);
+          assert.equal(meBody[0]?.injuryImpact, 5);
 
           const trendsRes = await fetch(
             `${baseUrl}/api/clients/client_1/checkins/trends?range=2w`,
@@ -2183,7 +2207,7 @@ test("POST /api/weekly-checkins persists injury impact and returns it in weekly 
           };
           assert.equal(trends.weeks.length, 1);
           assert.equal(trends.weeks[0]?.injuryAffectedTraining, true);
-          assert.equal(trends.weeks[0]?.injuryImpact, 3);
+          assert.equal(trends.weeks[0]?.injuryImpact, 5);
         });
       } catch (error: unknown) {
         if (

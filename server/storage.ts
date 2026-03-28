@@ -175,6 +175,9 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private durationColumnsChecked = false;
+  private static readonly DURATION_SCHEMA_ERROR_CODE = "DURATION_SCHEMA_MISMATCH";
+
   private isMissingColumnError(error: unknown): boolean {
     if (!error || typeof error !== "object") return false;
     const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
@@ -229,6 +232,33 @@ export class DatabaseStorage implements IStorage {
         }
       | undefined;
     return row ? this.toCompatUser(row) : undefined;
+  }
+
+  private async ensureDurationColumns(): Promise<boolean> {
+    if (this.durationColumnsChecked) return true;
+    if (process.env.NODE_ENV === "production") {
+      // In production we require explicit DB rollout (db:push/migrate) instead of
+      // silently mutating schema at runtime.
+      return false;
+    }
+    try {
+      await db.execute(sql`alter table sessions add column if not exists duration_minutes integer`);
+      await db.execute(
+        sql`alter table session_templates add column if not exists duration_minutes integer`,
+      );
+      this.durationColumnsChecked = true;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private throwDurationSchemaMismatch(tableName: "sessions" | "session_templates"): never {
+    const error = new Error(
+      `Database schema for ${tableName} is missing duration_minutes. Run npm run db:push before production start.`,
+    ) as Error & { code?: string };
+    error.code = DatabaseStorage.DURATION_SCHEMA_ERROR_CODE;
+    throw error;
   }
 
   private async getUserCompatByEmail(email: string): Promise<User | undefined> {
@@ -293,6 +323,7 @@ export class DatabaseStorage implements IStorage {
       phaseId: row.phase_id,
       name: row.name,
       description: row.description ?? null,
+      durationMinutes: null,
       sessionVideoUrl: null,
       completedInstances: this.parseJsonArray(row.completed_instances),
       sections: this.parseJsonArray(row.sections),
@@ -389,6 +420,7 @@ export class DatabaseStorage implements IStorage {
     const merged: Session = {
       ...existing,
       ...data,
+      durationMinutes: null,
       sessionVideoUrl: null,
       completedInstances: this.parseJsonArray(
         data.completedInstances ?? existing.completedInstances,
@@ -444,7 +476,7 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     try {
-      return db.select().from(users);
+      return await db.select().from(users);
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
       return this.getUsersCompat();
@@ -493,18 +525,32 @@ export class DatabaseStorage implements IStorage {
 
   async getSessions(): Promise<Session[]> {
     try {
-      return db.select().from(sessions);
+      return await db.select().from(sessions);
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          return await db.select().from(sessions);
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
       return this.getSessionsCompat();
     }
   }
 
   async getSessionsByPhase(phaseId: string): Promise<Session[]> {
     try {
-      return db.select().from(sessions).where(eq(sessions.phaseId, phaseId));
+      return await db.select().from(sessions).where(eq(sessions.phaseId, phaseId));
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          return await db.select().from(sessions).where(eq(sessions.phaseId, phaseId));
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
       return this.getSessionsByPhaseCompat(phaseId);
     }
   }
@@ -515,6 +561,14 @@ export class DatabaseStorage implements IStorage {
       return session;
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
+          return session;
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
       return this.getSessionCompatById(id);
     }
   }
@@ -525,6 +579,17 @@ export class DatabaseStorage implements IStorage {
       return created;
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          const [created] = await db.insert(sessions).values(session).returning();
+          return created;
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
+      if (process.env.NODE_ENV === "production") {
+        this.throwDurationSchemaMismatch("sessions");
+      }
       return this.createSessionCompat(session);
     }
   }
@@ -535,6 +600,21 @@ export class DatabaseStorage implements IStorage {
       return updated;
     } catch (error) {
       if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          const [updated] = await db
+            .update(sessions)
+            .set(data)
+            .where(eq(sessions.id, id))
+            .returning();
+          return updated;
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
+      if (process.env.NODE_ENV === "production") {
+        this.throwDurationSchemaMismatch("sessions");
+      }
       return this.updateSessionCompat(id, data);
     }
   }
@@ -586,18 +666,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTemplateFolder(id: string): Promise<boolean> {
-    await db.update(phaseTemplates).set({ folderId: null }).where(eq(phaseTemplates.folderId, id));
+    const folder = await this.getTemplateFolder(id);
+    if (!folder) return false;
+    const fallbackFolderId = folder.parentId ?? null;
+
+    await db
+      .update(phaseTemplates)
+      .set({ folderId: fallbackFolderId })
+      .where(eq(phaseTemplates.folderId, id));
     await db
       .update(sessionTemplates)
-      .set({ folderId: null })
+      .set({ folderId: fallbackFolderId })
       .where(eq(sessionTemplates.folderId, id));
     await db
       .update(sectionTemplates)
-      .set({ folderId: null })
+      .set({ folderId: fallbackFolderId })
       .where(eq(sectionTemplates.folderId, id));
     await db
       .update(exerciseTemplates)
-      .set({ folderId: null })
+      .set({ folderId: fallbackFolderId })
       .where(eq(exerciseTemplates.folderId, id));
 
     const deleted = await db.delete(templateFolders).where(eq(templateFolders.id, id)).returning();
@@ -788,28 +875,199 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  private toCompatSessionTemplate(row: {
+    id: string;
+    folder_id: string | null;
+    sort_order: number | null;
+    name: string;
+    description: string | null;
+    sections: unknown;
+  }): SessionTemplate {
+    return {
+      id: row.id,
+      folderId: row.folder_id,
+      sortOrder: row.sort_order ?? 0,
+      name: row.name,
+      description: row.description ?? null,
+      durationMinutes: null,
+      sections: this.parseJsonArray(row.sections),
+    };
+  }
+
+  private async getSessionTemplatesCompat(): Promise<SessionTemplate[]> {
+    const result = await db.execute(sql`
+      select id, folder_id, sort_order, name, description, sections
+      from session_templates
+      order by sort_order asc, name asc
+    `);
+    const rows = result.rows as Array<{
+      id: string;
+      folder_id: string | null;
+      sort_order: number | null;
+      name: string;
+      description: string | null;
+      sections: unknown;
+    }>;
+    return rows.map((row) => this.toCompatSessionTemplate(row));
+  }
+
+  private async getSessionTemplateCompatById(id: string): Promise<SessionTemplate | undefined> {
+    const result = await db.execute(sql`
+      select id, folder_id, sort_order, name, description, sections
+      from session_templates
+      where id = ${id}
+      limit 1
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          folder_id: string | null;
+          sort_order: number | null;
+          name: string;
+          description: string | null;
+          sections: unknown;
+        }
+      | undefined;
+    return row ? this.toCompatSessionTemplate(row) : undefined;
+  }
+
+  private async createSessionTemplateCompat(
+    template: InsertSessionTemplate,
+  ): Promise<SessionTemplate> {
+    const sectionsJson = JSON.stringify(Array.isArray(template.sections) ? template.sections : []);
+    const result = await db.execute(sql`
+      insert into session_templates (folder_id, sort_order, name, description, sections)
+      values (
+        ${template.folderId ?? null},
+        ${template.sortOrder ?? 0},
+        ${template.name},
+        ${template.description ?? null},
+        ${sectionsJson}::jsonb
+      )
+      returning id, folder_id, sort_order, name, description, sections
+    `);
+    const row = result.rows[0] as {
+      id: string;
+      folder_id: string | null;
+      sort_order: number | null;
+      name: string;
+      description: string | null;
+      sections: unknown;
+    };
+    return this.toCompatSessionTemplate(row);
+  }
+
+  private async updateSessionTemplateCompat(
+    id: string,
+    data: Partial<InsertSessionTemplate>,
+  ): Promise<SessionTemplate | undefined> {
+    const existing = await this.getSessionTemplateCompatById(id);
+    if (!existing) return undefined;
+
+    const merged: SessionTemplate = {
+      ...existing,
+      ...data,
+      durationMinutes: null,
+      sections: this.parseJsonArray(data.sections ?? existing.sections),
+    };
+    const sectionsJson = JSON.stringify(merged.sections);
+    const result = await db.execute(sql`
+      update session_templates
+      set
+        folder_id = ${merged.folderId ?? null},
+        sort_order = ${merged.sortOrder ?? 0},
+        name = ${merged.name},
+        description = ${merged.description ?? null},
+        sections = ${sectionsJson}::jsonb
+      where id = ${id}
+      returning id, folder_id, sort_order, name, description, sections
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string;
+          folder_id: string | null;
+          sort_order: number | null;
+          name: string;
+          description: string | null;
+          sections: unknown;
+        }
+      | undefined;
+    return row ? this.toCompatSessionTemplate(row) : undefined;
+  }
+
   async getSessionTemplates(): Promise<SessionTemplate[]> {
-    return db
-      .select()
-      .from(sessionTemplates)
-      .orderBy(asc(sessionTemplates.sortOrder), asc(sessionTemplates.name));
+    try {
+      return await db
+        .select()
+        .from(sessionTemplates)
+        .orderBy(asc(sessionTemplates.sortOrder), asc(sessionTemplates.name));
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          return await db
+            .select()
+            .from(sessionTemplates)
+            .orderBy(asc(sessionTemplates.sortOrder), asc(sessionTemplates.name));
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
+      return this.getSessionTemplatesCompat();
+    }
   }
 
   async createSessionTemplate(template: InsertSessionTemplate): Promise<SessionTemplate> {
-    const [created] = await db.insert(sessionTemplates).values(template).returning();
-    return created;
+    try {
+      const [created] = await db.insert(sessionTemplates).values(template).returning();
+      return created;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          const [created] = await db.insert(sessionTemplates).values(template).returning();
+          return created;
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
+      if (process.env.NODE_ENV === "production") {
+        this.throwDurationSchemaMismatch("session_templates");
+      }
+      return this.createSessionTemplateCompat(template);
+    }
   }
 
   async updateSessionTemplate(
     id: string,
     data: Partial<InsertSessionTemplate>,
   ): Promise<SessionTemplate | undefined> {
-    const [updated] = await db
-      .update(sessionTemplates)
-      .set(data)
-      .where(eq(sessionTemplates.id, id))
-      .returning();
-    return updated;
+    try {
+      const [updated] = await db
+        .update(sessionTemplates)
+        .set(data)
+        .where(eq(sessionTemplates.id, id))
+        .returning();
+      return updated;
+    } catch (error) {
+      if (!this.isMissingColumnError(error)) throw error;
+      if (await this.ensureDurationColumns()) {
+        try {
+          const [updated] = await db
+            .update(sessionTemplates)
+            .set(data)
+            .where(eq(sessionTemplates.id, id))
+            .returning();
+          return updated;
+        } catch (retryError) {
+          if (!this.isMissingColumnError(retryError)) throw retryError;
+        }
+      }
+      if (process.env.NODE_ENV === "production") {
+        this.throwDurationSchemaMismatch("session_templates");
+      }
+      return this.updateSessionTemplateCompat(id, data);
+    }
   }
 
   async deleteSessionTemplate(id: string): Promise<boolean> {

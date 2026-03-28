@@ -13,6 +13,7 @@ type SessionLike = {
   id: string;
   name: string;
   description: string;
+  durationMinutes?: number | null;
   sessionVideoUrl?: string;
   sections: BlueprintSection[];
 };
@@ -117,6 +118,27 @@ export function SessionEditorCard<TSession extends SessionLike>({
             placeholder="Session description"
             className="bg-slate-50 border-slate-200"
           />
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">Session duration (minutes, optional)</label>
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={session.durationMinutes ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value.trim();
+                const parsed = Number.parseInt(raw, 10);
+                const duration =
+                  raw.length === 0 || !Number.isFinite(parsed) || parsed <= 0
+                    ? null
+                    : parsed;
+                onSessionChange((prev) => ({ ...prev, durationMinutes: duration }));
+              }}
+              placeholder="e.g. 60"
+              className="bg-slate-50 border-slate-200"
+            />
+          </div>
 
           {showSessionVideoField ? (
             <div className="space-y-2">

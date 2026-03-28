@@ -48,7 +48,6 @@ import {
   Legend,
   ComposedChart,
   Line,
-  Scatter,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -138,7 +137,6 @@ export default function AdminClientProfile() {
   const [weeklyMetrics, setWeeklyMetrics] = useState({
     recoveryThisTrainingWeek: true,
     stressOutsideTrainingThisWeek: true,
-    injuryImpact: true,
   });
   const [createProgressReportOpen, setCreateProgressReportOpen] = useState(false);
   const [selectedProgressExerciseIds, setSelectedProgressExerciseIds] = useState<string[]>([]);
@@ -733,6 +731,26 @@ export default function AdminClientProfile() {
     () => mapWeeklyCheckinTrendData(((checkinsTrends as any)?.weeks || []) as any[]),
     [checkinsTrends],
   );
+  const weeklyTrendLabelByKey = useMemo(() => {
+    const labels = new Map<string, string>();
+    weeklyCheckinTrendData.forEach((entry: any) => {
+      labels.set(
+        String(entry?.trendWeekKey ?? ""),
+        String(entry?.trendWeekLabel ?? entry?.dateLabel ?? "—"),
+      );
+    });
+    return labels;
+  }, [weeklyCheckinTrendData]);
+  const sessionTrendLabelByKey = useMemo(() => {
+    const labels = new Map<string, string>();
+    sessionCheckinTrendData.forEach((entry: any) => {
+      labels.set(
+        String(entry?.trendWeekKey ?? ""),
+        String(entry?.trendWeekLabel ?? entry?.dateLabel ?? "—"),
+      );
+    });
+    return labels;
+  }, [sessionCheckinTrendData]);
 
   const readinessSummaryCards = useMemo(
     () =>
@@ -1666,7 +1684,13 @@ export default function AdminClientProfile() {
                     <ResponsiveContainer>
                       <ComposedChart data={sessionCheckinTrendData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
+                        <XAxis
+                          dataKey="trendWeekKey"
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(value: string) =>
+                            sessionTrendLabelByKey.get(String(value)) ?? String(value)
+                          }
+                        />
                         <YAxis yAxisId="rpe" domain={[0, 10]} tick={{ fontSize: 11 }} />
                         <YAxis yAxisId="sleep" orientation="right" domain={[0, 10]} tick={{ fontSize: 11 }} />
                         <Tooltip
@@ -1731,13 +1755,6 @@ export default function AdminClientProfile() {
                     >
                       Stress
                     </Button>
-                    <Button
-                      size="sm"
-                      variant={weeklyMetrics.injuryImpact ? "default" : "outline"}
-                      onClick={() => setWeeklyMetrics((prev) => ({ ...prev, injuryImpact: !prev.injuryImpact }))}
-                    >
-                      Injury impact
-                    </Button>
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer>
@@ -1754,8 +1771,6 @@ export default function AdminClientProfile() {
                                 <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
                                 <div className="text-slate-700 mt-1">Recovery: {point?.recoveryThisTrainingWeek}</div>
                                 <div className="text-slate-700">Stress: {point?.stressOutsideTrainingThisWeek}</div>
-                                <div className="text-slate-700">Pain/injury affected training: {point?.injuryAffectedTraining ? "Yes" : "No"}</div>
-                                <div className="text-slate-700">Injury impact: {point?.injuryImpact ?? 0}</div>
                                 {point?.optionalNote ? <div className="text-slate-700 mt-1">Note: {point.optionalNote}</div> : null}
                               </div>
                             );
@@ -1768,41 +1783,52 @@ export default function AdminClientProfile() {
                         {weeklyMetrics.stressOutsideTrainingThisWeek && (
                           <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHECKIN_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
                         )}
-                        <>
-                          {weeklyMetrics.injuryImpact ? (
-                            <Line
-                              type="linear"
-                              dataKey="injuryImpact"
-                              name="Pain/injury impact"
-                              stroke={CHECKIN_COLORS.painInjury}
-                              strokeWidth={3}
-                              dot={{ r: 5, fill: CHECKIN_COLORS.painInjury, stroke: "#ffffff", strokeWidth: 1.5 }}
-                              activeDot={{
-                                r: 6,
-                                fill: CHECKIN_COLORS.painInjury,
-                                stroke: "#ffffff",
-                                strokeWidth: 1.5,
-                              }}
-                              connectNulls={false}
-                            />
-                          ) : null}
-                          <Scatter
-                            dataKey="injuryImpactEventLevel"
-                            name="Pain/injury events"
-                            fill={CHECKIN_COLORS.painInjury}
-                            line={false}
-                            shape={
-                              <circle
-                                r={6}
-                                fill={CHECKIN_COLORS.painInjury}
-                                stroke="#ffffff"
-                                strokeWidth={1.75}
-                              />
-                            }
-                            legendType="circle"
-                            isAnimationActive={false}
-                          />
-                        </>
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-700">Weekly injury impact</span>
+                  </div>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer>
+                      <ComposedChart data={weeklyCheckinTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="trendWeekKey"
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(value: string) =>
+                            weeklyTrendLabelByKey.get(String(value)) ?? String(value)
+                          }
+                        />
+                        <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const point = payload[0]?.payload as any;
+                            return (
+                              <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                                <div className="font-semibold text-slate-900">
+                                  {point?.trendWeekLabel || point?.weekStartDate || "Week"}
+                                </div>
+                                <div className="text-slate-700 mt-1">
+                                  Injury impact: {typeof point?.injuryImpact === "number" ? point.injuryImpact : "—"}
+                                </div>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="injuryImpact"
+                          name="Weekly injury impact"
+                          stroke={CHECKIN_COLORS.painInjury}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          connectNulls={false}
+                        />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
@@ -1842,7 +1868,9 @@ export default function AdminClientProfile() {
                         <div className="text-sm font-semibold text-slate-900">Week of {entry.weekStartDate}</div>
                         <div className="text-xs text-slate-700 mt-1">Recovery {entry.recoveryThisTrainingWeek} · Stress {entry.stressOutsideTrainingThisWeek}</div>
                         <div className="text-xs text-slate-700">Pain/injury affected training {entry.injuryAffectedTraining ? "Yes" : "No"}</div>
-                        <div className="text-xs text-slate-700">Injury impact {entry.injuryImpact ?? 0}</div>
+                        <div className="text-xs text-slate-700">
+                          Injury impact {entry.injuryAffectedTraining ? (entry.injuryImpact ?? "—") : "—"}
+                        </div>
                         {entry.optionalNote ? <div className="text-xs text-slate-700 mt-1">Optional note: {entry.optionalNote}</div> : null}
                       </div>
                     ))

@@ -49,7 +49,13 @@ function makeSection(name = "New Section"): BlueprintSection {
 }
 
 function makeSession(name = "New Session"): BlueprintSession {
-  return { id: crypto.randomUUID(), name, description: "", sections: [makeSection("A. Main")] };
+  return {
+    id: crypto.randomUUID(),
+    name,
+    description: "",
+    durationMinutes: null,
+    sections: [makeSection("A. Main")],
+  };
 }
 
 export default function TemplateBuilder() {

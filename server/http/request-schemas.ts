@@ -50,10 +50,11 @@ export const createWeeklyCheckinSchema = z
     recoveryThisTrainingWeek: z.coerce.number().int().min(1).max(5),
     stressOutsideTrainingThisWeek: z.coerce.number().int().min(1).max(5),
     injuryAffectedTraining: z.boolean(),
-    injuryImpact: z.preprocess(
-      (value) => (value === "" ? null : value),
-      z.coerce.number().int().min(0).max(3).nullable().optional(),
-    ),
+    injuryImpact: z.preprocess((value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      if (value === 0 || value === "0") return null;
+      return value;
+    }, z.coerce.number().int().min(1).max(5).nullable().optional()),
     optionalNote: z.string().max(4000).nullable().optional(),
     phaseId: z.string().min(1).max(64).optional(),
     phaseWeekNumber: z.coerce.number().int().min(1).max(52).optional(),
@@ -71,6 +72,183 @@ export const createWeeklyCheckinSchema = z
       });
     }
   });
+
+const phaseStatusSchema = z.enum(["Draft", "Active", "Waiting for Movement Check", "Archived"]);
+
+const nullableText = (max: number) => z.string().max(max).nullable().optional();
+
+const durationMinutesSchema = z.coerce.number().int().min(1).max(600);
+
+const positiveWeekNumberSchema = z.coerce.number().int().min(1).max(104);
+
+const templateSortOrderSchema = z.coerce.number().int().min(0);
+
+const templateFolderIdSchema = z.string().min(1).max(64).nullable();
+
+export const createPhaseSchema = z
+  .object({
+    clientId: z.string().min(1).max(64),
+    name: z.string().min(1).max(160),
+    goal: nullableText(4000),
+    startDate: z.string().max(64).nullable().optional(),
+    durationWeeks: positiveWeekNumberSchema.optional(),
+    status: phaseStatusSchema.optional(),
+    movementChecks: z.array(z.unknown()).optional(),
+    schedule: z.array(z.unknown()).optional(),
+    completedScheduleInstances: z.array(z.string().max(120)).optional(),
+    homeIntroVideoUrl: z.string().trim().max(2048).nullable().optional(),
+  })
+  .strict();
+
+export const updatePhaseAdminSchema = z
+  .object({
+    name: z.string().min(1).max(160).optional(),
+    goal: nullableText(4000),
+    startDate: z.string().max(64).nullable().optional(),
+    durationWeeks: positiveWeekNumberSchema.optional(),
+    status: phaseStatusSchema.optional(),
+    movementChecks: z.array(z.unknown()).optional(),
+    schedule: z.array(z.unknown()).optional(),
+    completedScheduleInstances: z.array(z.string().max(120)).optional(),
+    homeIntroVideoUrl: z.string().trim().max(2048).nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
+
+export const createSessionSchema = z
+  .object({
+    phaseId: z.string().min(1).max(64),
+    name: z.string().min(1).max(160),
+    description: nullableText(4000),
+    durationMinutes: durationMinutesSchema.nullable().optional(),
+    sessionVideoUrl: z.string().trim().max(2048).nullable().optional(),
+    completedInstances: z.array(z.string().max(120)).optional(),
+    sections: z.array(z.unknown()).optional(),
+  })
+  .strict();
+
+export const updateSessionSchema = z
+  .object({
+    phaseId: z.string().min(1).max(64).optional(),
+    name: z.string().min(1).max(160).optional(),
+    description: nullableText(4000),
+    durationMinutes: durationMinutesSchema.nullable().optional(),
+    sessionVideoUrl: z.string().trim().max(2048).nullable().optional(),
+    completedInstances: z.array(z.string().max(120)).optional(),
+    sections: z.array(z.unknown()).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
+
+export const createExerciseTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160),
+    targetMuscle: nullableText(120),
+    demoUrl: z.string().trim().max(2048).nullable().optional(),
+    sets: nullableText(120),
+    reps: nullableText(120),
+    load: nullableText(120),
+    tempo: nullableText(120),
+    notes: nullableText(4000),
+    goal: nullableText(4000),
+    additionalInstructions: nullableText(4000),
+    enableStructuredLogging: z.boolean().optional(),
+    requiresMovementCheck: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateExerciseTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160).optional(),
+    targetMuscle: nullableText(120),
+    demoUrl: z.string().trim().max(2048).nullable().optional(),
+    sets: nullableText(120),
+    reps: nullableText(120),
+    load: nullableText(120),
+    tempo: nullableText(120),
+    notes: nullableText(4000),
+    goal: nullableText(4000),
+    additionalInstructions: nullableText(4000),
+    enableStructuredLogging: z.boolean().optional(),
+    requiresMovementCheck: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
+
+export const createSectionTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160),
+    description: nullableText(4000),
+    exercises: z.array(z.unknown()).optional(),
+  })
+  .strict();
+
+export const updateSectionTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160).optional(),
+    description: nullableText(4000),
+    exercises: z.array(z.unknown()).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
+
+export const createSessionTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160),
+    description: nullableText(4000),
+    durationMinutes: durationMinutesSchema.nullable().optional(),
+    sections: z.array(z.unknown()).optional(),
+  })
+  .strict();
+
+export const updateSessionTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160).optional(),
+    description: nullableText(4000),
+    durationMinutes: durationMinutesSchema.nullable().optional(),
+    sections: z.array(z.unknown()).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
+
+export const createPhaseTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160),
+    goal: nullableText(4000),
+    durationWeeks: positiveWeekNumberSchema.optional(),
+    sessions: z.array(z.unknown()).optional(),
+    schedule: z.array(z.unknown()).optional(),
+    movementCheckEnabled: z.boolean().optional(),
+  })
+  .strict();
+
+export const updatePhaseTemplateSchema = z
+  .object({
+    folderId: templateFolderIdSchema.optional(),
+    sortOrder: templateSortOrderSchema.optional(),
+    name: z.string().min(1).max(160).optional(),
+    goal: nullableText(4000),
+    durationWeeks: positiveWeekNumberSchema.optional(),
+    sessions: z.array(z.unknown()).optional(),
+    schedule: z.array(z.unknown()).optional(),
+    movementCheckEnabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
 
 export const createProgressReportSchema = z
   .object({

@@ -39,14 +39,16 @@ test("shared add-from-template modal is folder-aware and uses picker panel", () 
   assert.ok(source.includes("getTemplateFolderId={getTemplateFolderId}"));
 });
 
-test("template picker panel supports all-view, folder filtering, and search within current view", () => {
+test("template picker panel uses simplified category-root tree with nested folder filtering", () => {
   const source = fs.readFileSync(templatePickerPanelPath, "utf8");
 
-  assert.ok(source.includes('const VIEW_ALL = "__all__";'));
+  assert.ok(source.includes("rootLabel?: string;"));
+  assert.ok(source.includes("defaultRootLabel(allLabel)"));
   assert.ok(source.includes("allLabel: string;"));
   assert.ok(source.includes("templateFoldersQuery(folderType)"));
-  assert.ok(source.includes("if (selectedView === VIEW_ALL) return templates;"));
-  assert.ok(source.includes("return folderId === selectedView;"));
+  assert.ok(source.includes("selectedFolderId"));
+  assert.ok(source.includes("rootFolders.map((folder) => renderFolderTree(folder, 1))"));
+  assert.equal(source.includes(">Folders<"), false);
   assert.ok(source.includes("No templates found in this view."));
 });
 

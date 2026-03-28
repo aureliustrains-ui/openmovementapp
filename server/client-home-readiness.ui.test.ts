@@ -43,13 +43,27 @@ test("client readiness uses shared checkins mappers and chart keys expected by a
   assert.ok(readinessSectionSource.includes('dataKey="sleepLastNight"'));
   assert.ok(readinessSectionSource.includes('dataKey="feltOffEventLevel"'));
   assert.ok(readinessSectionSource.includes("ComposedChart data={weeklyCheckinTrendData}"));
+  assert.ok(readinessSectionSource.includes('dataKey="trendWeekKey"'));
   assert.ok(readinessSectionSource.includes('dataKey="recoveryThisTrainingWeek"'));
   assert.ok(readinessSectionSource.includes('dataKey="stressOutsideTrainingThisWeek"'));
   assert.ok(readinessSectionSource.includes('dataKey="injuryImpact"'));
-  assert.ok(readinessSectionSource.includes('dataKey="injuryImpactEventLevel"'));
 });
 
-test("felt-off and injury-affected events are rendered visually in admin and client readiness charts", () => {
+test("admin and client weekly readiness charts use shared training-week x-axis identity key", () => {
+  const adminSource = fs.readFileSync(adminProfilePath, "utf8");
+  const readinessSectionSource = fs.readFileSync(clientReadinessSectionPath, "utf8");
+
+  assert.ok(
+    adminSource.includes('dataKey="trendWeekKey"'),
+    "Admin weekly chart should use training-week identity key for x-axis",
+  );
+  assert.ok(
+    readinessSectionSource.includes('dataKey="trendWeekKey"'),
+    "Client weekly chart should use training-week identity key for x-axis",
+  );
+});
+
+test("felt-off markers stay in mixed chart while injury impact renders in dedicated weekly injury charts", () => {
   const adminSource = fs.readFileSync(adminProfilePath, "utf8");
   const readinessSectionSource = fs.readFileSync(clientReadinessSectionPath, "utf8");
 
@@ -60,14 +74,6 @@ test("felt-off and injury-affected events are rendered visually in admin and cli
   assert.ok(
     adminSource.includes('name="Felt off events"') && adminSource.includes('stroke="transparent"'),
     "Admin felt-off events should be rendered as visible marker-only series",
-  );
-  assert.ok(
-    adminSource.includes('dataKey="injuryImpactEventLevel"'),
-    "Admin trend explorer should render injury-affected week markers",
-  );
-  assert.ok(
-    adminSource.includes('name="Pain/injury events"') && adminSource.includes("<Scatter"),
-    "Admin injury-affected weeks should be rendered as visible marker scatter series",
   );
   assert.ok(
     readinessSectionSource.includes('dataKey="feltOffEventLevel"'),
@@ -83,15 +89,6 @@ test("felt-off and injury-affected events are rendered visually in admin and cli
     "Client readiness tooltip should include felt-off note detail text when available",
   );
   assert.ok(
-    readinessSectionSource.includes('dataKey="injuryImpactEventLevel"'),
-    "Client readiness should render injury-affected week markers",
-  );
-  assert.ok(
-    readinessSectionSource.includes('name="Pain/injury events"') &&
-      readinessSectionSource.includes("<Scatter"),
-    "Client readiness should render injury-affected week markers visibly",
-  );
-  assert.ok(
     adminSource.includes("What felt off:"),
     "Admin trend explorer tooltip should include felt-off note detail text when available",
   );
@@ -99,6 +96,42 @@ test("felt-off and injury-affected events are rendered visually in admin and cli
     adminSource.includes('dataKey="injuryImpact"') &&
       readinessSectionSource.includes('dataKey="injuryImpact"'),
     "Both admin and client readiness charts should plot numeric injury impact values",
+  );
+  assert.ok(
+    adminSource.includes("Weekly injury impact") &&
+      readinessSectionSource.includes("Weekly injury impact"),
+    "Both admin and client readiness surfaces should include a dedicated weekly injury impact chart section",
+  );
+  assert.ok(
+    readinessSectionSource.includes("showFullDetails && hasInjuryImpactDataInView"),
+    "Client readiness should render the dedicated injury chart only in full readiness mode when injury data exists",
+  );
+  assert.equal(
+    adminSource.includes('dataKey="injuryImpactEventLevel"'),
+    false,
+    "Admin should not use injury event-level scatter overlays in the mixed weekly chart",
+  );
+  assert.equal(
+    readinessSectionSource.includes('dataKey="injuryImpactEventLevel"'),
+    false,
+    "Client readiness should not use injury event-level scatter overlays in the mixed weekly chart",
+  );
+  assert.equal(
+    readinessSectionSource.includes('onClick={() => toggleWeeklyMetric("injuryImpact")}'),
+    false,
+    "Client mixed weekly metric controls should no longer include injury impact",
+  );
+  assert.equal(
+    adminSource.includes(
+      "setWeeklyMetrics((prev) => ({ ...prev, injuryImpact: !prev.injuryImpact }))",
+    ),
+    false,
+    "Admin mixed weekly metric controls should no longer include injury impact",
+  );
+  assert.equal(
+    readinessSectionSource.includes("No weekly injury impact entries yet."),
+    false,
+    "Client readiness should hide the dedicated injury chart entirely when there is no injury data",
   );
 });
 
@@ -114,22 +147,24 @@ test("checkins trend mappers normalize numeric fields for chart rendering", () =
   assert.ok(
     checkinsSource.includes("sleepLastNight: toFiniteNumber((entry as any).sleepLastNight)"),
   );
+  assert.ok(checkinsSource.includes("recoveryThisTrainingWeek: toFiniteNumber("));
   assert.ok(
-    checkinsSource.includes(
-      "recoveryThisTrainingWeek: toFiniteNumber(\n      (entry as any).recoveryThisTrainingWeek ?? (entry as any).sleepWeek,",
-    ),
+    checkinsSource.includes("(entry as any).recoveryThisTrainingWeek ?? (entry as any).sleepWeek"),
   );
+  assert.ok(checkinsSource.includes("stressOutsideTrainingThisWeek: toFiniteNumber("));
   assert.ok(
     checkinsSource.includes(
-      "stressOutsideTrainingThisWeek: toFiniteNumber(\n      (entry as any).stressOutsideTrainingThisWeek ?? (entry as any).energyWeek,",
+      "(entry as any).stressOutsideTrainingThisWeek ?? (entry as any).energyWeek",
     ),
   );
   assert.ok(checkinsSource.includes("feltOffEventLevel: entry.feltOff ? 9.6 : null"));
-  assert.ok(
-    checkinsSource.includes(
-      "injuryImpactEventLevel:\n      (entry as any).injuryAffectedTraining === true ||",
-    ),
+  assert.equal(
+    checkinsSource.includes("injuryImpactEventLevel"),
+    false,
+    "Weekly mapper should keep injury impact as a normal weekly metric without synthetic event levels",
   );
+  assert.ok(checkinsSource.includes("trendWeekKey"));
+  assert.ok(checkinsSource.includes("trendWeekLabel"));
 });
 
 test("client readiness full page reuses shared readiness section and includes recent check-ins", () => {
@@ -140,6 +175,11 @@ test("client readiness full page reuses shared readiness section and includes re
   assert.ok(
     homeSource.includes("<ClientReadinessSection />"),
     "Home should keep the readiness preview section",
+  );
+  assert.equal(
+    homeSource.includes("<ClientReadinessSection showFullDetails />"),
+    false,
+    "Home should not use the full readiness mode that renders the dedicated injury chart",
   );
   assert.ok(
     readinessPageSource.includes("<ClientReadinessSection showFullDetails />"),

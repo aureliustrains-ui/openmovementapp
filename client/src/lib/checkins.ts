@@ -48,6 +48,8 @@ function toFiniteNumber(value: unknown): number | null {
 
 export function mapSessionCheckinTrendData<T extends SessionTrendEntryLike>(entries: T[]): Array<
   T & {
+    trendWeekKey: string;
+    trendWeekLabel: string;
     dateLabel: string;
     rpeOverall: number | null;
     sleepLastNight: number | null;
@@ -56,47 +58,73 @@ export function mapSessionCheckinTrendData<T extends SessionTrendEntryLike>(entr
     feltOffSleepMarker: number | null;
   }
 > {
-  return entries.map((entry) => ({
-    ...entry,
-    rpeOverall: toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe),
-    sleepLastNight: toFiniteNumber((entry as any).sleepLastNight),
-    dateLabel: entry.date ? new Date(entry.date).toLocaleDateString() : "—",
-    feltOffMarker: entry.feltOff
-      ? toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe) ?? 0
-      : null,
-    // Keep felt-off markers visible and separate from regular metric dots.
-    feltOffEventLevel: entry.feltOff ? 9.6 : null,
-    feltOffSleepMarker:
-      entry.feltOff ? toFiniteNumber((entry as any).sleepLastNight) : null,
-  }));
+  return entries.map((entry, index) => {
+    const dateLabel = entry.date ? new Date(entry.date).toLocaleDateString() : "—";
+    const trendWeekKey =
+      (typeof (entry as any).id === "string" && (entry as any).id.trim().length > 0
+        ? (entry as any).id.trim()
+        : null) ||
+      (typeof entry.date === "string" && entry.date.trim().length > 0 ? entry.date.trim() : null) ||
+      `session-${index + 1}`;
+
+    return {
+      ...entry,
+      trendWeekKey,
+      trendWeekLabel: dateLabel,
+      rpeOverall: toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe),
+      sleepLastNight: toFiniteNumber((entry as any).sleepLastNight),
+      dateLabel,
+      feltOffMarker: entry.feltOff
+        ? toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe) ?? 0
+        : null,
+      // Keep felt-off markers visible and separate from regular metric dots.
+      feltOffEventLevel: entry.feltOff ? 9.6 : null,
+      feltOffSleepMarker: entry.feltOff ? toFiniteNumber((entry as any).sleepLastNight) : null,
+    };
+  });
 }
 
 export function mapWeeklyCheckinTrendData<T extends WeeklyTrendEntryLike>(entries: T[]): Array<
   T & {
+    trendWeekKey: string;
+    trendWeekLabel: string;
     dateLabel: string;
     recoveryThisTrainingWeek: number | null;
     stressOutsideTrainingThisWeek: number | null;
     injuryImpact: number | null;
-    injuryImpactEventLevel: number | null;
   }
 > {
-  return entries.map((entry) => ({
-    ...entry,
-    dateLabel: entry.weekStartDate || "—",
-    recoveryThisTrainingWeek: toFiniteNumber(
-      (entry as any).recoveryThisTrainingWeek ?? (entry as any).sleepWeek,
-    ),
-    stressOutsideTrainingThisWeek: toFiniteNumber(
-      (entry as any).stressOutsideTrainingThisWeek ?? (entry as any).energyWeek,
-    ),
-    injuryImpact: toFiniteNumber((entry as any).injuryImpact),
-    // Keep injury events visible as an explicit marker band, similar to felt-off events.
-    injuryImpactEventLevel:
-      (entry as any).injuryAffectedTraining === true ||
-      (toFiniteNumber((entry as any).injuryImpact) ?? 0) > 0
-        ? 4.6
-        : null,
-  }));
+  return entries.map((entry) => {
+    const weekStartDate = entry.weekStartDate || "—";
+    const phaseWeekNumber = toFiniteNumber((entry as any).phaseWeekNumber);
+    const phaseId =
+      typeof (entry as any).phaseId === "string" && (entry as any).phaseId.trim().length > 0
+        ? (entry as any).phaseId.trim()
+        : "phase";
+    const rowId =
+      (typeof (entry as any).id === "string" && (entry as any).id) ||
+      (typeof (entry as any).submittedAt === "string" && (entry as any).submittedAt) ||
+      weekStartDate;
+    // Use training-week identity for chart x-axis so rows don't collapse when multiple
+    // training weeks are submitted in the same calendar week.
+    const trendWeekKey =
+      phaseWeekNumber !== null ? `${phaseId}:week-${phaseWeekNumber}` : `week-start:${weekStartDate}:${rowId}`;
+    const trendWeekLabel = phaseWeekNumber !== null ? `W${phaseWeekNumber}` : weekStartDate;
+
+    return {
+      ...entry,
+      trendWeekKey,
+      trendWeekLabel,
+      dateLabel: weekStartDate,
+      recoveryThisTrainingWeek: toFiniteNumber(
+        (entry as any).recoveryThisTrainingWeek ?? (entry as any).sleepWeek,
+      ),
+      stressOutsideTrainingThisWeek: toFiniteNumber(
+        (entry as any).stressOutsideTrainingThisWeek ?? (entry as any).energyWeek,
+      ),
+      injuryImpact: toFiniteNumber((entry as any).injuryImpact),
+    };
+  });
 }
 
 export function hasSessionCheckinTrendData(entries: unknown[]): boolean {

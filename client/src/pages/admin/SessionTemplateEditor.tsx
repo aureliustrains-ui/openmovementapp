@@ -23,6 +23,7 @@ type SessionTemplateModel = {
   id: string;
   name: string;
   description: string;
+  durationMinutes: number | null;
   sections: BlueprintSection[];
 };
 
@@ -56,6 +57,12 @@ export default function SessionTemplateEditor() {
       id: template.id,
       name: template.name || "",
       description: template.description || "",
+      durationMinutes:
+        typeof template.durationMinutes === "number" &&
+        Number.isFinite(template.durationMinutes) &&
+        template.durationMinutes > 0
+          ? Math.floor(template.durationMinutes)
+          : null,
       sections: (template.sections || []) as BlueprintSection[],
     });
   }, [template]);
@@ -68,6 +75,7 @@ export default function SessionTemplateEditor() {
         id: model.id,
         name: model.name.trim(),
         description: model.description.trim() || null,
+        durationMinutes: model.durationMinutes,
         sections: model.sections,
       });
       toast({ title: "Session template saved" });
@@ -95,6 +103,7 @@ export default function SessionTemplateEditor() {
       const created = await createTemplate.mutateAsync({
         name: `${model.name} (Copy)`,
         description: model.description.trim() || null,
+        durationMinutes: model.durationMinutes,
         sections: model.sections,
       });
       toast({ title: "Session template duplicated" });

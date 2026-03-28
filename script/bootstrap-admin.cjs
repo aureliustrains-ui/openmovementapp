@@ -5,7 +5,9 @@ const loadLocalEnv = require("./load-local-env.cjs");
 loadLocalEnv();
 
 const PRIMARY_ADMIN_EMAIL =
-  process.env.PRIMARY_ADMIN_EMAIL?.trim()?.toLowerCase() || "aureliustrains@gmail.com";
+  process.env.PRIMARY_ADMIN_EMAIL?.trim()?.toLowerCase() ||
+  process.env.BOOTSTRAP_ADMIN_EMAIL?.trim()?.toLowerCase() ||
+  "aureliustrains@gmail.com";
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");

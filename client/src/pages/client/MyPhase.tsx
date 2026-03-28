@@ -4,6 +4,7 @@ import {
   sessionsQuery,
   useUpdatePhase,
   weeklyCheckinsMeQuery,
+  weeklyCheckinsCurrentOrDueQuery,
   useCreateWeeklyCheckin,
   myActivePhaseProgressReportsQuery,
   useCreateClientVideoUploadTarget,
@@ -93,11 +94,20 @@ function getProgressReportStatusMeta(status: string): {
 
 export default function ClientMyPhase() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
+  const isClientSession = sessionUser?.role === "Client";
+  const isClientContextMatch = Boolean(
+    sessionUser?.id && viewedUser?.id && sessionUser.id === viewedUser.id,
+  );
+  const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { data: weeklyCheckins = [] } = useQuery({
     ...weeklyCheckinsMeQuery,
     enabled: !!sessionUser && !impersonating,
+  });
+  const { data: weeklyCheckinStatus } = useQuery({
+    ...weeklyCheckinsCurrentOrDueQuery,
+    enabled: !!sessionUser && !isCheckinReadOnly,
   });
   const { data: activePhaseProgressReports = [] } = useQuery({
     ...myActivePhaseProgressReportsQuery,
@@ -126,11 +136,6 @@ export default function ClientMyPhase() {
   const [weeklyNote, setWeeklyNote] = useState("");
   const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
   const previousRecommendedWeekRef = useRef<number | null>(null);
-  const isClientSession = sessionUser?.role === "Client";
-  const isClientContextMatch = Boolean(
-    sessionUser?.id && viewedUser?.id && sessionUser.id === viewedUser.id,
-  );
-  const isCheckinReadOnly = impersonating || !isClientSession || !isClientContextMatch;
 
   if (!viewedUser) return null;
 
@@ -173,7 +178,15 @@ export default function ClientMyPhase() {
       currentPhase.id,
       weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>,
     );
-    const recommendedWeek = lifecycle.currentWeek;
+    const dueWeek = lifecycle.weeks.find((status) => status.state === "ready_for_checkin");
+    const serverPhaseWeek =
+      weeklyCheckinStatus &&
+      weeklyCheckinStatus.phaseId === currentPhase.id &&
+      typeof weeklyCheckinStatus.phaseWeekNumber === "number" &&
+      Number.isFinite(weeklyCheckinStatus.phaseWeekNumber)
+        ? weeklyCheckinStatus.phaseWeekNumber
+        : null;
+    const recommendedWeek = dueWeek?.week ?? serverPhaseWeek ?? lifecycle.currentWeek;
     const selectedStatus = lifecycle.weeks.find((status) => status.week === selectedWeek);
     const selectedWeekOutOfRange = selectedWeek < 1 || selectedWeek > lifecycle.weeks.length;
     const previousRecommendedWeek = previousRecommendedWeekRef.current;
@@ -203,6 +216,8 @@ export default function ClientMyPhase() {
         (entry) => `${entry.id || ""}:${entry.phaseId || ""}:${entry.phaseWeekNumber ?? ""}`,
       ),
     ),
+    weeklyCheckinStatus?.phaseId,
+    weeklyCheckinStatus?.phaseWeekNumber,
     selectedWeek,
   ]);
 
@@ -459,10 +474,26 @@ export default function ClientMyPhase() {
       hasWeeklyCheckin: false,
       state: "future",
     } as const);
-  const currentTrainingWeek = weekLifecycle.currentWeek;
+  const weeklyCheckinStatusForPhase =
+    weeklyCheckinStatus && weeklyCheckinStatus.phaseId === currentPhase.id
+      ? weeklyCheckinStatus
+      : null;
+  const weeklyCheckinStatusWeek =
+    typeof weeklyCheckinStatusForPhase?.phaseWeekNumber === "number" &&
+    Number.isFinite(weeklyCheckinStatusForPhase.phaseWeekNumber)
+      ? weeklyCheckinStatusForPhase.phaseWeekNumber
+      : null;
+  const dueWeekStatus =
+    weekStatuses.find((status) => status.state === "ready_for_checkin") || null;
+  const currentTrainingWeek =
+    dueWeekStatus?.week ?? weeklyCheckinStatusWeek ?? weekLifecycle.currentWeek;
   const currentWeekStatus = weekStatuses.find((status) => status.week === currentTrainingWeek);
-  const weeklyCheckinWeek = currentTrainingWeek;
-  const weeklyCheckinDue = currentWeekStatus?.state === "ready_for_checkin";
+  const weeklyCheckinWeek =
+    dueWeekStatus?.week ?? weeklyCheckinStatusWeek ?? currentTrainingWeek;
+  const weeklyCheckinDue =
+    Boolean(dueWeekStatus) ||
+    Boolean(weeklyCheckinStatusForPhase?.due) ||
+    currentWeekStatus?.state === "ready_for_checkin";
   const latestPhaseProgressReport = currentPhase
     ? pickLatestProgressReportForPhase(
         activePhaseProgressReports as Array<{
@@ -508,6 +539,16 @@ export default function ClientMyPhase() {
       day,
       slot: slotVal || "AM",
     }).href;
+  };
+
+  const formatSessionDuration = (session: any) => {
+    const minutes =
+      typeof session?.durationMinutes === "number" &&
+      Number.isFinite(session.durationMinutes) &&
+      session.durationMinutes > 0
+        ? Math.floor(session.durationMinutes)
+        : null;
+    return minutes ? `${minutes} min` : null;
   };
 
   const { nextScheduleItem } = getWeekSchedulePreview(
@@ -641,6 +682,9 @@ export default function ClientMyPhase() {
                   <p className="text-sm font-semibold text-slate-900">{nextScheduleItem.session.name}</p>
                   <p className="text-xs text-slate-600 mt-0.5">
                     Week {selectedWeek} · {nextScheduleItem.entry.day} {nextScheduleItem.entry.slot || "AM"}
+                    {formatSessionDuration(nextScheduleItem.session)
+                      ? ` · ${formatSessionDuration(nextScheduleItem.session)}`
+                      : ""}
                   </p>
                 </div>
                 <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
@@ -837,7 +881,12 @@ export default function ClientMyPhase() {
                                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
                                     <h3 className={`text-xl font-bold ${isCompleted ? "text-slate-500 line-through" : "text-slate-900 group-hover:text-slate-700 transition-colors"}`}>{session?.name}</h3>
                                   </div>
-                                  <p className="text-sm text-slate-500 mt-1">{(session?.sections as any[])?.length} Blocks</p>
+                                  <p className="text-sm text-slate-500 mt-1">
+                                    {(session?.sections as any[])?.length} Blocks
+                                    {formatSessionDuration(session)
+                                      ? ` · ${formatSessionDuration(session)}`
+                                      : ""}
+                                  </p>
                                 </div>
                                 <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-[var(--color-ui-surface)] group-hover:shadow-inner transition-all ml-4 border border-slate-200">
                                    {isCompleted ? <CheckCircle2 className="h-6 w-6 text-[var(--color-done-foreground)]" /> : <ChevronRight className="h-6 w-6 text-[var(--color-brand-600)] group-hover:translate-x-0.5 transition-transform" />}
@@ -977,22 +1026,25 @@ export default function ClientMyPhase() {
               {weeklyInjuryAffected && (
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-slate-900">How much did it affect training?</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[0, 1, 2, 3].map((value) => (
+                  <div className="grid grid-cols-5 gap-2">
+                    {[1, 2, 3, 4, 5].map((value) => (
                       <button
                         key={`impact-${value}`}
                         type="button"
                         onClick={() => setWeeklyInjuryImpact(value)}
-                        className={`rounded-xl border px-3 py-3 text-sm font-semibold ${
+                        className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
                           weeklyInjuryImpact === value
                             ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                             : "border-slate-200 bg-white text-slate-700"
                         }`}
                       >
-                        {value === 0 ? "0 None" : value === 1 ? "1 Slightly reduced" : value === 2 ? "2 Moderately reduced" : "3 Could not train normally"}
+                        {value}
                       </button>
                     ))}
                   </div>
+                  <p className="text-xs text-slate-500">
+                    1 Very low impact · 2 Low impact · 3 Moderate impact · 4 High impact · 5 Very high impact
+                  </p>
                 </div>
               )}
 
