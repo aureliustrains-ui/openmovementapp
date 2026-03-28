@@ -1,5 +1,6 @@
 import type { InsertWeeklyCheckin, Phase, Session, User, WeeklyCheckin } from "@shared/schema";
 import { AppError } from "../../http/error-handler";
+import { hasAdminAccess } from "../authz/admin-access";
 
 type CheckinsPhaseSessionPort = {
   getSession(id: string): Promise<Session | undefined>;
@@ -38,7 +39,7 @@ export async function assertSessionOwnedByClient(
 }
 
 export function assertCanReadClientCheckins(authUser: User, clientId: string): void {
-  if (authUser.role === "Admin" || authUser.role === "Coach") return;
+  if (hasAdminAccess(authUser) || authUser.role === "Coach") return;
   if (authUser.role === "Client" && authUser.id === clientId) return;
   throw new AppError("Forbidden", 403, "FORBIDDEN");
 }

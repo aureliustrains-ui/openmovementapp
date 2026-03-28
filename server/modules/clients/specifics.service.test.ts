@@ -7,6 +7,7 @@ import {
   mapWorkoutHistoryForCoach,
   saveClientSpecifics,
 } from "./specifics.service";
+import { PRIMARY_ADMIN_EMAIL } from "../authz/admin-access";
 
 function buildUser(overrides: Partial<User> = {}): User {
   return {
@@ -45,7 +46,9 @@ function buildLog(overrides: Partial<WorkoutLog> = {}): WorkoutLog {
 }
 
 test("assertCoachCanManageSpecifics allows admins", () => {
-  assert.doesNotThrow(() => assertCoachCanManageSpecifics(buildUser({ role: "Admin" })));
+  assert.doesNotThrow(() =>
+    assertCoachCanManageSpecifics(buildUser({ role: "Admin", email: PRIMARY_ADMIN_EMAIL })),
+  );
 });
 
 test("assertCoachCanManageSpecifics blocks clients with typed forbidden error", () => {

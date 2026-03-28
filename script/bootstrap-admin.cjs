@@ -4,6 +4,9 @@ const loadLocalEnv = require("./load-local-env.cjs");
 
 loadLocalEnv();
 
+const PRIMARY_ADMIN_EMAIL =
+  process.env.PRIMARY_ADMIN_EMAIL?.trim()?.toLowerCase() || "aureliustrains@gmail.com";
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
   const derived = scryptSync(password, salt, 64);
@@ -11,14 +14,13 @@ function hashPassword(password) {
 }
 
 async function run() {
-  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim()?.toLowerCase() || "";
+  const email = PRIMARY_ADMIN_EMAIL;
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || "";
 
-  if (!email || !password) {
+  if (!password) {
     console.log(
-      "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are not both set.",
+      "Skipping admin bootstrap create: BOOTSTRAP_ADMIN_PASSWORD is not set.",
     );
-    return;
   }
 
   const databaseUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : "";
@@ -28,7 +30,7 @@ async function run() {
 
   const name = (process.env.BOOTSTRAP_ADMIN_NAME || "Admin").trim();
 
-  if (password.length < 8) {
+  if (password && password.length < 8) {
     throw new Error("BOOTSTRAP_ADMIN_PASSWORD must be at least 8 characters");
   }
 
@@ -41,25 +43,38 @@ async function run() {
       throw new Error("users table not found. Run migrations first (npm run db:push).");
     }
 
-    const passwordHash = hashPassword(password);
     const existing = await client.query("select id from users where lower(email) = lower($1) limit 1", [
       email,
     ]);
 
     if (existing.rows.length > 0) {
-      await client.query(
-        "update users set name = $1, role = 'Admin', status = 'Active', password_hash = $2 where id = $3",
-        [name, passwordHash, existing.rows[0].id],
-      );
+      if (password) {
+        const passwordHash = hashPassword(password);
+        await client.query(
+          "update users set name = $1, role = 'Admin', status = 'Active', password_hash = $2 where id = $3",
+          [name, passwordHash, existing.rows[0].id],
+        );
+      } else {
+        await client.query("update users set role = 'Admin', status = 'Active' where id = $1", [
+          existing.rows[0].id,
+        ]);
+      }
       console.log(`Updated existing user to active admin: ${email}`);
-      return;
+    } else if (password) {
+      await client.query(
+        "insert into users (id, name, email, password_hash, role, status, avatar) values ($1, $2, $3, $4, 'Admin', 'Active', null)",
+        [`admin_${randomUUID()}`, name, email, hashPassword(password)],
+      );
+      console.log(`Created admin user: ${email}`);
+    } else {
+      console.log(`Primary admin user ${email} not found and no bootstrap password set.`);
     }
 
     await client.query(
-      "insert into users (id, name, email, password_hash, role, status, avatar) values ($1, $2, $3, $4, 'Admin', 'Active', null)",
-      [`admin_${randomUUID()}`, name, email, passwordHash],
+      "update users set role = 'Client', status = case when status = 'Removed' then 'Removed' else 'Active' end where role = 'Admin' and lower(email) <> lower($1)",
+      [email],
     );
-    console.log(`Created admin user: ${email}`);
+    console.log(`Enforced single-admin policy for ${email}`);
   } finally {
     await client.end();
   }

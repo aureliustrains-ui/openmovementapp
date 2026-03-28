@@ -65,6 +65,11 @@ import {
   countUnreadMessagesForClient,
   type ProgressReportWithItems,
 } from "./modules/notifications/notifications.service";
+import {
+  hasAdminAccess,
+  isPrimaryAdminEmail,
+  PRIMARY_ADMIN_EMAIL,
+} from "./modules/authz/admin-access";
 
 const registerSchema = z.object({
   name: z.string().min(2).max(120),
@@ -250,7 +255,7 @@ async function attachAuthUser(req: Request, res: Response, next: NextFunction) {
 }
 
 function isAdmin(user: User) {
-  return user.role === "Admin";
+  return hasAdminAccess(user);
 }
 
 function requireAdmin(req: Request, res: Response): User | null {
@@ -576,53 +581,68 @@ async function persistSession(session: Request["session"]): Promise<void> {
 }
 
 async function maybeBootstrapAdminUser(): Promise<void> {
-  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() || "";
+  const email = PRIMARY_ADMIN_EMAIL;
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD?.trim() || "";
   const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || "Admin";
 
-  if (!email || !password) {
-    logInfo(
-      "bootstrap",
-      "Skipping admin bootstrap: BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD missing",
-    );
-    return;
-  }
-
-  if (password.length < 8) {
-    logError("bootstrap", "Skipping admin bootstrap due to invalid password length");
-    return;
-  }
-
   try {
-    const passwordHash = await hashPassword(password);
     const existing = await storage.getUserByEmail(email);
 
     if (existing) {
-      await storage.updateUser(existing.id, {
-        name,
-        role: "Admin",
-        status: "Active",
-        passwordHash,
-      });
-      logInfo("bootstrap", `Updated existing admin user: ${email}`);
-      return;
+      const updatePayload: { role?: "Admin"; status?: "Active" } = {};
+      if (existing.role !== "Admin") updatePayload.role = "Admin";
+      if (existing.status !== "Active") updatePayload.status = "Active";
+      if (Object.keys(updatePayload).length > 0) {
+        await storage.updateUser(existing.id, updatePayload);
+        logInfo("bootstrap", `Updated existing primary admin user: ${email}`);
+      }
+    } else if (!password) {
+      logInfo("bootstrap", "Skipping primary admin creation: BOOTSTRAP_ADMIN_PASSWORD missing");
+    } else {
+      if (password.length < 8) {
+        logError("bootstrap", "Skipping admin bootstrap due to invalid password length");
+        return;
+      }
+      await createUserAccount(
+        {
+          name,
+          email,
+          password,
+          role: "Admin",
+          status: "Active",
+          avatar: null,
+        },
+        {
+          users: storage,
+          hashPassword,
+        },
+      );
+      logInfo("bootstrap", `Created primary admin user: ${email}`);
     }
 
-    await createUserAccount(
-      {
-        name,
-        email,
-        password,
-        role: "Admin",
-        status: "Active",
-        avatar: null,
-      },
-      {
-        users: storage,
-        hashPassword,
-      },
-    );
-    logInfo("bootstrap", `Created admin user: ${email}`);
+    if (process.env.NODE_ENV !== "test") {
+      const allUsers = await storage.getUsers();
+      const primaryAdmin = allUsers.find((user) => isPrimaryAdminEmail(user.email));
+      if (!primaryAdmin) {
+        logError("bootstrap", `Primary admin account not found: ${PRIMARY_ADMIN_EMAIL}`);
+        return;
+      }
+
+      const nonPrimaryAdmins = allUsers.filter(
+        (user) => user.role === "Admin" && user.id !== primaryAdmin.id,
+      );
+      await Promise.all(
+        nonPrimaryAdmins.map((user) =>
+          storage.updateUser(user.id, {
+            role: "Client",
+            status: user.status === "Removed" ? "Removed" : "Active",
+          }),
+        ),
+      );
+      if (nonPrimaryAdmins.length > 0) {
+        logInfo("bootstrap", `Downgraded ${nonPrimaryAdmins.length} non-primary admin account(s)`);
+      }
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const pgCode =
@@ -2768,7 +2788,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const adminByAlias = new Map<string, User>();
     if (hasLegacyCoachMessages) {
       const allUsers = await storage.getUsers();
-      const adminUsers = allUsers.filter((user) => user.role === "Admin");
+      const adminUsers = allUsers.filter((user) => isAdmin(user));
       if (adminUsers.length === 1) {
         [soleAdminUser] = adminUsers;
       }

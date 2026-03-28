@@ -684,7 +684,7 @@ export default function ClientMyPhase() {
                 Week
               </h2>
               {currentPhase.durationWeeks > 1 && (
-                <div className="flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1">
+                <div className="self-start md:self-auto inline-flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1">
                   {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map((w) => {
                     const weekStatus =
                       weekStatuses.find((status) => status.week === w) ||
