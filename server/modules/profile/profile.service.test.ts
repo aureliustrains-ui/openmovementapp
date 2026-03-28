@@ -110,7 +110,7 @@ test("updateMyProfile enforces unique email", async () => {
 test("updateMyProfile accepts stored avatar paths from upload endpoint", async () => {
   const updated = await updateMyProfile(
     "client_1",
-    { avatar: "/uploads/avatars/1700000000-demo.webp" },
+    { avatar: "data:image/png;base64,ZmFrZS1hdmF0YXI=" },
     {
       users: {
         getUserByEmail: async () => undefined,
@@ -120,5 +120,35 @@ test("updateMyProfile accepts stored avatar paths from upload endpoint", async (
     },
   );
 
-  assert.equal(updated.avatar, "/uploads/avatars/1700000000-demo.webp");
+  assert.equal(updated.avatar, "data:image/png;base64,ZmFrZS1hdmF0YXI=");
+});
+
+test("updateMyProfile preserves existing optional profile fields when omitted", async () => {
+  const updated = await updateMyProfile(
+    "client_1",
+    { name: "Updated Name" },
+    {
+      users: {
+        getUserByEmail: async () => undefined,
+        getUser: async (id) =>
+          buildUser({
+            id,
+            name: "Original Name",
+            bio: "Existing bio",
+            height: "180 cm",
+            weight: "80 kg",
+            goals: "Build consistency",
+            infos: "Aurelius",
+          }),
+        updateUser: async (id, data) => buildUser({ id, ...data }),
+      },
+    },
+  );
+
+  assert.equal(updated.name, "Updated Name");
+  assert.equal(updated.bio, "Existing bio");
+  assert.equal(updated.height, "180 cm");
+  assert.equal(updated.weight, "80 kg");
+  assert.equal(updated.goals, "Build consistency");
+  assert.equal(updated.infos, "Aurelius");
 });

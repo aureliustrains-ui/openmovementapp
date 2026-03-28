@@ -72,6 +72,17 @@ export function normalizeWeeklyCheckinInput(
   phaseWeekNumber: number,
   weekStartDate: string,
 ): InsertWeeklyCheckin {
+  if (
+    input.injuryAffectedTraining &&
+    (input.injuryImpact === null || input.injuryImpact === undefined)
+  ) {
+    throw new AppError(
+      "Injury impact is required when pain/injury affected training",
+      400,
+      "INJURY_IMPACT_REQUIRED",
+    );
+  }
+
   return {
     clientId,
     phaseId,
@@ -82,7 +93,7 @@ export function normalizeWeeklyCheckinInput(
     sleepWeek: input.recoveryThisTrainingWeek,
     energyWeek: input.stressOutsideTrainingThisWeek,
     injuryAffectedTraining: input.injuryAffectedTraining,
-    injuryImpact: input.injuryAffectedTraining ? (input.injuryImpact ?? 0) : null,
+    injuryImpact: input.injuryAffectedTraining ? (input.injuryImpact ?? null) : null,
     coachNoteFromClient: input.optionalNote?.trim() || null,
   };
 }

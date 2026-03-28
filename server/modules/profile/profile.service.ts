@@ -40,11 +40,11 @@ export async function updateMyProfile(
     name: input.name?.trim() || currentUser.name,
     email: normalizedEmail || currentUser.email,
     avatar: input.avatar ?? currentUser.avatar ?? null,
-    bio: input.bio ?? null,
-    height: input.height ?? null,
-    weight: input.weight ?? null,
-    goals: input.goals ?? null,
-    infos: input.infos ?? null,
+    bio: input.bio ?? currentUser.bio ?? null,
+    height: input.height ?? currentUser.height ?? null,
+    weight: input.weight ?? currentUser.weight ?? null,
+    goals: input.goals ?? currentUser.goals ?? null,
+    infos: input.infos ?? currentUser.infos ?? null,
   });
 
   if (!updated) {

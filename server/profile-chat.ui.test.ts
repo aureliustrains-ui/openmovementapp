@@ -167,7 +167,12 @@ test("avatar upload route persists avatar and returns updated user payload", () 
   const source = fs.readFileSync(routesPath, "utf8");
   assert.ok(
     source.includes(
-      "const updated = await storage.updateUser(authUser.id, { avatar: avatarPath });",
+      'const avatarDataUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;',
+    ),
+  );
+  assert.ok(
+    source.includes(
+      "const updated = await storage.updateUser(authUser.id, { avatar: avatarDataUrl });",
     ),
   );
   assert.ok(source.includes("res.json({ avatar: updated.avatar, user: toPublicUser(updated) });"));

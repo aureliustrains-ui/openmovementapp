@@ -74,15 +74,21 @@ test("createSessionCheckinSchema validates the new session check-in fields", () 
 
 test("createWeeklyCheckinSchema enforces injury impact bounds", () => {
   const valid = createWeeklyCheckinSchema.safeParse({
-    recoveryThisTrainingWeek: 4,
-    stressOutsideTrainingThisWeek: 3,
+    recoveryThisTrainingWeek: "4",
+    stressOutsideTrainingThisWeek: "3",
     injuryAffectedTraining: true,
-    injuryImpact: 2,
+    injuryImpact: "2",
     optionalNote: "Tight lower back after deadlifts",
     phaseId: "phase_1",
-    phaseWeekNumber: 2,
+    phaseWeekNumber: "2",
   });
   assert.equal(valid.success, true);
+  if (valid.success) {
+    assert.equal(valid.data.injuryImpact, 2);
+    assert.equal(valid.data.recoveryThisTrainingWeek, 4);
+    assert.equal(valid.data.stressOutsideTrainingThisWeek, 3);
+    assert.equal(valid.data.phaseWeekNumber, 2);
+  }
 
   const invalid = createWeeklyCheckinSchema.safeParse({
     recoveryThisTrainingWeek: 4,
@@ -91,6 +97,16 @@ test("createWeeklyCheckinSchema enforces injury impact bounds", () => {
     injuryImpact: 5,
   });
   assert.equal(invalid.success, false);
+});
+
+test("createWeeklyCheckinSchema requires injury impact when injury affected training is true", () => {
+  const parsed = createWeeklyCheckinSchema.safeParse({
+    recoveryThisTrainingWeek: 4,
+    stressOutsideTrainingThisWeek: 3,
+    injuryAffectedTraining: true,
+    injuryImpact: null,
+  });
+  assert.equal(parsed.success, false);
 });
 
 test("createWeeklyCheckinSchema accepts payload without explicit phase fields", () => {

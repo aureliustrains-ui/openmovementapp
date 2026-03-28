@@ -2,7 +2,6 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import { type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import { hashPassword, verifyPassword } from "./auth";
@@ -94,7 +93,7 @@ const updateUserStatusSchema = z.object({
 const updateMyProfileSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   email: z.string().email().max(320).optional(),
-  avatar: z.string().max(2048).nullable().optional(),
+  avatar: z.string().max(2_000_000).nullable().optional(),
   bio: z.string().max(4000).nullable().optional(),
   height: z.string().max(120).nullable().optional(),
   weight: z.string().max(120).nullable().optional(),
@@ -115,36 +114,10 @@ const updateClientSpecificsSchema = z.object({
 const maxAvatarSizeBytes = 5 * 1024 * 1024;
 const allowedAvatarMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const uploadRoot = path.resolve(process.cwd(), "uploads");
-const avatarUploadDir = path.join(uploadRoot, "avatars");
 const invalidAvatarFileTypeError = "INVALID_AVATAR_FILE_TYPE";
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
 const avatarUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, _file, cb) => {
-      const authUserId = req.authUser?.id;
-      if (!authUserId) {
-        cb(new Error("UNAUTHORIZED_AVATAR_UPLOAD"), avatarUploadDir);
-        return;
-      }
-      const userDir = path.join(avatarUploadDir, authUserId);
-      fs.mkdirSync(userDir, { recursive: true });
-      cb(null, userDir);
-    },
-    filename: (req, file, cb) => {
-      if (!req.authUser?.id) {
-        cb(new Error("UNAUTHORIZED_AVATAR_UPLOAD"), "avatar");
-        return;
-      }
-      const ext = path.extname(file.originalname).toLowerCase();
-      const safeBase =
-        sanitizeFilename(path.basename(file.originalname, ext)).slice(0, 64) || "avatar";
-      cb(null, `${Date.now()}-${safeBase}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   fileFilter: (_req, file, cb) => {
     if (!allowedAvatarMimeTypes.has(file.mimetype)) {
       cb(new Error(invalidAvatarFileTypeError));
@@ -1004,14 +977,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       try {
-        const normalizedPath = file.path.replaceAll("\\", "/");
-        const marker = `/uploads/avatars/${authUser.id}/`;
-        const markerIndex = normalizedPath.indexOf(marker);
-        const avatarPath =
-          markerIndex >= 0
-            ? normalizedPath.slice(markerIndex)
-            : `/uploads/avatars/${authUser.id}/${file.filename}`;
-        const updated = await storage.updateUser(authUser.id, { avatar: avatarPath });
+        const avatarDataUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+        const updated = await storage.updateUser(authUser.id, { avatar: avatarDataUrl });
         if (!updated) return res.status(404).json({ message: "User not found" });
         res.json({ avatar: updated.avatar, user: toPublicUser(updated) });
       } catch (error) {
@@ -1954,6 +1921,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
       res.status(201).json(created);
     } catch (error: unknown) {
+      if (error instanceof AppError) {
+        return res.status(error.status || 400).json({ message: error.message });
+      }
       if (
         error &&
         typeof error === "object" &&
@@ -1963,6 +1933,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res
           .status(409)
           .json({ message: "Weekly check-in already submitted for this training week" });
+      }
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        ((error as { code?: unknown }).code === "42P01" ||
+          (error as { code?: unknown }).code === "42703")
+      ) {
+        return res
+          .status(500)
+          .json({ message: "Database not ready for weekly check-ins. Run npm run db:push." });
       }
       throw error;
     }

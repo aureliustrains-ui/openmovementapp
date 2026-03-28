@@ -122,7 +122,7 @@ export default function ClientMyPhase() {
   const [weeklySleep, setWeeklySleep] = useState(3);
   const [weeklyEnergy, setWeeklyEnergy] = useState(3);
   const [weeklyInjuryAffected, setWeeklyInjuryAffected] = useState(false);
-  const [weeklyInjuryImpact, setWeeklyInjuryImpact] = useState(0);
+  const [weeklyInjuryImpact, setWeeklyInjuryImpact] = useState<number | null>(null);
   const [weeklyNote, setWeeklyNote] = useState("");
   const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
   const previousRecommendedWeekRef = useRef<number | null>(null);
@@ -349,7 +349,7 @@ export default function ClientMyPhase() {
     setWeeklySleep(3);
     setWeeklyEnergy(3);
     setWeeklyInjuryAffected(false);
-    setWeeklyInjuryImpact(0);
+    setWeeklyInjuryImpact(null);
     setWeeklyNote("");
     setWeeklyCheckinOpen(true);
   };
@@ -360,6 +360,14 @@ export default function ClientMyPhase() {
         title: "Read-only client context",
         description:
           "Weekly check-ins can be submitted only in a real client session for this client.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (weeklyInjuryAffected && weeklyInjuryImpact === null) {
+      toast({
+        title: "Select injury impact",
+        description: "Choose how much pain/injury affected training before submitting.",
         variant: "destructive",
       });
       return;
@@ -1010,7 +1018,15 @@ export default function ClientMyPhase() {
             {weeklyCheckinStep === 1 ? (
               <Button className="btn-primary-action" onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
             ) : (
-              <Button className="btn-primary-action" onClick={handleSubmitWeeklyCheckin} disabled={submittingWeeklyCheckin || isCheckinReadOnly}>
+              <Button
+                className="btn-primary-action"
+                onClick={handleSubmitWeeklyCheckin}
+                disabled={
+                  submittingWeeklyCheckin ||
+                  isCheckinReadOnly ||
+                  (weeklyInjuryAffected && weeklyInjuryImpact === null)
+                }
+              >
                 {submittingWeeklyCheckin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Submit weekly check-in
               </Button>

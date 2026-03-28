@@ -47,15 +47,30 @@ export const createSessionCheckinSchema = z
 
 export const createWeeklyCheckinSchema = z
   .object({
-    recoveryThisTrainingWeek: z.number().int().min(1).max(5),
-    stressOutsideTrainingThisWeek: z.number().int().min(1).max(5),
+    recoveryThisTrainingWeek: z.coerce.number().int().min(1).max(5),
+    stressOutsideTrainingThisWeek: z.coerce.number().int().min(1).max(5),
     injuryAffectedTraining: z.boolean(),
-    injuryImpact: z.number().int().min(0).max(3).nullable().optional(),
+    injuryImpact: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z.coerce.number().int().min(0).max(3).nullable().optional(),
+    ),
     optionalNote: z.string().max(4000).nullable().optional(),
     phaseId: z.string().min(1).max(64).optional(),
-    phaseWeekNumber: z.number().int().min(1).max(52).optional(),
+    phaseWeekNumber: z.coerce.number().int().min(1).max(52).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.injuryAffectedTraining &&
+      (value.injuryImpact === null || value.injuryImpact === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["injuryImpact"],
+        message: "Injury impact is required when pain/injury affected training",
+      });
+    }
+  });
 
 export const createProgressReportSchema = z
   .object({
