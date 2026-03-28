@@ -158,6 +158,49 @@ test("normalizeWeeklyCheckinInput enforces impact reset when no injury impact", 
   assert.equal(normalized.phaseWeekNumber, 2);
 });
 
+test("normalizeWeeklyCheckinInput preserves injury impact when injury affected training is true", () => {
+  const normalized = normalizeWeeklyCheckinInput(
+    {
+      recoveryThisTrainingWeek: 4,
+      stressOutsideTrainingThisWeek: 3,
+      injuryAffectedTraining: true,
+      injuryImpact: 3,
+      optionalNote: " Knee was limiting depth ",
+    },
+    "client_1",
+    "phase_1",
+    2,
+    "2026-03-02",
+  );
+
+  assert.equal(normalized.injuryImpact, 3);
+  assert.equal(normalized.coachNoteFromClient, "Knee was limiting depth");
+});
+
+test("normalizeWeeklyCheckinInput throws when injury impact is missing for injury-affected week", () => {
+  assert.throws(
+    () =>
+      normalizeWeeklyCheckinInput(
+        {
+          recoveryThisTrainingWeek: 4,
+          stressOutsideTrainingThisWeek: 3,
+          injuryAffectedTraining: true,
+          injuryImpact: null,
+          optionalNote: null,
+        },
+        "client_1",
+        "phase_1",
+        2,
+        "2026-03-02",
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, "INJURY_IMPACT_REQUIRED");
+      return true;
+    },
+  );
+});
+
 test("getWeekStartDateUtc returns monday start for UTC date", () => {
   const weekStart = getWeekStartDateUtc(new Date("2026-03-05T18:00:00.000Z"));
   assert.equal(weekStart, "2026-03-02");

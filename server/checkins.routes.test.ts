@@ -2099,6 +2099,110 @@ test("POST /api/weekly-checkins enforces one weekly check-in per client + phase 
   );
 });
 
+test("POST /api/weekly-checkins persists injury impact and returns it in weekly trend reads", async (t) => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const users = new Map<string, User>([
+    ["client_1", buildUser({ id: "client_1", role: "Client" })],
+  ]);
+  const weeklyCheckins: WeeklyCheckin[] = [];
+  const currentWeekStart = getWeekStartDateUtc();
+  const phase = buildPhase({
+    id: "phase_1",
+    clientId: "client_1",
+    startDate: currentWeekStart,
+    schedule: [{ week: 1, day: "Monday", slot: "AM", sessionId: "session_1" }],
+    completedScheduleInstances: ["w1_Monday_AM_session_1"],
+  });
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async (id: string) => users.get(id),
+      getPhasesByClient: async (_clientId: string) => [phase],
+      getSessionCheckinsByClient: async () => [],
+      getSessions: async () => [],
+      getWeeklyCheckinsByClient: async (_clientId: string) => weeklyCheckins,
+      getWeeklyCheckinByClientAndPhaseWeek: async (
+        clientId: string,
+        phaseId: string,
+        phaseWeekNumber: number,
+      ) =>
+        weeklyCheckins.find(
+          (entry) =>
+            entry.clientId === clientId &&
+            entry.phaseId === phaseId &&
+            entry.phaseWeekNumber === phaseWeekNumber,
+        ),
+      getWeeklyCheckinByClientAndWeek: async () => undefined,
+      createWeeklyCheckin: async (payload: InsertWeeklyCheckin) => {
+        const row: WeeklyCheckin = { id: `wc_${weeklyCheckins.length + 1}`, ...payload };
+        weeklyCheckins.push(row);
+        return row;
+      },
+    },
+    async () => {
+      try {
+        await withTestServer(registerRoutes, async (baseUrl) => {
+          const createRes = await fetch(`${baseUrl}/api/weekly-checkins`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "client_1",
+            },
+            body: JSON.stringify({
+              recoveryThisTrainingWeek: 4,
+              stressOutsideTrainingThisWeek: 2,
+              injuryAffectedTraining: true,
+              injuryImpact: 3,
+              optionalNote: "Left knee pain limited loaded squat depth",
+            }),
+          });
+
+          assert.equal(createRes.status, 201);
+          const created = (await createRes.json()) as WeeklyCheckin;
+          assert.equal(created.injuryAffectedTraining, true);
+          assert.equal(created.injuryImpact, 3);
+
+          const meRes = await fetch(`${baseUrl}/api/weekly-checkins/me`, {
+            headers: { "x-test-user-id": "client_1" },
+          });
+          assert.equal(meRes.status, 200);
+          const meBody = (await meRes.json()) as WeeklyCheckin[];
+          assert.equal(meBody.length, 1);
+          assert.equal(meBody[0]?.injuryImpact, 3);
+
+          const trendsRes = await fetch(
+            `${baseUrl}/api/clients/client_1/checkins/trends?range=2w`,
+            {
+              headers: { "x-test-user-id": "client_1" },
+            },
+          );
+          assert.equal(trendsRes.status, 200);
+          const trends = (await trendsRes.json()) as {
+            weeks: Array<{ injuryImpact: number | null; injuryAffectedTraining: boolean }>;
+          };
+          assert.equal(trends.weeks.length, 1);
+          assert.equal(trends.weeks[0]?.injuryAffectedTraining, true);
+          assert.equal(trends.weeks[0]?.injuryImpact, 3);
+        });
+      } catch (error: unknown) {
+        if (
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "EPERM"
+        ) {
+          t.skip(
+            "Sandbox blocks local socket binding; run on local machine to execute API route test.",
+          );
+          return;
+        }
+        throw error;
+      }
+    },
+  );
+});
+
 test("POST /api/weekly-checkins rejects admin users with client-only write error", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([
