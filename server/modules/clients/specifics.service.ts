@@ -1,5 +1,6 @@
 import type { InsertUser, User, WorkoutLog } from "@shared/schema";
 import { AppError } from "../../http/error-handler";
+import { hasAdminAccess } from "../authz/admin-access";
 
 type UsersPort = {
   getUser(id: string): Promise<User | undefined>;
@@ -7,7 +8,7 @@ type UsersPort = {
 };
 
 export function assertCoachCanManageSpecifics(authUser: User): void {
-  if (authUser.role !== "Admin") {
+  if (!hasAdminAccess(authUser)) {
     throw new AppError("Forbidden", 403, "FORBIDDEN");
   }
 }

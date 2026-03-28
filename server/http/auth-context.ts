@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { User } from "@shared/schema";
 import { storage } from "../storage";
+import { hasAdminAccess } from "../modules/authz/admin-access";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -31,7 +32,7 @@ export async function attachAuthUser(req: Request, res: Response, next: NextFunc
 }
 
 export function isAdmin(user: User) {
-  return user.role === "Admin";
+  return hasAdminAccess(user);
 }
 
 export function requireUser(req: Request, res: Response): User | null {

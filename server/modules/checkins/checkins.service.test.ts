@@ -9,6 +9,7 @@ import {
   getWeekStartDateUtc,
   normalizeWeeklyCheckinInput,
 } from "./checkins.service";
+import { PRIMARY_ADMIN_EMAIL } from "../authz/admin-access";
 
 function buildUser(overrides: Partial<User> = {}): User {
   return {
@@ -115,7 +116,12 @@ test("weekly check-in enforces one submission per week", async () => {
 });
 
 test("admin and coach can read any client check-ins", () => {
-  assert.doesNotThrow(() => assertCanReadClientCheckins(buildUser({ role: "Admin" }), "client_1"));
+  assert.doesNotThrow(() =>
+    assertCanReadClientCheckins(
+      buildUser({ role: "Admin", email: PRIMARY_ADMIN_EMAIL }),
+      "client_1",
+    ),
+  );
   assert.doesNotThrow(() => assertCanReadClientCheckins(buildUser({ role: "Coach" }), "client_1"));
 });
 
