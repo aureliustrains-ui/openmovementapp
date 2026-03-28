@@ -1,21 +1,12 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-  clientCheckinsTrendsQuery,
   phasesQuery,
   sessionsQuery,
   weeklyCheckinsMeQuery,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
-import {
-  type CheckinsRange,
-  hasSessionCheckinTrendData,
-  hasWeeklyCheckinTrendData,
-  mapSessionCheckinTrendData,
-  mapWeeklyCheckinTrendData,
-} from "@/lib/checkins";
 import { buildScheduleInstanceKey, getWeekSchedulePreview } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
@@ -23,34 +14,11 @@ import { getClientCounterpartDisplayName } from "@/lib/counterpartDisplayName";
 import { cn } from "@/lib/utils";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
 import { HomeChatCard } from "@/components/client/HomeChatCard";
+import ClientReadinessSection from "@/components/client/ClientReadinessSection";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
-import { Loader2, TrendingUp, CheckCircle2, ChevronRight, CalendarDays } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  Scatter,
-  Tooltip,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-} from "recharts";
-
-const CHART_COLORS = {
-  sessionRpe: "#eab308",
-  sleepLastNight: "#2563eb",
-  feltOff: "#dc2626",
-  recovery: "#16a34a",
-  stress: "#d97706",
-  painInjury: "#dc2626",
-} as const;
-type SessionMetricKey = "rpeOverall" | "sleepLastNight" | "feltOffEvents";
-type WeeklyMetricKey = "recoveryThisTrainingWeek" | "stressOutsideTrainingThisWeek" | "injuryImpact";
-const CHART_FRAME_CLASS =
-  "w-full rounded-xl border border-slate-200 bg-slate-50/30 p-1.5 h-[62vw] min-h-[260px] max-h-[380px] sm:h-64";
+import { Loader2, CheckCircle2, ChevronRight, CalendarDays } from "lucide-react";
 
 function getActivePlanCompletion(phase: any | null): {
   completedInstances: number;
@@ -85,51 +53,15 @@ function getActivePlanCompletion(phase: any | null): {
   return { completedInstances, totalInstances, percent };
 }
 
-function metricToggleClassName(active: boolean): string {
-  return cn(
-    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-medium transition-colors sm:text-xs",
-    active
-      ? "text-slate-900"
-      : "text-slate-500 hover:text-slate-700",
-  );
-}
-
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
   const counterpartName = getClientCounterpartDisplayName();
-  const [checkinsRange, setCheckinsRange] = useState<CheckinsRange>("8w");
-  const [sessionMetrics, setSessionMetrics] = useState({
-    rpeOverall: true,
-    sleepLastNight: true,
-    feltOffEvents: true,
-  });
-  const [weeklyMetrics, setWeeklyMetrics] = useState({
-    recoveryThisTrainingWeek: true,
-    stressOutsideTrainingThisWeek: true,
-    injuryImpact: true,
-  });
-  const toggleSessionMetric = (metric: SessionMetricKey) => {
-    setSessionMetrics((prev) => {
-      const next = { ...prev, [metric]: !prev[metric] };
-      return Object.values(next).some(Boolean) ? next : prev;
-    });
-  };
-  const toggleWeeklyMetric = (metric: WeeklyMetricKey) => {
-    setWeeklyMetrics((prev) => {
-      const next = { ...prev, [metric]: !prev[metric] };
-      return Object.values(next).some(Boolean) ? next : prev;
-    });
-  };
 
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { data: weeklyCheckins = [] } = useQuery({
     ...weeklyCheckinsMeQuery,
     enabled: !!sessionUser && !impersonating,
-  });
-  const { data: checkinsTrends, isLoading: loadingTrends, isError: trendsError } = useQuery({
-    ...clientCheckinsTrendsQuery(viewedUser?.id || "", checkinsRange),
-    enabled: !!viewedUser?.id,
   });
 
   if (!viewedUser) return null;
@@ -198,25 +130,6 @@ export default function ClientHome() {
     typeof progressPhase?.homeIntroVideoUrl === "string" && progressPhase.homeIntroVideoUrl.trim().length > 0
       ? progressPhase.homeIntroVideoUrl.trim()
       : null;
-
-  const allSessionCheckinTrendData = mapSessionCheckinTrendData(
-    (((checkinsTrends as any)?.sessions || []) as any[]),
-  );
-  const allWeeklyCheckinTrendData = mapWeeklyCheckinTrendData(
-    (((checkinsTrends as any)?.weeks || []) as any[]),
-  );
-  const sessionCheckinTrendData = allSessionCheckinTrendData;
-  const weeklyCheckinTrendData = allWeeklyCheckinTrendData;
-  const hasAnySessionTrendData = hasSessionCheckinTrendData(sessionCheckinTrendData);
-  const hasAnyWeeklyTrendData = hasWeeklyCheckinTrendData(weeklyCheckinTrendData);
-  const hasFeltOffEventsInView = sessionCheckinTrendData.some((entry: any) => Boolean(entry?.feltOff));
-  const hasInjuryImpactEventsInView = weeklyCheckinTrendData.some((entry: any) => {
-    const injuryImpact = typeof entry?.injuryImpact === "number" ? entry.injuryImpact : 0;
-    return injuryImpact > 0 || entry?.injuryAffectedTraining === true;
-  });
-  const hasAnyTrendData = hasAnySessionTrendData || hasAnyWeeklyTrendData;
-  const hasSessionTrendData = hasAnySessionTrendData;
-  const hasWeeklyTrendData = hasAnyWeeklyTrendData;
 
   if (loadingPhases) {
     return (
@@ -372,205 +285,7 @@ export default function ClientHome() {
         <HomeChatCard />
       </div>
 
-      <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/40">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-slate-600" />
-              <CardTitle>Readiness</CardTitle>
-            </div>
-            <Select value={checkinsRange} onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}>
-              <SelectTrigger className="w-[160px] bg-white border-slate-200" data-testid="select-client-home-checkins-range">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2w">2 weeks</SelectItem>
-                <SelectItem value="4w">4 weeks</SelectItem>
-                <SelectItem value="8w">8 weeks</SelectItem>
-                <SelectItem value="12w">12 weeks</SelectItem>
-                <SelectItem value="all">All</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent className="p-5 md:p-6 space-y-6">
-          {loadingTrends ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-700" />
-            </div>
-          ) : trendsError ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-600">Readiness data could not be loaded right now.</p>
-            </div>
-          ) : !hasAnyTrendData ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-600">No check-ins yet. Your trends will appear after your first entries.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-700">Session check-ins</h3>
-                {hasSessionTrendData ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
-                      <button
-                        type="button"
-                        className={metricToggleClassName(sessionMetrics.rpeOverall)}
-                        onClick={() => toggleSessionMetric("rpeOverall")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sessionRpe }} />
-                        Effort
-                      </button>
-                      <button
-                        type="button"
-                        className={metricToggleClassName(sessionMetrics.sleepLastNight)}
-                        onClick={() => toggleSessionMetric("sleepLastNight")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sleepLastNight }} />
-                        Sleep
-                      </button>
-                      {hasFeltOffEventsInView ? (
-                        <button
-                          type="button"
-                          className={metricToggleClassName(sessionMetrics.feltOffEvents)}
-                          onClick={() => toggleSessionMetric("feltOffEvents")}
-                        >
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.feltOff }} />
-                          Felt off
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className={CHART_FRAME_CLASS}>
-                      <ResponsiveContainer>
-                        <LineChart data={sessionCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
-                          <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={28} />
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload || payload.length === 0) return null;
-                              const point = payload[0]?.payload as any;
-                              return (
-                                <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                  <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
-                                  <div className="text-slate-600">{point?.dateLabel}</div>
-                                  <div className="text-slate-700 mt-1">Effort: {point?.rpeOverall}</div>
-                                  <div className="text-slate-700">Sleep: {point?.sleepLastNight ?? "-"}/10</div>
-                                </div>
-                              );
-                            }}
-                          />
-                          {sessionMetrics.rpeOverall && (
-                            <Line type="monotone" dataKey="rpeOverall" name="Effort" stroke={CHART_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
-                          )}
-                          {sessionMetrics.sleepLastNight && (
-                            <Line
-                              type="monotone"
-                              dataKey="sleepLastNight"
-                              name="Sleep"
-                              stroke={CHART_COLORS.sleepLastNight}
-                              strokeWidth={2}
-                              dot={{ r: 3 }}
-                              connectNulls={false}
-                            />
-                          )}
-                          {hasFeltOffEventsInView && sessionMetrics.feltOffEvents && (
-                            <Scatter dataKey="feltOffMarker" name="Felt off" fill={CHART_COLORS.feltOff} />
-                          )}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                ) : hasAnySessionTrendData ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                    No session check-ins in this range.
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                    No session check-ins yet.
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-700">Weekly check-ins</h3>
-                {hasWeeklyTrendData ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
-                      <button
-                        type="button"
-                        className={metricToggleClassName(weeklyMetrics.recoveryThisTrainingWeek)}
-                        onClick={() => toggleWeeklyMetric("recoveryThisTrainingWeek")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.recovery }} />
-                        Recovery
-                      </button>
-                      <button
-                        type="button"
-                        className={metricToggleClassName(weeklyMetrics.stressOutsideTrainingThisWeek)}
-                        onClick={() => toggleWeeklyMetric("stressOutsideTrainingThisWeek")}
-                      >
-                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.stress }} />
-                        Stress
-                      </button>
-                      {hasInjuryImpactEventsInView ? (
-                        <button
-                          type="button"
-                          className={metricToggleClassName(weeklyMetrics.injuryImpact)}
-                          onClick={() => toggleWeeklyMetric("injuryImpact")}
-                        >
-                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.painInjury }} />
-                          Injury impact
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className={CHART_FRAME_CLASS}>
-                      <ResponsiveContainer>
-                        <LineChart data={weeklyCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
-                          <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} width={28} />
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload || payload.length === 0) return null;
-                              const point = payload[0]?.payload as any;
-                              return (
-                                <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                  <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
-                                  <div className="text-slate-700 mt-1">Recovery: {point?.recoveryThisTrainingWeek}</div>
-                                  <div className="text-slate-700">Stress: {point?.stressOutsideTrainingThisWeek}</div>
-                                  <div className="text-slate-700">Injury impact: {point?.injuryImpact ?? 0}</div>
-                                </div>
-                              );
-                            }}
-                          />
-                          {weeklyMetrics.recoveryThisTrainingWeek && (
-                            <Line type="monotone" dataKey="recoveryThisTrainingWeek" name="Recovery this training week" stroke={CHART_COLORS.recovery} strokeWidth={2} dot={{ r: 3 }} />
-                          )}
-                          {weeklyMetrics.stressOutsideTrainingThisWeek && (
-                            <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHART_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
-                          )}
-                          {hasInjuryImpactEventsInView && weeklyMetrics.injuryImpact && (
-                            <Line type="monotone" dataKey="injuryImpact" name="Pain/injury impact" stroke={CHART_COLORS.painInjury} strokeWidth={2} dot={{ r: 3 }} />
-                          )}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                ) : hasAnyWeeklyTrendData ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                    No weekly check-ins in this range.
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                    No weekly check-ins yet.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ClientReadinessSection />
     </div>
   );
 }

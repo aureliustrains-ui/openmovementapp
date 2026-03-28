@@ -52,6 +52,7 @@ export function mapSessionCheckinTrendData<T extends SessionTrendEntryLike>(entr
     rpeOverall: number | null;
     sleepLastNight: number | null;
     feltOffMarker: number | null;
+    feltOffEventLevel: number | null;
     feltOffSleepMarker: number | null;
   }
 > {
@@ -63,6 +64,8 @@ export function mapSessionCheckinTrendData<T extends SessionTrendEntryLike>(entr
     feltOffMarker: entry.feltOff
       ? toFiniteNumber((entry as any).rpeOverall ?? (entry as any).sessionRpe) ?? 0
       : null,
+    // Keep felt-off markers visible and separate from regular metric dots.
+    feltOffEventLevel: entry.feltOff ? 9.6 : null,
     feltOffSleepMarker:
       entry.feltOff ? toFiniteNumber((entry as any).sleepLastNight) : null,
   }));
@@ -74,6 +77,7 @@ export function mapWeeklyCheckinTrendData<T extends WeeklyTrendEntryLike>(entrie
     recoveryThisTrainingWeek: number | null;
     stressOutsideTrainingThisWeek: number | null;
     injuryImpact: number | null;
+    injuryImpactEventLevel: number | null;
   }
 > {
   return entries.map((entry) => ({
@@ -86,6 +90,12 @@ export function mapWeeklyCheckinTrendData<T extends WeeklyTrendEntryLike>(entrie
       (entry as any).stressOutsideTrainingThisWeek ?? (entry as any).energyWeek,
     ),
     injuryImpact: toFiniteNumber((entry as any).injuryImpact),
+    // Keep injury events visible as an explicit marker band, similar to felt-off events.
+    injuryImpactEventLevel:
+      (entry as any).injuryAffectedTraining === true ||
+      (toFiniteNumber((entry as any).injuryImpact) ?? 0) > 0
+        ? 4.6
+        : null,
   }));
 }
 

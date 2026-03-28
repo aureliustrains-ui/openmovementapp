@@ -26,7 +26,7 @@ export default function AdminAnalytics() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in max-w-6xl mx-auto">
+    <div className="space-y-8 animate-in fade-in w-full">
       <div>
         <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-analytics-title">Analytics</h1>
         <p className="text-slate-500 mt-1">High-level view of roster engagement and performance.</p>

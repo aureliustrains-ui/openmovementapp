@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import type { TemplateFolderType } from "@/lib/api";
+import { TemplatePickerPanel } from "@/components/admin/TemplatePickerPanel";
 
 type AddFromTemplatesModalProps<T> = {
   open: boolean;
@@ -10,11 +9,14 @@ type AddFromTemplatesModalProps<T> = {
   title: string;
   description: string;
   createLabel: string;
+  allLabel: string;
   searchPlaceholder: string;
+  folderType: TemplateFolderType;
   templates: T[];
   getTemplateId: (item: T) => string;
   getTemplateName: (item: T) => string;
   getTemplateMeta?: (item: T) => string;
+  getTemplateFolderId?: (item: T) => string | null | undefined;
   onCreateNew: () => void;
   onInsertTemplate: (item: T) => void;
 };
@@ -25,26 +27,21 @@ export function AddFromTemplatesModal<T>({
   title,
   description,
   createLabel,
+  allLabel,
   searchPlaceholder,
+  folderType,
   templates,
   getTemplateId,
   getTemplateName,
   getTemplateMeta,
+  getTemplateFolderId,
   onCreateNew,
   onInsertTemplate,
 }: AddFromTemplatesModalProps<T>) {
-  const [search, setSearch] = useState("");
-
-  const filteredTemplates = useMemo(
-    () => templates.filter((item) => getTemplateName(item).toLowerCase().includes(search.toLowerCase())),
-    [templates, search, getTemplateName],
-  );
-
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) setSearch("");
         onOpenChange(nextOpen);
       }}
     >
@@ -57,7 +54,7 @@ export function AddFromTemplatesModal<T>({
         <div className="space-y-3">
           <Button
             variant="outline"
-            className="w-full justify-start text-indigo-700 border-indigo-200 bg-indigo-50 hover:bg-indigo-100"
+            className="w-full justify-start border-slate-300 text-slate-700 hover:bg-slate-100"
             onClick={() => {
               onCreateNew();
               onOpenChange(false);
@@ -66,34 +63,20 @@ export function AddFromTemplatesModal<T>({
             {createLabel}
           </Button>
 
-          <div className="flex items-center gap-2 border rounded-md px-3">
-            <Search className="h-4 w-4 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="border-none shadow-none focus-visible:ring-0 px-0"
-            />
-          </div>
-
-          <div className="max-h-[52vh] overflow-y-auto space-y-2 pr-1">
-            {filteredTemplates.map((item) => (
-              <button
-                key={getTemplateId(item)}
-                className="w-full text-left px-4 py-3 rounded-lg border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                onClick={() => {
-                  onInsertTemplate(item);
-                  onOpenChange(false);
-                }}
-              >
-                <div className="font-medium text-slate-900">{getTemplateName(item)}</div>
-                {getTemplateMeta && <div className="text-xs text-slate-500 mt-0.5">{getTemplateMeta(item)}</div>}
-              </button>
-            ))}
-            {filteredTemplates.length === 0 && (
-              <div className="text-sm text-slate-500 text-center py-4">No templates found.</div>
-            )}
-          </div>
+          <TemplatePickerPanel
+            templates={templates}
+            folderType={folderType}
+            allLabel={allLabel}
+            searchPlaceholder={searchPlaceholder}
+            getTemplateId={getTemplateId}
+            getTemplateName={getTemplateName}
+            getTemplateMeta={getTemplateMeta}
+            getTemplateFolderId={getTemplateFolderId}
+            onSelectTemplate={(item) => {
+              onInsertTemplate(item);
+              onOpenChange(false);
+            }}
+          />
         </div>
 
         <DialogFooter>

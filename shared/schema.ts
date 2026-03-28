@@ -67,10 +67,28 @@ export const sessions = pgTable("sessions", {
   sections: jsonb("sections").notNull().default([]),
 });
 
+export const templateFolderTypes = ["phase", "session", "section", "exercise"] as const;
+export const templateFolderTypeSchema = z.enum(templateFolderTypes);
+export type TemplateFolderType = z.infer<typeof templateFolderTypeSchema>;
+
+export const templateFolders = pgTable("template_folders", {
+  id: varchar("id", { length: 64 })
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  type: text("type").$type<TemplateFolderType>().notNull(),
+  parentId: varchar("parent_id", { length: 64 }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const exerciseTemplates = pgTable("exercise_templates", {
   id: varchar("id", { length: 64 })
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  folderId: varchar("folder_id", { length: 64 }),
+  sortOrder: integer("sort_order").notNull().default(0),
   name: text("name").notNull(),
   targetMuscle: text("target_muscle"),
   demoUrl: text("demo_url"),
@@ -89,6 +107,8 @@ export const sectionTemplates = pgTable("section_templates", {
   id: varchar("id", { length: 64 })
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  folderId: varchar("folder_id", { length: 64 }),
+  sortOrder: integer("sort_order").notNull().default(0),
   name: text("name").notNull(),
   description: text("description"),
   exercises: jsonb("exercises").notNull().default([]),
@@ -98,6 +118,8 @@ export const sessionTemplates = pgTable("session_templates", {
   id: varchar("id", { length: 64 })
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  folderId: varchar("folder_id", { length: 64 }),
+  sortOrder: integer("sort_order").notNull().default(0),
   name: text("name").notNull(),
   description: text("description"),
   sections: jsonb("sections").notNull().default([]),
@@ -107,6 +129,8 @@ export const phaseTemplates = pgTable("phase_templates", {
   id: varchar("id", { length: 64 })
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  folderId: varchar("folder_id", { length: 64 }),
+  sortOrder: integer("sort_order").notNull().default(0),
   name: text("name").notNull(),
   goal: text("goal"),
   durationWeeks: integer("duration_weeks").notNull().default(4),
@@ -231,6 +255,11 @@ export const chatReadStatus = pgTable("chat_read_status", {
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertPhaseSchema = createInsertSchema(phases).omit({ id: true });
 export const insertSessionSchema = createInsertSchema(sessions).omit({ id: true });
+export const insertTemplateFolderSchema = createInsertSchema(templateFolders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export const insertExerciseTemplateSchema = createInsertSchema(exerciseTemplates).omit({
   id: true,
 });
@@ -253,6 +282,8 @@ export type InsertPhase = z.infer<typeof insertPhaseSchema>;
 export type Phase = typeof phases.$inferSelect;
 export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Session = typeof sessions.$inferSelect;
+export type InsertTemplateFolder = z.infer<typeof insertTemplateFolderSchema>;
+export type TemplateFolder = typeof templateFolders.$inferSelect;
 export type InsertExerciseTemplate = z.infer<typeof insertExerciseTemplateSchema>;
 export type ExerciseTemplate = typeof exerciseTemplates.$inferSelect;
 export type InsertSectionTemplate = z.infer<typeof insertSectionTemplateSchema>;

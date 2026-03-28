@@ -1,5 +1,38 @@
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 
+export type TemplateFolderType = "phase" | "session" | "section" | "exercise";
+
+export type TemplateFolder = {
+  id: string;
+  name: string;
+  type: TemplateFolderType;
+  parentId: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminClientNotificationSummary = {
+  clientId: string;
+  hasAttention: boolean;
+  totalAttentionCount: number;
+  unreadChatCount: number;
+  movementAttentionCount: number;
+  progressAttentionCount: number;
+};
+
+export type AdminClientsNotificationSummaryResponse = {
+  clients: AdminClientNotificationSummary[];
+};
+
+export type ClientNotificationSummary = {
+  unreadChatCount: number;
+  movementActionCount: number;
+  progressActionCount: number;
+  weeklyCheckinDue: boolean;
+  totalAttentionCount: number;
+};
+
 const configuredApiBaseUrl =
   typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
     ? String(import.meta.env.VITE_API_BASE_URL).trim()
@@ -290,6 +323,20 @@ export const phaseTemplatesQuery = queryOptions({
   queryFn: () => fetchApi("/api/phase-templates"),
 });
 
+export function templateFoldersQuery(type: TemplateFolderType) {
+  return queryOptions({
+    queryKey: ["templateFolders", type],
+    queryFn: () => fetchApi(`/api/template-folders?type=${encodeURIComponent(type)}`),
+  });
+}
+
+function getTemplateQueryKey(type: TemplateFolderType): string {
+  if (type === "phase") return "phaseTemplates";
+  if (type === "session") return "sessionTemplates";
+  if (type === "section") return "sectionTemplates";
+  return "exerciseTemplates";
+}
+
 export function phaseTemplateQuery(id: string) {
   return queryOptions({
     queryKey: ["phaseTemplate", id],
@@ -400,6 +447,28 @@ export function chatUnreadQuery(userId: string, role: string) {
   });
 }
 
+export const adminClientsNotificationSummaryQuery = queryOptions({
+  queryKey: ["adminClientsNotificationSummary"],
+  queryFn: () =>
+    fetchApi("/api/admin/clients/notification-summary") as Promise<AdminClientsNotificationSummaryResponse>,
+  refetchInterval: 10000,
+});
+
+export function adminClientNotificationSummaryQuery(clientId: string) {
+  return queryOptions({
+    queryKey: ["adminClientNotificationSummary", clientId],
+    queryFn: () =>
+      fetchApi(`/api/admin/clients/${clientId}/notification-summary`) as Promise<AdminClientNotificationSummary>,
+    refetchInterval: 10000,
+  });
+}
+
+export const myNotificationSummaryQuery = queryOptions({
+  queryKey: ["notifications", "me", "summary"],
+  queryFn: () => fetchApi("/api/notifications/me/summary") as Promise<ClientNotificationSummary>,
+  refetchInterval: 10000,
+});
+
 export function useCreatePhase() {
   const qc = useQueryClient();
   return useMutation({
@@ -416,6 +485,9 @@ export function useUpdatePhase() {
       qc.invalidateQueries({ queryKey: ["phases"] });
       qc.invalidateQueries({ queryKey: ["phase"] });
       qc.invalidateQueries({ queryKey: ["clientMovementChecksGrouped"] });
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }
@@ -456,7 +528,13 @@ export function useSendMessage() {
         method: "POST",
         body: JSON.stringify({ clientId: data.clientId, text: data.text }),
       }),
-    onSuccess: (_d, vars) => { qc.invalidateQueries({ queryKey: ["messages", vars.clientId] }); },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["messages", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["chatUnread"] });
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
+    },
   });
 }
 
@@ -506,6 +584,7 @@ export function useCreateWeeklyCheckin() {
       qc.invalidateQueries({ queryKey: ["clientCheckinsSummary"] });
       qc.invalidateQueries({ queryKey: ["clientCheckinsTrends"] });
       qc.invalidateQueries({ queryKey: ["clientCheckinsRecent"] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }
@@ -531,6 +610,9 @@ export function useCreateClientProgressReport() {
       qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["progressReports"] });
       qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }
@@ -599,6 +681,9 @@ export function useSubmitProgressReport() {
       qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
       qc.invalidateQueries({ queryKey: ["clientProgressReports"] });
       qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped"] });
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }
@@ -627,6 +712,9 @@ export function useReviewProgressReportItem() {
       qc.invalidateQueries({ queryKey: ["progressReports", "me", "activePhase"] });
       qc.invalidateQueries({ queryKey: ["clientProgressReports"] });
       qc.invalidateQueries({ queryKey: ["clientProgressReportsGrouped"] });
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }
@@ -727,6 +815,104 @@ export function useDeletePhaseTemplate() {
   });
 }
 
+export function useCreateTemplateFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      type: TemplateFolderType;
+      parentId?: string | null;
+      sortOrder?: number;
+    }) =>
+      fetchApi("/api/template-folders", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }) as Promise<TemplateFolder>,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["templateFolders", vars.type] });
+    },
+  });
+}
+
+export function useUpdateTemplateFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      type,
+      ...data
+    }: {
+      id: string;
+      type: TemplateFolderType;
+      name?: string;
+      parentId?: string | null;
+      sortOrder?: number;
+    }) =>
+      fetchApi(`/api/template-folders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }) as Promise<TemplateFolder>,
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["templateFolders", vars.type] });
+    },
+  });
+}
+
+export function useDeleteTemplateFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, type }: { id: string; type: TemplateFolderType }) =>
+      fetchApi(`/api/template-folders/${id}`, { method: "DELETE" }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["templateFolders", vars.type] });
+      qc.invalidateQueries({ queryKey: [getTemplateQueryKey(vars.type)] });
+    },
+  });
+}
+
+export function useMoveTemplateToFolder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      type,
+      templateId,
+      folderId,
+    }: {
+      type: TemplateFolderType;
+      templateId: string;
+      folderId: string | null;
+    }) =>
+      fetchApi("/api/template-folders/move-template", {
+        method: "POST",
+        body: JSON.stringify({ type, templateId, folderId }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: [getTemplateQueryKey(vars.type)] });
+      qc.invalidateQueries({ queryKey: ["templateFolders", vars.type] });
+    },
+  });
+}
+
+export function useReorderTemplates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      type,
+      items,
+    }: {
+      type: TemplateFolderType;
+      items: Array<{ id: string; sortOrder: number; folderId: string | null }>;
+    }) =>
+      fetchApi("/api/template-folders/reorder-templates", {
+        method: "POST",
+        body: JSON.stringify({ type, items }),
+      }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: [getTemplateQueryKey(vars.type)] });
+    },
+  });
+}
+
 export function useMarkChatRead() {
   const qc = useQueryClient();
   return useMutation({
@@ -762,6 +948,9 @@ export function useMarkChatRead() {
       } else {
         qc.invalidateQueries({ queryKey: ["chatUnread"] });
       }
+      qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
+      qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary", vars.clientId] });
+      qc.invalidateQueries({ queryKey: ["notifications", "me", "summary"] });
     },
   });
 }

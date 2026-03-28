@@ -258,11 +258,14 @@ export function SessionEditorCard<TSession extends SessionLike>({
         title="Add Section"
         description="Create a new section or insert one from Section Templates."
         createLabel="Create new section"
+        allLabel="All Sections"
         searchPlaceholder="Search section templates..."
+        folderType="section"
         templates={sectionTemplates}
         getTemplateId={(item: any) => item.id}
         getTemplateName={(item: any) => item.name}
         getTemplateMeta={(item: any) => `${(item.exercises || []).length} exercise(s)`}
+        getTemplateFolderId={(item: any) => item.folderId ?? null}
         onCreateNew={addSection}
         onInsertTemplate={addSectionFromTemplate}
       />

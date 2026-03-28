@@ -108,3 +108,53 @@ export const reviewProgressReportItemSchema = z
     feedbackNote: z.string().max(2000).nullable().optional(),
   })
   .strict();
+
+const templateFolderTypeSchema = z.enum(["phase", "session", "section", "exercise"]);
+
+export const createTemplateFolderSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    type: templateFolderTypeSchema,
+    parentId: z.string().min(1).max(64).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  })
+  .strict();
+
+export const updateTemplateFolderSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    parentId: z.string().min(1).max(64).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.name !== undefined || value.parentId !== undefined || value.sortOrder !== undefined,
+    "At least one field must be provided.",
+  );
+
+export const moveTemplateToFolderSchema = z
+  .object({
+    type: templateFolderTypeSchema,
+    templateId: z.string().min(1).max(64),
+    folderId: z.string().min(1).max(64).nullable(),
+  })
+  .strict();
+
+export const reorderTemplatesSchema = z
+  .object({
+    type: templateFolderTypeSchema,
+    items: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(64),
+            sortOrder: z.number().int().min(0),
+            folderId: z.string().min(1).max(64).nullable(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(500),
+  })
+  .strict();

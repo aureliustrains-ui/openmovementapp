@@ -121,6 +121,10 @@ test("admin chat marks thread as read on tab open without message-count guard", 
   const source = fs.readFileSync(adminClientProfilePath, "utf8");
   assert.equal(source.includes("chatMessages.length > 0"), false);
   assert.ok(source.includes('if (activeTab === "chat" && sessionUser && clientId)'));
+  assert.ok(source.includes("latestClientChatMessageTime"));
+  assert.ok(
+    source.includes("}, [activeTab, sessionUser?.id, clientId, latestClientChatMessageTime]);"),
+  );
 });
 
 test("chat avatars open profile preview in both client and admin chat views", () => {

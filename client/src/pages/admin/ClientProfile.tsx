@@ -13,13 +13,13 @@ import {
   messagesQuery,
   useSendMessage,
   useMarkChatRead,
-  clientCheckinsSummaryQuery,
   clientCheckinsTrendsQuery,
   clientCheckinsRecentQuery,
   useUpdateUserStatus,
   useRemoveClient,
   clientMovementChecksGroupedQuery,
   clientProgressReportsGroupedQuery,
+  adminClientNotificationSummaryQuery,
   useCreateClientProgressReport,
   useReviewProgressReportItem,
 } from "@/lib/api";
@@ -41,14 +41,15 @@ import { ReviewSubmissionRow } from "@/components/admin/review/ReviewSubmissionR
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
 import { mapSessionCheckinTrendData, mapWeeklyCheckinTrendData } from "@/lib/checkins";
+import { buildReadinessSummaryCards } from "@/lib/readinessSummary";
 import { normalizeVideoSource } from "@/lib/video";
 import {
   CartesianGrid,
   Legend,
+  ComposedChart,
   Line,
-  LineChart,
-  ResponsiveContainer,
   Scatter,
+  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -63,12 +64,6 @@ const CHECKIN_COLORS = {
   stress: "#d97706",
   painInjury: "#dc2626",
 } as const;
-
-function formatScaledAverage(value: unknown, scale: 5 | 10): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  const rounded = Number(value.toFixed(1));
-  return `${rounded}/${scale}`;
-}
 
 function isPhaseReadyToActivate(phase: any): boolean {
   const checks = (phase.movementChecks as any[]) || [];
@@ -172,10 +167,6 @@ export default function AdminClientProfile() {
     ...clientSpecificsQuery(clientId || ""),
     enabled: !!clientId,
   });
-  const { data: checkinsSummary } = useQuery({
-    ...clientCheckinsSummaryQuery(clientId || ""),
-    enabled: !!clientId && activeTab === "checkins",
-  });
   const { data: checkinsTrends } = useQuery({
     ...clientCheckinsTrendsQuery(clientId || "", checkinsRange),
     enabled: !!clientId && activeTab === "checkins",
@@ -193,6 +184,13 @@ export default function AdminClientProfile() {
     ...(clientId ? clientProgressReportsGroupedQuery(clientId) : clientProgressReportsGroupedQuery("")),
     enabled: !!clientId && activeTab === "progress-report",
   });
+  const { data: notificationSummary } = useQuery({
+    ...(clientId
+      ? adminClientNotificationSummaryQuery(clientId)
+      : adminClientNotificationSummaryQuery("")),
+    enabled: !!clientId,
+    refetchInterval: 10000,
+  });
 
   useEffect(() => {
     if (typeof specificsData?.specifics === "string") {
@@ -206,11 +204,20 @@ export default function AdminClientProfile() {
     }
   }, [chatMessages, activeTab]);
 
+  const latestClientChatMessageTime = useMemo(() => {
+    const clientMessages = (chatMessages as any[]).filter((message: any) => Boolean(message?.isClient));
+    if (clientMessages.length === 0) return null;
+    return clientMessages.reduce((latest, message) => {
+      const messageTime = typeof message?.time === "string" ? message.time : "";
+      return messageTime > latest ? messageTime : latest;
+    }, "");
+  }, [chatMessages]);
+
   useEffect(() => {
     if (activeTab === "chat" && sessionUser && clientId) {
       markRead.mutate({ userId: sessionUser.id, clientId });
     }
-  }, [activeTab, sessionUser?.id, clientId]);
+  }, [activeTab, sessionUser?.id, clientId, latestClientChatMessageTime]);
 
   const client = allUsers.find((u: any) => u.id === clientId);
   const clientPhases = allPhases.filter((p: any) => p.clientId === clientId);
@@ -727,18 +734,19 @@ export default function AdminClientProfile() {
     [checkinsTrends],
   );
 
-  const summarySleepFallback = useMemo(() => {
-    const values = ((checkinsTrends as any)?.sessions || [])
-      .map((entry: any) => entry?.sleepLastNight)
-      .filter((value: unknown): value is number => typeof value === "number" && Number.isFinite(value));
-    if (values.length === 0) return null;
-    return Number((values.reduce((sum: number, value: number) => sum + value, 0) / values.length).toFixed(2));
-  }, [checkinsTrends]);
-
-  const avgSessionSleepValue =
-    typeof (checkinsSummary as any)?.avgSessionSleepLastNight === "number"
-      ? (checkinsSummary as any).avgSessionSleepLastNight
-      : summarySleepFallback;
+  const readinessSummaryCards = useMemo(
+    () =>
+      buildReadinessSummaryCards({
+        sessionTrendData: sessionCheckinTrendData as Record<string, unknown>[],
+        weeklyTrendData: weeklyCheckinTrendData as Record<string, unknown>[],
+      }),
+    [sessionCheckinTrendData, weeklyCheckinTrendData],
+  );
+  const readinessCardAccent: Record<string, string> = {
+    recovery: CHECKIN_COLORS.recovery,
+    stress: CHECKIN_COLORS.stress,
+    effort: CHECKIN_COLORS.sessionRpe,
+  };
 
   const movementCheckGroups = useMemo(() => {
     return [...(movementCheckGroupsData as any[])].sort((a: any, b: any) => {
@@ -771,6 +779,28 @@ export default function AdminClientProfile() {
       return bTime.localeCompare(aTime);
     });
   }, [progressReportGroupsData]);
+
+  const adminNotificationSummary = useMemo(() => {
+    const raw = (notificationSummary as
+      | {
+          unreadChatCount?: number;
+          movementAttentionCount?: number;
+          progressAttentionCount?: number;
+          totalAttentionCount?: number;
+        }
+      | undefined) || {
+      unreadChatCount: 0,
+      movementAttentionCount: 0,
+      progressAttentionCount: 0,
+      totalAttentionCount: 0,
+    };
+    return {
+      unreadChatCount: raw.unreadChatCount || 0,
+      movementAttentionCount: raw.movementAttentionCount || 0,
+      progressAttentionCount: raw.progressAttentionCount || 0,
+      totalAttentionCount: raw.totalAttentionCount || 0,
+    };
+  }, [notificationSummary]);
 
   const renderPhaseCard = (phase: any) => {
     const displayStatus = getPhaseDisplayStatus(phase);
@@ -987,14 +1017,61 @@ export default function AdminClientProfile() {
         </div>
       </div>
 
+      {adminNotificationSummary.totalAttentionCount > 0 ? (
+        <Card className="border-rose-200 bg-rose-50/60 shadow-sm">
+          <CardContent className="flex flex-wrap items-center gap-2 p-4">
+            <span className="text-sm font-semibold text-rose-800">Needs attention</span>
+            <Badge className="border-none bg-rose-200 text-rose-900">
+              {adminNotificationSummary.totalAttentionCount}
+            </Badge>
+            {adminNotificationSummary.unreadChatCount > 0 ? (
+              <Badge variant="outline" className="border-rose-300 bg-white text-rose-900">
+                Chat {adminNotificationSummary.unreadChatCount}
+              </Badge>
+            ) : null}
+            {adminNotificationSummary.movementAttentionCount > 0 ? (
+              <Badge variant="outline" className="border-rose-300 bg-white text-rose-900">
+                Movement {adminNotificationSummary.movementAttentionCount}
+              </Badge>
+            ) : null}
+            {adminNotificationSummary.progressAttentionCount > 0 ? (
+              <Badge variant="outline" className="border-rose-300 bg-white text-rose-900">
+                Progress {adminNotificationSummary.progressAttentionCount}
+              </Badge>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start flex-wrap h-auto gap-1">
           <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Programming</TabsTrigger>
-          <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">Chat</TabsTrigger>
+          <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">
+            Chat
+            {adminNotificationSummary.unreadChatCount > 0 ? (
+              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                {adminNotificationSummary.unreadChatCount}
+              </span>
+            ) : null}
+          </TabsTrigger>
           <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Metrics</TabsTrigger>
           <TabsTrigger value="structured-logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-structured-logs">Notes &amp; Logs</TabsTrigger>
-          <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">Movement Check</TabsTrigger>
-          <TabsTrigger value="progress-report" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-progress-report">Progress Report</TabsTrigger>
+          <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">
+            Movement Check
+            {adminNotificationSummary.movementAttentionCount > 0 ? (
+              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                {adminNotificationSummary.movementAttentionCount}
+              </span>
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="progress-report" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-progress-report">
+            Progress Report
+            {adminNotificationSummary.progressAttentionCount > 0 ? (
+              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                {adminNotificationSummary.progressAttentionCount}
+              </span>
+            ) : null}
+          </TabsTrigger>
           <TabsTrigger value="specifics" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-specifics">Specifics</TabsTrigger>
           <TabsTrigger value="access" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-client-access">Client Access</TabsTrigger>
         </TabsList>
@@ -1524,57 +1601,21 @@ export default function AdminClientProfile() {
           </TabsContent>
 
           <TabsContent value="checkins" className="m-0 outline-none space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.recovery }}>Recovery</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgWeeklyRecovery, 5)}</div>
-                  <div className="text-xs text-slate-500">
-                    {typeof (checkinsSummary as any)?.avgWeeklyRecovery === "number" ? "last weeks" : "No data yet"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.stress }}>Stress</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgWeeklyStress, 5)}</div>
-                  <div className="text-xs text-slate-500">
-                    {typeof (checkinsSummary as any)?.avgWeeklyStress === "number" ? "last weeks" : "No data yet"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.sessionRpe }}>Session RPE</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage((checkinsSummary as any)?.avgSessionRpe, 10)}</div>
-                  <div className="text-xs text-slate-500">
-                    {typeof (checkinsSummary as any)?.avgSessionRpe === "number" ? "session trend" : "No data yet"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.sleepLastNight }}>Sleep last night</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{formatScaledAverage(avgSessionSleepValue, 5)}</div>
-                  <div className="text-xs text-slate-500">
-                    {typeof avgSessionSleepValue === "number" ? "session check-ins" : "No data yet"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.feltOff }}>Felt off events</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.feltOffFlags ?? 0}</div>
-                  <div className="text-xs text-slate-500">session alerts</div>
-                </CardContent>
-              </Card>
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                  <div className="text-xs uppercase tracking-wider" style={{ color: CHECKIN_COLORS.painInjury }}>Pain/injury weeks</div>
-                  <div className="text-2xl font-bold text-slate-900 mt-1">{(checkinsSummary as any)?.injuryAffectedWeeks ?? 0}</div>
-                  <div className="text-xs text-slate-500">weekly impact</div>
-                </CardContent>
-              </Card>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {readinessSummaryCards.map((card) => (
+                <Card key={card.key} className="border-slate-200 shadow-sm rounded-2xl bg-white">
+                  <CardContent className="p-4">
+                    <div
+                      className="text-xs uppercase tracking-wider"
+                      style={{ color: readinessCardAccent[card.key] || "#475569" }}
+                    >
+                      {card.title}
+                    </div>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">{card.primary}</div>
+                    <div className="text-xs text-slate-500 mt-1">{card.secondary}</div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
 
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
@@ -1623,7 +1664,7 @@ export default function AdminClientProfile() {
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer>
-                      <LineChart data={sessionCheckinTrendData}>
+                      <ComposedChart data={sessionCheckinTrendData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
                         <YAxis yAxisId="rpe" domain={[0, 10]} tick={{ fontSize: 11 }} />
@@ -1638,8 +1679,12 @@ export default function AdminClientProfile() {
                                 <div className="text-slate-600">{point?.dateLabel}</div>
                                 <div className="text-slate-700 mt-1">RPE: {point?.rpeOverall}</div>
                                 <div className="text-slate-700">Sleep last night: {point?.sleepLastNight ?? "-"}</div>
-                                {point?.feltOff ? <div className="text-amber-700">Felt off: yes</div> : null}
-                                {point?.whatFeltOff ? <div className="text-slate-700 mt-1">What felt off: {point.whatFeltOff}</div> : null}
+                                {point?.feltOff ? <div className="text-amber-700">Felt off: Yes</div> : null}
+                                {point?.whatFeltOff ? (
+                                  <div className="text-slate-700 mt-1 whitespace-pre-wrap">
+                                    What felt off: {point.whatFeltOff}
+                                  </div>
+                                ) : null}
                                 {point?.optionalNote ? <div className="text-slate-700 mt-1">Optional note: {point.optionalNote}</div> : null}
                               </div>
                             );
@@ -1653,9 +1698,18 @@ export default function AdminClientProfile() {
                           <Line yAxisId="sleep" type="monotone" dataKey="sleepLastNight" name="Sleep last night" stroke={CHECKIN_COLORS.sleepLastNight} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
                         )}
                         {sessionMetrics.feltOffEvents && (
-                          <Scatter yAxisId="rpe" dataKey="feltOffMarker" name="Felt off events" fill={CHECKIN_COLORS.feltOff} />
+                          <Line
+                            yAxisId="rpe"
+                            type="linear"
+                            dataKey="feltOffEventLevel"
+                            name="Felt off events"
+                            stroke="transparent"
+                            dot={{ r: 5, fill: CHECKIN_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
+                            activeDot={{ r: 6, fill: CHECKIN_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
+                            connectNulls={false}
+                          />
                         )}
-                      </LineChart>
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -1687,7 +1741,7 @@ export default function AdminClientProfile() {
                   </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer>
-                      <LineChart data={weeklyCheckinTrendData}>
+                      <ComposedChart data={weeklyCheckinTrendData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
                         <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} />
@@ -1714,10 +1768,42 @@ export default function AdminClientProfile() {
                         {weeklyMetrics.stressOutsideTrainingThisWeek && (
                           <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHECKIN_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
                         )}
-                        {weeklyMetrics.injuryImpact && (
-                          <Line type="monotone" dataKey="injuryImpact" name="Pain/injury impact" stroke={CHECKIN_COLORS.painInjury} strokeWidth={2} dot={{ r: 3 }} />
-                        )}
-                      </LineChart>
+                        <>
+                          {weeklyMetrics.injuryImpact ? (
+                            <Line
+                              type="linear"
+                              dataKey="injuryImpact"
+                              name="Pain/injury impact"
+                              stroke={CHECKIN_COLORS.painInjury}
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: CHECKIN_COLORS.painInjury, stroke: "#ffffff", strokeWidth: 1.5 }}
+                              activeDot={{
+                                r: 6,
+                                fill: CHECKIN_COLORS.painInjury,
+                                stroke: "#ffffff",
+                                strokeWidth: 1.5,
+                              }}
+                              connectNulls={false}
+                            />
+                          ) : null}
+                          <Scatter
+                            dataKey="injuryImpactEventLevel"
+                            name="Pain/injury events"
+                            fill={CHECKIN_COLORS.painInjury}
+                            line={false}
+                            shape={
+                              <circle
+                                r={6}
+                                fill={CHECKIN_COLORS.painInjury}
+                                stroke="#ffffff"
+                                strokeWidth={1.75}
+                              />
+                            }
+                            legendType="circle"
+                            isAnimationActive={false}
+                          />
+                        </>
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                 </div>

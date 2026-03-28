@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   usersQuery,
   phasesQuery,
+  adminClientsNotificationSummaryQuery,
   useCreateUser,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,9 @@ import {
   ChevronRight,
   Activity,
   AlertCircle,
+  MessageCircle,
+  ShieldAlert,
+  ClipboardList,
   Loader2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +42,36 @@ export default function AdminClientsList() {
   const createUser = useCreateUser();
   const { data: allUsers = [], isLoading: loadingUsers } = useQuery(usersQuery);
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
+  const { data: clientNotificationSummary } = useQuery({
+    ...adminClientsNotificationSummaryQuery,
+    enabled: sessionUser?.role === "Admin",
+  });
+
+  const notificationByClientId = useMemo(() => {
+    const rows =
+      (clientNotificationSummary as
+        | {
+            clients?: Array<{
+              clientId: string;
+              totalAttentionCount: number;
+              unreadChatCount: number;
+              movementAttentionCount: number;
+              progressAttentionCount: number;
+            }>;
+          }
+        | undefined)?.clients || [];
+    return new Map(
+      rows.map((row) => [
+        row.clientId,
+        {
+          totalAttentionCount: row.totalAttentionCount || 0,
+          unreadChatCount: row.unreadChatCount || 0,
+          movementAttentionCount: row.movementAttentionCount || 0,
+          progressAttentionCount: row.progressAttentionCount || 0,
+        },
+      ]),
+    );
+  }, [clientNotificationSummary]);
 
   const clients = allUsers.filter((u: any) => {
     if (u.role !== "Client") return false;
@@ -64,6 +98,37 @@ export default function AdminClientsList() {
     if (pendingPhase) return { label: 'Action Required', type: 'destructive', desc: 'Movement Check Pending' };
     if (activePhase) return { label: 'Active', type: 'default', desc: activePhase.name };
     return { label: 'No Active Phase', type: 'secondary', desc: 'Needs programming' };
+  };
+
+  const renderAttentionIndicators = (clientId: string) => {
+    const summary = notificationByClientId.get(clientId);
+    if (!summary || summary.totalAttentionCount <= 0) return null;
+
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <Badge className="border-none bg-rose-100 text-rose-700 hover:bg-rose-100">
+          Needs attention {summary.totalAttentionCount}
+        </Badge>
+        {summary.unreadChatCount > 0 ? (
+          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
+            <MessageCircle className="h-3 w-3" />
+            {summary.unreadChatCount}
+          </Badge>
+        ) : null}
+        {summary.movementAttentionCount > 0 ? (
+          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
+            <ShieldAlert className="h-3 w-3" />
+            {summary.movementAttentionCount}
+          </Badge>
+        ) : null}
+        {summary.progressAttentionCount > 0 ? (
+          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
+            <ClipboardList className="h-3 w-3" />
+            {summary.progressAttentionCount}
+          </Badge>
+        ) : null}
+      </div>
+    );
   };
 
   const resetForm = () => {
@@ -282,6 +347,7 @@ export default function AdminClientsList() {
                             <div>
                               <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
                               <p className="text-sm text-slate-500">{client.email}</p>
+                              {renderAttentionIndicators(client.id)}
                             </div>
                           </div>
                           <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
@@ -330,6 +396,7 @@ export default function AdminClientsList() {
                             <div>
                               <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{client.name}</h3>
                               <p className="text-sm text-slate-500">{client.email}</p>
+                              {renderAttentionIndicators(client.id)}
                             </div>
                           </div>
                           <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />

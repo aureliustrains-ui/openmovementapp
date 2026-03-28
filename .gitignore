@@ -16,3 +16,6 @@ uploads/
 coverage/
 *.log
 .DS_Store
+
+# Local tool/runtime state (never commit)
+.local/state/

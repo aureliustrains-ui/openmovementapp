@@ -31,6 +31,7 @@ import ClientHome from "@/pages/client/Home";
 import ClientMyPhase from "@/pages/client/MyPhase";
 import ClientSessionView from "@/pages/client/SessionView";
 import ClientChat from "@/pages/client/Chat";
+import ClientReadiness from "@/pages/client/Readiness";
 import ClientInfo from "@/pages/client/Info";
 import ClientProgressReport from "@/pages/client/ProgressReport";
 
@@ -139,6 +140,9 @@ function Router() {
                 </Route>
                 <Route path="/app/client/chat">
                   {() => <ProtectedRoute component={ClientChat} allowedRole="Client" />}
+                </Route>
+                <Route path="/app/client/readiness">
+                  {() => <ProtectedRoute component={ClientReadiness} allowedRole="Client" />}
                 </Route>
                 <Route path="/app/client/info">
                   {() => <ProtectedRoute component={ClientInfo} allowedRole="Client" />}

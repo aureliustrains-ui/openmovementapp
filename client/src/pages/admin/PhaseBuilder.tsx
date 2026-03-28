@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal";
+import { TemplatePickerPanel } from "@/components/admin/TemplatePickerPanel";
 import { SessionEditorCard } from "@/components/admin/builder/SessionEditorCard";
 
 function generateId() {
@@ -791,7 +792,7 @@ export default function AdminPhaseBuilder() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-24 animate-in fade-in">
+    <div className="space-y-6 w-full pb-24 animate-in fade-in">
       <div className="sticky top-0 z-20 bg-slate-50/80 backdrop-blur-xl border-b border-slate-200 py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href={`/app/admin/clients/${params?.clientId}`}>
@@ -1055,20 +1056,20 @@ export default function AdminPhaseBuilder() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1">
+            <div className="space-y-2">
               <Label>Phase Template</Label>
-              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a phase template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {phaseTemplates.map((template: any) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TemplatePickerPanel
+                templates={phaseTemplates as any[]}
+                folderType="phase"
+                allLabel="All Phases"
+                searchPlaceholder="Search phase templates..."
+                selectedTemplateId={selectedTemplateId || null}
+                getTemplateId={(item: any) => item.id}
+                getTemplateName={(item: any) => item.name}
+                getTemplateMeta={(item: any) => `${(item.sessions || []).length} session(s)`}
+                getTemplateFolderId={(item: any) => item.folderId ?? null}
+                onSelectTemplate={(item: any) => setSelectedTemplateId(item.id)}
+              />
             </div>
 
             <div className="border rounded-lg p-3 bg-slate-50">
@@ -1237,11 +1238,14 @@ export default function AdminPhaseBuilder() {
         title="Add Session"
         description="Create a new session or insert one from Session Templates."
         createLabel="Create new session"
+        allLabel="All Sessions"
         searchPlaceholder="Search session templates..."
+        folderType="session"
         templates={sessionTemplates as any[]}
         getTemplateId={(item: any) => item.id}
         getTemplateName={(item: any) => item.name}
         getTemplateMeta={(item: any) => `${(item.sections || []).length} section(s)`}
+        getTemplateFolderId={(item: any) => item.folderId ?? null}
         onCreateNew={addSession}
         onInsertTemplate={(item: any) => addSessionFromTemplate(item)}
       />

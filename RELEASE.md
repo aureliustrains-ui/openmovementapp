@@ -25,11 +25,12 @@
 
 - Current strategy is schema-first with Drizzle.
 - Use one of:
-  - Fast sync (current): `npm run db:push`
-  - Versioned migrations (recommended for teams):
+  - Fast sync (current default): `npm run db:push`
+  - Versioned migrations (optional, when explicitly adopted):
     1. `npx drizzle-kit@0.31.9 generate`
-    2. Commit generated files under `migrations/`
+    2. Commit generated files under `migrations/` (directory is reserved in-repo)
     3. Apply in deploy pipeline with `npx drizzle-kit@0.31.9 migrate`
+- For this repo today, treat `db:push` as the required pre-deploy schema step unless a migration file is explicitly generated and reviewed.
 - [ ] Back up production DB before applying schema changes.
 - [ ] Never run destructive migration without tested rollback.
 
@@ -63,3 +64,13 @@
   - [ ] If migration is backward-compatible: rollback app only.
   - [ ] If migration is breaking: restore from backup or apply tested down-migration.
 - [ ] Re-run smoke checks after rollback.
+
+## 7) Safe Git Push Target
+
+- Verify branch before pushing:
+  - `git branch --show-current`
+- Verify remotes and target:
+  - `git remote -v`
+- Push to the intended GitHub remote (`openmovementapp`) and non-main branch first:
+  - `git push -u openmovementapp <branch-name>`
+- Open a PR to `main` after CI passes. Avoid pushing release work to `origin` by mistake.

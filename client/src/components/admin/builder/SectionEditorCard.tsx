@@ -204,11 +204,14 @@ export function SectionEditorCard({
         title="Add Exercise"
         description="Create a new exercise or insert one from Exercise Templates."
         createLabel="Create new exercise"
+        allLabel="All Exercises"
         searchPlaceholder="Search exercise templates..."
+        folderType="exercise"
         templates={exerciseTemplates}
         getTemplateId={(item: any) => item.id}
         getTemplateName={(item: any) => item.name}
         getTemplateMeta={(item: any) => item.targetMuscle || ""}
+        getTemplateFolderId={(item: any) => item.folderId ?? null}
         onCreateNew={() => onAddExerciseByName("New Exercise")}
         onInsertTemplate={onAddExerciseFromTemplate}
       />
