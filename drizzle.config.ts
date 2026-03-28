@@ -8,6 +8,8 @@ if (!process.env.DATABASE_URL) {
 }
 
 export default defineConfig({
+  // Migration files live here when generated. Current release flow uses `npm run db:push`
+  // unless versioned migrations are explicitly generated and committed.
   out: "./migrations",
   schema: "./shared/schema.ts",
   dialect: "postgresql",

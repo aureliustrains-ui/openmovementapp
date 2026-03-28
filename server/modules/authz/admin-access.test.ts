@@ -30,10 +30,13 @@ test("isPrimaryAdminEmail matches the single allowed production admin email", ()
   assert.equal(isPrimaryAdminEmail("other-admin@example.com"), false);
 });
 
-test("hasAdminAccess allows only primary admin in non-test environments", () => {
+test("hasAdminAccess allows any admin in development and only primary admin in production", () => {
   const prevNodeEnv = process.env.NODE_ENV;
-  process.env.NODE_ENV = "production";
   try {
+    process.env.NODE_ENV = "development";
+    assert.equal(hasAdminAccess(buildUser({ role: "Admin", email: "admin@example.com" })), true);
+
+    process.env.NODE_ENV = "production";
     assert.equal(hasAdminAccess(buildUser({ role: "Admin", email: PRIMARY_ADMIN_EMAIL })), true);
     assert.equal(hasAdminAccess(buildUser({ role: "Admin", email: "admin@example.com" })), false);
     assert.equal(hasAdminAccess(buildUser({ role: "Client", email: PRIMARY_ADMIN_EMAIL })), false);

@@ -171,23 +171,36 @@ test("client dashboard defaults selected phase to active phase with deterministi
   );
 });
 
-test("ready lifecycle state and weekly action visibility share the same condition", () => {
+test("weekly action visibility uses server due status with lifecycle fallback", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
   const source = fs.readFileSync(myPhasePath, "utf8");
 
   assert.ok(
-    source.includes('const weeklyCheckinDue = currentWeekStatus?.state === "ready_for_checkin";'),
-    "Weekly check-in visibility should key off ready_for_checkin lifecycle state",
+    source.includes("weeklyCheckinsCurrentOrDueQuery"),
+    "MyPhase should read authoritative weekly due status from the current-or-due endpoint",
+  );
+  assert.ok(
+    source.includes(
+      "const recommendedWeek = dueWeek?.week ?? serverPhaseWeek ?? lifecycle.currentWeek;",
+    ),
+    "Selected week progression should keep due week visible before falling back",
+  );
+  assert.ok(
+    source.includes("const weeklyCheckinDue ="),
+    "Weekly action visibility should derive from combined due signals",
+  );
+  assert.ok(
+    source.includes('weekStatuses.find((status) => status.state === "ready_for_checkin") || null'),
+    "Lifecycle ready-for-checkin fallback should remain in place",
+  );
+  assert.ok(
+    source.includes("Boolean(dueWeekStatus) ||"),
+    "Weekly action visibility should never hide due card when lifecycle marks a due week",
   );
   assert.ok(
     source.includes("buildActionRequiredItems({"),
     "Action Required section should derive weekly card visibility from shared action item builder",
-  );
-  assert.equal(
-    source.includes("weeklyCheckinStatus?.due"),
-    false,
-    "Weekly check-in visibility must not depend on separate stale due flag",
   );
 });
 

@@ -26,33 +26,61 @@ const exerciseEditorPath = path.resolve(
 
 test("template category tabs remain clickable and preserve explicit tab context", () => {
   const source = fs.readFileSync(templatesPagePath, "utf8");
+  const paneSource = fs.readFileSync(libraryPanePath, "utf8");
 
-  assert.ok(source.includes('<TabsTrigger\n                value="phases"'));
-  assert.ok(source.includes('<TabsTrigger\n                value="sessions"'));
-  assert.ok(source.includes('<TabsTrigger\n                value="sections"'));
-  assert.ok(source.includes('<TabsTrigger\n                value="exercises"'));
+  assert.ok(source.includes('label: "Phases"'));
+  assert.ok(source.includes('label: "Sessions"'));
+  assert.ok(source.includes('label: "Sections"'));
+  assert.ok(source.includes('label: "Exercises"'));
+  assert.ok(source.includes('rootLabel="Phases"'));
+  assert.ok(source.includes('rootLabel="Sessions"'));
+  assert.ok(source.includes('rootLabel="Sections"'));
+  assert.ok(source.includes('rootLabel="Exercises"'));
   assert.ok(
-    source.includes("setActiveTab(next);"),
-    "Tab click handler should set local active tab state immediately",
+    source.includes("setActiveTabWithPersistence(categoryId, { resetFolder: true })"),
+    "Category click should set active template category and reset to root view",
   );
   assert.ok(
-    source.includes("setLocation(`/app/admin/templates${tabToQueryParam(next)}`);"),
-    "Tab click handler should keep URL context for navigation persistence",
+    source.includes("activeCategoryId={activeTab}"),
+    "Active category should be passed into the shared library pane",
+  );
+  assert.ok(
+    paneSource.includes("categoryItems") && paneSource.includes("onSelectCategory"),
+    "Template library pane should render categories and tree in one sidebar surface",
+  );
+  assert.ok(
+    source.includes("buildTemplatesUrl(activeTab, folderId)"),
+    "Template navigation should preserve tab/folder location in URL state",
   );
 });
 
-test("template library sidebar uses All + Folders model without visible Uncategorized entry", () => {
+test("template library sidebar uses category-as-root tree without Uncategorized", () => {
   const source = fs.readFileSync(libraryPanePath, "utf8");
 
-  assert.ok(source.includes("allLabel"));
-  assert.ok(source.includes(">Folders<"));
-  assert.ok(source.includes("Remove from folder"));
+  assert.ok(source.includes("rootNodeLabel"));
+  assert.ok(
+    source.includes("const rootFolders = childrenByParent.get(folderParentKey(null)) || [];"),
+  );
+  assert.ok(source.includes("setRootExpanded((prev) => !prev)"));
+  assert.ok(source.includes("rootFolders.map((rootFolder) => renderFolderTree(rootFolder, 1))"));
+  assert.equal(source.includes('truncate font-medium">{allLabel}'), false);
+  assert.ok(source.includes("selectedFolderPath.map"));
   assert.equal(
     source.includes("Uncategorized"),
     false,
     "Uncategorized should not be rendered as a visible sidebar item/folder",
   );
   assert.equal(source.includes("__uncategorized__"), false);
+});
+
+test("template content pane stays uncluttered and relies on visual hierarchy", () => {
+  const source = fs.readFileSync(libraryPanePath, "utf8");
+
+  assert.equal(source.includes(">Folders</p>"), false);
+  assert.equal(source.includes(">Templates</p>"), false);
+  assert.equal(source.includes("child folder"), false);
+  assert.equal(source.includes("Move to</label>"), false);
+  assert.ok(source.includes("selectedFolderPath.map"));
 });
 
 test("template editors route back to the correct template category tab", () => {

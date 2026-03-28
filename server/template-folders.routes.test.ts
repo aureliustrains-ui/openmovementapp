@@ -301,3 +301,145 @@ test("POST /api/template-folders/reorder-templates persists sort order", async (
     },
   );
 });
+
+test("PATCH /api/template-folders/:id blocks moving a folder into its own descendant", async () => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const admin = buildUser();
+  const folders: TemplateFolder[] = [
+    {
+      id: "folder_root",
+      name: "Root",
+      type: "exercise",
+      parentId: null,
+      sortOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: "folder_child",
+      name: "Child",
+      type: "exercise",
+      parentId: "folder_root",
+      sortOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: "folder_grandchild",
+      name: "Grandchild",
+      type: "exercise",
+      parentId: "folder_child",
+      sortOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async () => admin,
+      getTemplateFolder: async (id: string) => folders.find((folder) => folder.id === id),
+      getTemplateFolders: async () => folders,
+      updateTemplateFolder: async () => undefined,
+    },
+    async () => {
+      await withTestServer(registerRoutes, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/api/template-folders/folder_root`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            "x-test-user-id": "admin_1",
+          },
+          body: JSON.stringify({
+            parentId: "folder_grandchild",
+          }),
+        });
+
+        assert.equal(res.status, 400);
+        const body = (await res.json()) as { message?: string };
+        assert.match(body.message || "", /descendants/i);
+      });
+    },
+  );
+});
+
+test("DELETE /api/template-folders/:id rehomes templates to parent folder", async () => {
+  const { registerRoutes, storage } = await loadRouteDeps();
+  const admin = buildUser();
+  const folders: TemplateFolder[] = [
+    {
+      id: "folder_parent",
+      name: "Parent",
+      type: "exercise",
+      parentId: null,
+      sortOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: "folder_child",
+      name: "Child",
+      type: "exercise",
+      parentId: "folder_parent",
+      sortOrder: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ];
+  const exerciseTemplates = [
+    {
+      id: "exercise_tpl_1",
+      name: "Exercise A",
+      folderId: "folder_child" as string | null,
+      sortOrder: 0,
+      targetMuscle: null,
+      demoUrl: null,
+      sets: null,
+      reps: null,
+      load: null,
+      tempo: null,
+      notes: null,
+      goal: null,
+      additionalInstructions: null,
+      requiresMovementCheck: false,
+      enableStructuredLogging: false,
+    },
+  ];
+
+  await withPatchedStorage(
+    storage,
+    {
+      getUser: async () => admin,
+      getTemplateFolder: async (id: string) => folders.find((folder) => folder.id === id),
+      getTemplateFolders: async (type: string) => folders.filter((folder) => folder.type === type),
+      deleteTemplateFolder: async (id: string) => {
+        const folder = folders.find((entry) => entry.id === id);
+        if (!folder) return false;
+        for (const template of exerciseTemplates) {
+          if (template.folderId === id) template.folderId = folder.parentId;
+        }
+        const index = folders.findIndex((entry) => entry.id === id);
+        if (index >= 0) folders.splice(index, 1);
+        return index >= 0;
+      },
+      getExerciseTemplates: async () => exerciseTemplates,
+    },
+    async () => {
+      await withTestServer(registerRoutes, async (baseUrl) => {
+        const deleteRes = await fetch(`${baseUrl}/api/template-folders/folder_child`, {
+          method: "DELETE",
+          headers: { "x-test-user-id": "admin_1" },
+        });
+        assert.equal(deleteRes.status, 200);
+
+        const templatesRes = await fetch(`${baseUrl}/api/exercise-templates`, {
+          headers: { "x-test-user-id": "admin_1" },
+        });
+        assert.equal(templatesRes.status, 200);
+        const templates = (await templatesRes.json()) as Array<{ folderId: string | null }>;
+        assert.equal(templates[0]?.folderId, "folder_parent");
+      });
+    },
+  );
+});

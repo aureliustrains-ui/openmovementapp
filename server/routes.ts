@@ -33,6 +33,18 @@ import {
   createClientVideoUploadSchema,
   createSessionCheckinSchema,
   createWeeklyCheckinSchema,
+  createPhaseSchema,
+  updatePhaseAdminSchema,
+  createSessionSchema,
+  updateSessionSchema,
+  createExerciseTemplateSchema,
+  updateExerciseTemplateSchema,
+  createSectionTemplateSchema,
+  updateSectionTemplateSchema,
+  createSessionTemplateSchema,
+  updateSessionTemplateSchema,
+  createPhaseTemplateSchema,
+  updatePhaseTemplateSchema,
   createProgressReportSchema,
   submitProgressReportSchema,
   reviewProgressReportItemSchema,
@@ -474,6 +486,14 @@ function isProgressReportSchemaError(error: unknown): boolean {
   return code === "42P01" || code === "42703";
 }
 
+function isDurationSchemaMismatchError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: unknown }).code || "") : "";
+  if (code === "DURATION_SCHEMA_MISMATCH" || code === "42703") return true;
+  const message = "message" in error ? String((error as { message?: unknown }).message || "") : "";
+  return message.toLowerCase().includes("duration_minutes");
+}
+
 const ISO_EPOCH = "1970-01-01T00:00:00.000Z";
 
 function isTimestampAfter(left: string, right: string): boolean {
@@ -620,7 +640,7 @@ async function maybeBootstrapAdminUser(): Promise<void> {
       logInfo("bootstrap", `Created primary admin user: ${email}`);
     }
 
-    if (process.env.NODE_ENV !== "test") {
+    if (process.env.NODE_ENV === "production") {
       const allUsers = await storage.getUsers();
       const primaryAdmin = allUsers.find((user) => isPrimaryAdminEmail(user.email));
       if (!primaryAdmin) {
@@ -1172,7 +1192,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/phases", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const payload = { ...(req.body || {}) } as Record<string, unknown>;
+    const parsed = createPhaseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid phase payload" });
+    }
+    const payload = { ...parsed.data } as Record<string, unknown>;
     const client = await storage.getUser(String(payload.clientId || ""));
     if (!client || client.role !== "Client") {
       return res.status(400).json({ message: "Client not found" });
@@ -1192,7 +1217,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const authUser = requireUser(req, res);
     if (!authUser) return;
 
-    let updatePayload = req.body;
+    let updatePayload: Record<string, unknown> = req.body || {};
     if (!isAdmin(authUser)) {
       const phaseForClient = await storage.getPhase(req.params.id);
       if (!phaseForClient || phaseForClient.clientId !== authUser.id) {
@@ -1359,20 +1384,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       updatePayload = nextClientPayload;
     } else {
+      const parsed = updatePhaseAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+        return res.status(400).json({ message: details || "Invalid phase update payload" });
+      }
       const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(
-        (req.body || {}).homeIntroVideoUrl,
+        parsed.data.homeIntroVideoUrl,
       );
       if (parsedHomeIntroVideoUrl !== undefined) {
         updatePayload = {
-          ...(req.body || {}),
+          ...parsed.data,
           homeIntroVideoUrl: parsedHomeIntroVideoUrl,
         };
+      } else {
+        updatePayload = { ...parsed.data };
       }
     }
 
     const requestedStatus =
-      typeof (req.body as { status?: unknown } | undefined)?.status === "string"
-        ? String((req.body as { status: string }).status)
+      typeof (updatePayload as { status?: unknown } | undefined)?.status === "string"
+        ? String((updatePayload as { status: string }).status)
         : null;
     try {
       const phase = await storage.updatePhase(req.params.id, updatePayload);
@@ -1428,15 +1460,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/sessions", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const session = await storage.createSession(req.body);
-    res.status(201).json(session);
+    const parsed = createSessionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid session payload" });
+    }
+    try {
+      const session = await storage.createSession(parsed.data);
+      res.status(201).json(session);
+    } catch (error) {
+      if (isDurationSchemaMismatchError(error)) {
+        return res.status(500).json({
+          message:
+            "Database schema not ready for session duration fields. Run npm run db:push before production start.",
+        });
+      }
+      throw error;
+    }
   });
 
   app.patch("/api/sessions/:id", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const session = await storage.updateSession(req.params.id, req.body);
-    if (!session) return res.status(404).json({ message: "Session not found" });
-    res.json(session);
+    const parsed = updateSessionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid session update payload" });
+    }
+    try {
+      const session = await storage.updateSession(req.params.id, parsed.data);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      res.json(session);
+    } catch (error) {
+      if (isDurationSchemaMismatchError(error)) {
+        return res.status(500).json({
+          message:
+            "Database schema not ready for session duration fields. Run npm run db:push before production start.",
+        });
+      }
+      throw error;
+    }
   });
 
   app.delete("/api/sessions/:id", async (req, res) => {
@@ -1499,6 +1561,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!parent) return res.status(404).json({ message: "Parent folder not found" });
       if (parent.type !== current.type) {
         return res.status(400).json({ message: "Parent folder must have the same template type" });
+      }
+
+      const sameTypeFolders = await storage.getTemplateFolders(current.type as TemplateFolderType);
+      const childrenByParent = new Map<string, string[]>();
+      for (const folder of sameTypeFolders) {
+        if (!folder.parentId) continue;
+        const children = childrenByParent.get(folder.parentId) || [];
+        children.push(folder.id);
+        childrenByParent.set(folder.parentId, children);
+      }
+
+      const descendants = new Set<string>();
+      const queue = [current.id];
+      while (queue.length > 0) {
+        const folderId = queue.shift();
+        if (!folderId) continue;
+        const children = childrenByParent.get(folderId) || [];
+        for (const childId of children) {
+          if (descendants.has(childId)) continue;
+          descendants.add(childId);
+          queue.push(childId);
+        }
+      }
+
+      if (descendants.has(parsed.data.parentId)) {
+        return res
+          .status(400)
+          .json({ message: "A folder cannot be moved into one of its descendants" });
       }
     }
 
@@ -1591,13 +1681,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/exercise-templates", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.createExerciseTemplate(req.body);
+    const parsed = createExerciseTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid exercise template payload" });
+    }
+    const template = await storage.createExerciseTemplate(parsed.data);
     res.status(201).json(template);
   });
 
   app.patch("/api/exercise-templates/:id", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.updateExerciseTemplate(req.params.id, req.body);
+    const parsed = updateExerciseTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res
+        .status(400)
+        .json({ message: details || "Invalid exercise template update payload" });
+    }
+    const template = await storage.updateExerciseTemplate(req.params.id, parsed.data);
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });
@@ -1617,13 +1719,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/section-templates", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.createSectionTemplate(req.body);
+    const parsed = createSectionTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid section template payload" });
+    }
+    const template = await storage.createSectionTemplate(parsed.data);
     res.status(201).json(template);
   });
 
   app.patch("/api/section-templates/:id", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.updateSectionTemplate(req.params.id, req.body);
+    const parsed = updateSectionTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res
+        .status(400)
+        .json({ message: details || "Invalid section template update payload" });
+    }
+    const template = await storage.updateSectionTemplate(req.params.id, parsed.data);
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });
@@ -1643,15 +1757,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/session-templates", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.createSessionTemplate(req.body);
-    res.status(201).json(template);
+    const parsed = createSessionTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid session template payload" });
+    }
+    try {
+      const template = await storage.createSessionTemplate(parsed.data);
+      res.status(201).json(template);
+    } catch (error) {
+      if (isDurationSchemaMismatchError(error)) {
+        return res.status(500).json({
+          message:
+            "Database schema not ready for session template duration fields. Run npm run db:push before production start.",
+        });
+      }
+      throw error;
+    }
   });
 
   app.patch("/api/session-templates/:id", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.updateSessionTemplate(req.params.id, req.body);
-    if (!template) return res.status(404).json({ message: "Template not found" });
-    res.json(template);
+    const parsed = updateSessionTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res
+        .status(400)
+        .json({ message: details || "Invalid session template update payload" });
+    }
+    try {
+      const template = await storage.updateSessionTemplate(req.params.id, parsed.data);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      if (isDurationSchemaMismatchError(error)) {
+        return res.status(500).json({
+          message:
+            "Database schema not ready for session template duration fields. Run npm run db:push before production start.",
+        });
+      }
+      throw error;
+    }
   });
 
   app.delete("/api/session-templates/:id", async (req, res) => {
@@ -1676,13 +1822,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/phase-templates", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.createPhaseTemplate(req.body);
+    const parsed = createPhaseTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid phase template payload" });
+    }
+    const template = await storage.createPhaseTemplate(parsed.data);
     res.status(201).json(template);
   });
 
   app.patch("/api/phase-templates/:id", async (req, res) => {
     if (!requireAdmin(req, res)) return;
-    const template = await storage.updatePhaseTemplate(req.params.id, req.body);
+    const parsed = updatePhaseTemplateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid phase template update payload" });
+    }
+    const template = await storage.updatePhaseTemplate(req.params.id, parsed.data);
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });

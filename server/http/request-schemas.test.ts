@@ -77,14 +77,14 @@ test("createWeeklyCheckinSchema enforces injury impact bounds", () => {
     recoveryThisTrainingWeek: "4",
     stressOutsideTrainingThisWeek: "3",
     injuryAffectedTraining: true,
-    injuryImpact: "2",
+    injuryImpact: "5",
     optionalNote: "Tight lower back after deadlifts",
     phaseId: "phase_1",
     phaseWeekNumber: "2",
   });
   assert.equal(valid.success, true);
   if (valid.success) {
-    assert.equal(valid.data.injuryImpact, 2);
+    assert.equal(valid.data.injuryImpact, 5);
     assert.equal(valid.data.recoveryThisTrainingWeek, 4);
     assert.equal(valid.data.stressOutsideTrainingThisWeek, 3);
     assert.equal(valid.data.phaseWeekNumber, 2);
@@ -94,9 +94,22 @@ test("createWeeklyCheckinSchema enforces injury impact bounds", () => {
     recoveryThisTrainingWeek: 4,
     stressOutsideTrainingThisWeek: 3,
     injuryAffectedTraining: true,
-    injuryImpact: 5,
+    injuryImpact: 6,
   });
   assert.equal(invalid.success, false);
+});
+
+test("createWeeklyCheckinSchema coerces legacy zero injury impact to null when injury was not reported", () => {
+  const parsed = createWeeklyCheckinSchema.safeParse({
+    recoveryThisTrainingWeek: 4,
+    stressOutsideTrainingThisWeek: 3,
+    injuryAffectedTraining: false,
+    injuryImpact: 0,
+  });
+  assert.equal(parsed.success, true);
+  if (parsed.success) {
+    assert.equal(parsed.data.injuryImpact, null);
+  }
 });
 
 test("createWeeklyCheckinSchema requires injury impact when injury affected training is true", () => {

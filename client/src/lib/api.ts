@@ -484,6 +484,8 @@ export function useUpdatePhase() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["phases"] });
       qc.invalidateQueries({ queryKey: ["phase"] });
+      qc.invalidateQueries({ queryKey: ["weeklyCheckins"] });
+      qc.invalidateQueries({ queryKey: ["weeklyCheckins", "currentOrDue"] });
       qc.invalidateQueries({ queryKey: ["clientMovementChecksGrouped"] });
       qc.invalidateQueries({ queryKey: ["adminClientsNotificationSummary"] });
       qc.invalidateQueries({ queryKey: ["adminClientNotificationSummary"] });

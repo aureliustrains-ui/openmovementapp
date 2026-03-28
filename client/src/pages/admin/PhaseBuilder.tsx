@@ -68,6 +68,7 @@ type LocalSession = {
   dbId?: string;
   name: string;
   description: string;
+  durationMinutes: number | null;
   sessionVideoUrl: string;
   sections: Section[];
   isNew?: boolean;
@@ -93,6 +94,7 @@ function makeSession(name = "New Session"): LocalSession {
     id: generateId(),
     name,
     description: "",
+    durationMinutes: null,
     sessionVideoUrl: "",
     sections: [makeSection("A. Main")],
     isNew: true,
@@ -246,6 +248,7 @@ export default function AdminPhaseBuilder() {
       if (!ps) return true;
       if (ls.name !== ps.name) return true;
       if (ls.description !== (ps.description || "")) return true;
+      if ((ls.durationMinutes ?? null) !== (ps.durationMinutes ?? null)) return true;
       if (ls.sessionVideoUrl !== (ps.sessionVideoUrl || "")) return true;
       if (stableStringify(ls.sections) !== stableStringify(ps.sections)) return true;
     }
@@ -333,6 +336,12 @@ export default function AdminPhaseBuilder() {
         dbId: s.id,
         name: s.name,
         description: s.description || "",
+        durationMinutes:
+          typeof s.durationMinutes === "number" &&
+          Number.isFinite(s.durationMinutes) &&
+          s.durationMinutes > 0
+            ? Math.floor(s.durationMinutes)
+            : null,
         sessionVideoUrl: s.sessionVideoUrl || "",
         sections: ((s.sections as any[]) || []).map((sec: any) => ({
           ...sec,
@@ -392,6 +401,12 @@ export default function AdminPhaseBuilder() {
       ...prev,
       {
         ...cloned,
+        durationMinutes:
+          typeof (cloned as { durationMinutes?: number | null }).durationMinutes === "number" &&
+          Number.isFinite((cloned as { durationMinutes?: number | null }).durationMinutes) &&
+          ((cloned as { durationMinutes?: number | null }).durationMinutes || 0) > 0
+            ? Math.floor((cloned as { durationMinutes?: number | null }).durationMinutes || 0)
+            : null,
         sessionVideoUrl: (cloned as { sessionVideoUrl?: string }).sessionVideoUrl || "",
         dbId: undefined,
         isNew: true,
@@ -477,6 +492,7 @@ export default function AdminPhaseBuilder() {
           id: ls.dbId,
           name: ls.name,
           description: ls.description.trim() || null,
+          durationMinutes: ls.durationMinutes,
           sessionVideoUrl: ls.sessionVideoUrl.trim() || null,
           sections: ls.sections,
         });
@@ -486,6 +502,7 @@ export default function AdminPhaseBuilder() {
           phaseId,
           name: ls.name,
           description: ls.description.trim() || null,
+          durationMinutes: ls.durationMinutes,
           sessionVideoUrl: ls.sessionVideoUrl.trim() || null,
           sections: ls.sections,
           completedInstances: [],
@@ -739,6 +756,7 @@ export default function AdminPhaseBuilder() {
     const hasContent = localSchedule.length > 0 || localSessions.some((session) =>
       session.name.trim() !== "" ||
       session.description.trim() !== "" ||
+      (session.durationMinutes ?? null) !== null ||
       session.sessionVideoUrl.trim() !== "" ||
       session.sections.some((section) => section.exercises.length > 0),
     );
@@ -750,6 +768,12 @@ export default function AdminPhaseBuilder() {
     });
     const nextSessions: LocalSession[] = cloned.sessions.map((session) => ({
       ...session,
+      durationMinutes:
+        typeof (session as { durationMinutes?: number | null }).durationMinutes === "number" &&
+        Number.isFinite((session as { durationMinutes?: number | null }).durationMinutes) &&
+        ((session as { durationMinutes?: number | null }).durationMinutes || 0) > 0
+          ? Math.floor((session as { durationMinutes?: number | null }).durationMinutes || 0)
+          : null,
       sessionVideoUrl: (session as { sessionVideoUrl?: string }).sessionVideoUrl || "",
       dbId: undefined,
       isNew: true,
@@ -769,6 +793,12 @@ export default function AdminPhaseBuilder() {
     const cloned = cloneSessionFromTemplate(sourceSession as any);
     const nextSession: LocalSession = {
       ...cloned,
+      durationMinutes:
+        typeof (cloned as { durationMinutes?: number | null }).durationMinutes === "number" &&
+        Number.isFinite((cloned as { durationMinutes?: number | null }).durationMinutes) &&
+        ((cloned as { durationMinutes?: number | null }).durationMinutes || 0) > 0
+          ? Math.floor((cloned as { durationMinutes?: number | null }).durationMinutes || 0)
+          : null,
       sessionVideoUrl: (cloned as { sessionVideoUrl?: string }).sessionVideoUrl || "",
       dbId: undefined,
       isNew: true,

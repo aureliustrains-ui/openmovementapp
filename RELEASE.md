@@ -31,6 +31,8 @@
     2. Commit generated files under `migrations/` (directory is reserved in-repo)
     3. Apply in deploy pipeline with `npx drizzle-kit@0.31.9 migrate`
 - For this repo today, treat `db:push` as the required pre-deploy schema step unless a migration file is explicitly generated and reviewed.
+- Production runtime does **not** rely on automatic schema patching for duration columns.
+  - If session/session-template duration columns are missing, writes fail with a schema-mismatch error until DB is updated.
 - [ ] Back up production DB before applying schema changes.
 - [ ] Never run destructive migration without tested rollback.
 
@@ -49,7 +51,7 @@
 ## 5) Deploy steps
 
 - [ ] Deploy build artifact/container.
-- [ ] Run DB migration step (`db:push` or `migrate`) against target DB.
+- [ ] Run DB migration step (`db:push` or `migrate`) against target DB **before** shifting traffic.
 - [ ] Run smoke checks:
   - Login works
   - Admin-only endpoints enforce `403` for clients

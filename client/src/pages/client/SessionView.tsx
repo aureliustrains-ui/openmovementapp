@@ -116,6 +116,12 @@ export default function ClientSessionView() {
   const schedule: any[] = (phase?.schedule as any[]) || [];
   const sessionDescription =
     typeof session.description === "string" ? session.description.trim() : "";
+  const sessionDurationMinutes =
+    typeof session.durationMinutes === "number" &&
+    Number.isFinite(session.durationMinutes) &&
+    session.durationMinutes > 0
+      ? Math.floor(session.durationMinutes)
+      : null;
   const sessionVideoUrl =
     typeof session.sessionVideoUrl === "string" ? session.sessionVideoUrl.trim() : "";
   const sessionSections = useMemo(() => (session.sections as any[]) || [], [session.sections]);
@@ -319,7 +325,7 @@ export default function ClientSessionView() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24 animate-in fade-in lg:max-w-6xl">
+    <div className="mx-auto max-w-3xl space-y-4 pb-24 animate-in fade-in lg:max-w-6xl">
       {isCheckinReadOnly && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="banner-impersonation-read-only">
           Client check-ins are read-only unless you are logged in as this client account.
@@ -331,9 +337,13 @@ export default function ClientSessionView() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
-        <div>
+        <div className="space-y-1">
           <h1 className="font-display font-bold text-lg text-slate-900 leading-tight" data-testid="text-session-name">{session.name}</h1>
-          <p className="text-xs text-slate-500">{phase?.name}{day ? ` \u2022 Week ${week} \u2022 ${day} ${slot}` : ''}</p>
+          <p className="text-xs text-slate-500">
+            {phase?.name}
+            {day ? ` \u2022 Week ${week} \u2022 ${day} ${slot}` : ""}
+            {sessionDurationMinutes ? ` \u2022 ${sessionDurationMinutes} min` : ""}
+          </p>
           {sessionDescription ? (
             <p className="mt-1 text-sm leading-relaxed text-slate-700" data-testid="text-session-description">
               {sessionDescription}
@@ -353,7 +363,7 @@ export default function ClientSessionView() {
       </div>
       <div className="border-b border-slate-200" />
 
-      <div className="mt-5 space-y-1.5 lg:hidden" data-testid="list-session-sections-mobile">
+      <div className="space-y-1.5 lg:hidden" data-testid="list-session-sections-mobile">
         {sessionSections.map((section: any) => (
           <button
             key={section.id}
@@ -366,7 +376,7 @@ export default function ClientSessionView() {
         ))}
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
           <div className="sticky top-24 rounded-2xl border border-slate-200/70 bg-slate-50/40 p-2.5" data-testid="rail-session-sections-desktop">
             <p className="px-2 text-[9px] font-medium uppercase tracking-wider text-slate-400">Session flow</p>

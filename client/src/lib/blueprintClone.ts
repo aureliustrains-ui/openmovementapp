@@ -23,6 +23,7 @@ export type BlueprintSession = {
   id: string;
   name: string;
   description: string;
+  durationMinutes?: number | null;
   sections: BlueprintSection[];
 };
 
@@ -105,13 +106,21 @@ export function cloneSessionFromTemplate(
   session: Partial<BlueprintSession> & {
     name?: string;
     description?: string;
+    durationMinutes?: number | null;
     sections?: Array<Partial<BlueprintSection> & { exercises?: Array<Partial<BlueprintExercise>> }>;
   },
 ): BlueprintSession {
+  const parsedDuration =
+    typeof session.durationMinutes === "number" &&
+    Number.isFinite(session.durationMinutes) &&
+    session.durationMinutes > 0
+      ? Math.floor(session.durationMinutes)
+      : null;
   return {
     id: nextId(),
     name: session.name || "New Session",
     description: session.description || "",
+    durationMinutes: parsedDuration,
     sections: (session.sections || []).map((section) => cloneSectionFromTemplate(section)),
   };
 }
