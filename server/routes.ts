@@ -14,6 +14,7 @@ import type {
   ProgressReport,
   ProgressReportItem,
   InsertPhase,
+  TemplateFolderType,
 } from "@shared/schema";
 import { createUserAccount } from "./modules/users/users.service";
 import {
@@ -38,6 +39,10 @@ import {
   reviewProgressReportItemSchema,
   createWorkoutLogSchema,
   markChatReadSchema,
+  createTemplateFolderSchema,
+  updateTemplateFolderSchema,
+  moveTemplateToFolderSchema,
+  reorderTemplatesSchema,
 } from "./http/request-schemas";
 import {
   assertCanReadClientCheckins,
@@ -52,6 +57,15 @@ import {
   resolveClientVideoPlaybackUrl,
 } from "./media/client-video-storage";
 import { logError, logInfo } from "./http/logger";
+import {
+  countAdminMovementAttention,
+  countAdminProgressAttention,
+  countClientMovementActions,
+  countClientProgressActions,
+  countUnreadMessagesForAdminConversation,
+  countUnreadMessagesForClient,
+  type ProgressReportWithItems,
+} from "./modules/notifications/notifications.service";
 
 const registerSchema = z.object({
   name: z.string().min(2).max(120),
@@ -183,6 +197,13 @@ function parseOptionalPhaseHomeIntroVideoUrl(value: unknown): string | null | un
     throw new AppError("Invalid home intro video URL protocol", 400);
   }
   return parsed.toString();
+}
+
+async function getTemplatesByFolderType(type: TemplateFolderType) {
+  if (type === "phase") return storage.getPhaseTemplates();
+  if (type === "session") return storage.getSessionTemplates();
+  if (type === "section") return storage.getSectionTemplates();
+  return storage.getExerciseTemplates();
 }
 
 function toPublicMessage(
@@ -475,6 +496,100 @@ function isProgressReportSchemaError(error: unknown): boolean {
   return code === "42P01" || code === "42703";
 }
 
+const ISO_EPOCH = "1970-01-01T00:00:00.000Z";
+
+function isTimestampAfter(left: string, right: string): boolean {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) {
+    return leftMs > rightMs;
+  }
+  return left > right;
+}
+
+function buildLatestLastReadMap(
+  statuses: Array<{ clientId: string; lastReadAt: string }>,
+): Map<string, string> {
+  const byClientId = new Map<string, string>();
+  for (const status of statuses) {
+    const current = byClientId.get(status.clientId);
+    if (!current || isTimestampAfter(status.lastReadAt, current)) {
+      byClientId.set(status.clientId, status.lastReadAt);
+    }
+  }
+  return byClientId;
+}
+
+type AdminClientNotificationSummary = {
+  clientId: string;
+  hasAttention: boolean;
+  totalAttentionCount: number;
+  unreadChatCount: number;
+  movementAttentionCount: number;
+  progressAttentionCount: number;
+};
+
+async function getProgressReportItemsGroupedByReport(
+  reports: ProgressReport[],
+): Promise<ProgressReportWithItems[]> {
+  const grouped = await Promise.all(
+    reports.map(async (report) => ({
+      report,
+      items: await storage.getProgressReportItems(report.id),
+    })),
+  );
+  return grouped;
+}
+
+async function buildAdminClientNotificationSummary(input: {
+  clientId: string;
+  allMessages: Array<{
+    clientId: string;
+    isClient: boolean;
+    time: string;
+  }>;
+  lastReadAtByClientId: Map<string, string>;
+  phasesByClientId: Map<string, Phase[]>;
+}): Promise<AdminClientNotificationSummary> {
+  const unreadChatCount = countUnreadMessagesForAdminConversation(
+    input.allMessages,
+    input.clientId,
+    input.lastReadAtByClientId.get(input.clientId) || ISO_EPOCH,
+  );
+  const movementAttentionCount = countAdminMovementAttention(
+    input.phasesByClientId.get(input.clientId) || [],
+  );
+
+  let progressAttentionCount = 0;
+  try {
+    const activePhaseIds = new Set(
+      (input.phasesByClientId.get(input.clientId) || [])
+        .filter(
+          (phase) => phase.status === "Active" || phase.status === "Waiting for Movement Check",
+        )
+        .map((phase) => phase.id),
+    );
+    const reports = (await storage.getProgressReportsByClient(input.clientId)).filter((report) =>
+      activePhaseIds.has(report.phaseId),
+    );
+    const groupedItems = await getProgressReportItemsGroupedByReport(reports);
+    progressAttentionCount = countAdminProgressAttention(groupedItems);
+  } catch (error) {
+    if (!isProgressReportSchemaError(error)) throw error;
+    progressAttentionCount = 0;
+  }
+
+  const totalAttentionCount = unreadChatCount + movementAttentionCount + progressAttentionCount;
+  return {
+    clientId: input.clientId,
+    hasAttention: totalAttentionCount > 0,
+    totalAttentionCount,
+    unreadChatCount,
+    movementAttentionCount,
+    progressAttentionCount,
+  };
+}
+
 async function persistSession(session: Request["session"]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     session.save((error) => {
@@ -666,6 +781,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(users.map(toPublicUser));
   });
 
+  app.get("/api/admin/clients/notification-summary", async (req, res) => {
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+
+    const [users, allMessages, allPhases, readStatuses] = await Promise.all([
+      storage.getUsers(),
+      storage.getMessages(),
+      storage.getPhases(),
+      storage.getChatReadStatusByUser(authUser.id),
+    ]);
+    const clients = users.filter((user) => user.role === "Client" && user.status === "Active");
+
+    const lastReadAtByClientId = buildLatestLastReadMap(readStatuses);
+    const phasesByClientId = new Map<string, Phase[]>();
+    for (const phase of allPhases) {
+      const bucket = phasesByClientId.get(phase.clientId) || [];
+      bucket.push(phase);
+      phasesByClientId.set(phase.clientId, bucket);
+    }
+
+    const summaries = await Promise.all(
+      clients.map((client) =>
+        buildAdminClientNotificationSummary({
+          clientId: client.id,
+          allMessages,
+          lastReadAtByClientId,
+          phasesByClientId,
+        }),
+      ),
+    );
+
+    res.json({ clients: summaries });
+  });
+
+  app.get("/api/admin/clients/:clientId/notification-summary", async (req, res) => {
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+
+    const clientId = req.params.clientId;
+    const client = await storage.getUser(clientId);
+    if (!client || client.role !== "Client") {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    const [allMessages, allPhases, readStatuses] = await Promise.all([
+      storage.getMessages(),
+      storage.getPhases(),
+      storage.getChatReadStatusByUser(authUser.id),
+    ]);
+
+    const lastReadAtByClientId = buildLatestLastReadMap(readStatuses);
+    const phasesForClient = allPhases.filter((phase) => phase.clientId === clientId);
+    const summary = await buildAdminClientNotificationSummary({
+      clientId,
+      allMessages,
+      lastReadAtByClientId,
+      phasesByClientId: new Map([[clientId, phasesForClient]]),
+    });
+
+    res.json(summary);
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     const authUser = requireUser(req, res);
     if (!authUser) return;
@@ -683,6 +860,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.getUser(authUser.id);
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(toPublicUser(user));
+  });
+
+  app.get("/api/notifications/me/summary", async (req, res) => {
+    const authUser = requireUser(req, res);
+    if (!authUser) return;
+    if (authUser.role !== "Client") {
+      return res.status(403).json({ message: "Only client accounts can read this summary" });
+    }
+
+    const clientId = authUser.id;
+    const [allMessages, readStatus, phases, weeklyCheckins] = await Promise.all([
+      storage.getMessages(),
+      storage.getChatReadStatus(clientId, clientId),
+      storage.getPhasesByClient(clientId),
+      storage.getWeeklyCheckinsByClient(clientId),
+    ]);
+
+    const unreadChatCount = countUnreadMessagesForClient(
+      allMessages,
+      clientId,
+      readStatus?.lastReadAt || ISO_EPOCH,
+    );
+    const activePhase = getActivePhase(phases);
+    const movementActionCount = countClientMovementActions(activePhase);
+
+    let progressActionCount = 0;
+    try {
+      const reports = await storage.getProgressReportsByClient(clientId);
+      progressActionCount = countClientProgressActions(reports, activePhase?.id || null);
+    } catch (error) {
+      if (!isProgressReportSchemaError(error)) throw error;
+      progressActionCount = 0;
+    }
+
+    const phaseWeekNumber =
+      activePhase && weeklyCheckins
+        ? getCurrentPhaseWeekByProgress(activePhase, weeklyCheckins)
+        : null;
+    let weeklyCheckinDue = false;
+    if (activePhase && phaseWeekNumber !== null) {
+      const existing = await storage.getWeeklyCheckinByClientAndPhaseWeek(
+        clientId,
+        activePhase.id,
+        phaseWeekNumber,
+      );
+      if (!existing) {
+        const { scheduledCount, completedCount } = getWeekCompletionForPhase(
+          activePhase,
+          phaseWeekNumber,
+        );
+        weeklyCheckinDue = scheduledCount > 0 && completedCount >= scheduledCount;
+      }
+    }
+
+    const totalAttentionCount =
+      unreadChatCount + movementActionCount + progressActionCount + (weeklyCheckinDue ? 1 : 0);
+
+    res.json({
+      unreadChatCount,
+      movementActionCount,
+      progressActionCount,
+      weeklyCheckinDue,
+      totalAttentionCount,
+    });
   });
 
   app.patch("/api/me", async (req, res) => {
@@ -1215,6 +1456,143 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!requireAdmin(req, res)) return;
     const deleted = await storage.deleteSession(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Session not found" });
+    res.json({ success: true });
+  });
+
+  app.get("/api/template-folders", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const parsedType = z
+      .enum(["phase", "session", "section", "exercise"])
+      .safeParse(req.query.type);
+    if (!parsedType.success) {
+      return res.status(400).json({ message: "Invalid template folder type" });
+    }
+    const folders = await storage.getTemplateFolders(parsedType.data);
+    res.json(folders);
+  });
+
+  app.post("/api/template-folders", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const parsed = createTemplateFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid template folder payload" });
+    }
+    if (parsed.data.parentId) {
+      const parent = await storage.getTemplateFolder(parsed.data.parentId);
+      if (!parent) return res.status(404).json({ message: "Parent folder not found" });
+      if (parent.type !== parsed.data.type) {
+        return res.status(400).json({ message: "Parent folder must have the same template type" });
+      }
+    }
+    const folder = await storage.createTemplateFolder({
+      name: parsed.data.name,
+      type: parsed.data.type,
+      parentId: parsed.data.parentId ?? null,
+      sortOrder: parsed.data.sortOrder ?? 0,
+    });
+    res.status(201).json(folder);
+  });
+
+  app.patch("/api/template-folders/:id", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const parsed = updateTemplateFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid template folder payload" });
+    }
+    const current = await storage.getTemplateFolder(req.params.id);
+    if (!current) return res.status(404).json({ message: "Folder not found" });
+
+    if (parsed.data.parentId) {
+      if (parsed.data.parentId === req.params.id) {
+        return res.status(400).json({ message: "A folder cannot be its own parent" });
+      }
+      const parent = await storage.getTemplateFolder(parsed.data.parentId);
+      if (!parent) return res.status(404).json({ message: "Parent folder not found" });
+      if (parent.type !== current.type) {
+        return res.status(400).json({ message: "Parent folder must have the same template type" });
+      }
+    }
+
+    const updated = await storage.updateTemplateFolder(req.params.id, parsed.data);
+    if (!updated) return res.status(404).json({ message: "Folder not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/template-folders/:id", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const folder = await storage.getTemplateFolder(req.params.id);
+    if (!folder) return res.status(404).json({ message: "Folder not found" });
+
+    const siblingFolders = await storage.getTemplateFolders(folder.type as TemplateFolderType);
+    if (siblingFolders.some((entry) => entry.parentId === folder.id)) {
+      return res
+        .status(400)
+        .json({ message: "Delete child folders first before deleting this folder" });
+    }
+
+    const deleted = await storage.deleteTemplateFolder(folder.id);
+    if (!deleted) return res.status(404).json({ message: "Folder not found" });
+    res.json({ success: true });
+  });
+
+  app.post("/api/template-folders/move-template", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const parsed = moveTemplateToFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid move payload" });
+    }
+
+    if (parsed.data.folderId) {
+      const folder = await storage.getTemplateFolder(parsed.data.folderId);
+      if (!folder) return res.status(404).json({ message: "Folder not found" });
+      if (folder.type !== parsed.data.type) {
+        return res.status(400).json({ message: "Folder type does not match template type" });
+      }
+    }
+
+    const templates = await getTemplatesByFolderType(parsed.data.type);
+    if (!templates.some((template) => template.id === parsed.data.templateId)) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+
+    const moved = await storage.moveTemplateToFolder(
+      parsed.data.type,
+      parsed.data.templateId,
+      parsed.data.folderId,
+    );
+    if (!moved) return res.status(404).json({ message: "Template not found" });
+    res.json({ success: true });
+  });
+
+  app.post("/api/template-folders/reorder-templates", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const parsed = reorderTemplatesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid reorder payload" });
+    }
+
+    const templates = await getTemplatesByFolderType(parsed.data.type);
+    const templateIds = new Set(templates.map((template) => template.id));
+    for (const entry of parsed.data.items) {
+      if (!templateIds.has(entry.id)) {
+        return res.status(404).json({ message: `Template not found: ${entry.id}` });
+      }
+      if (entry.folderId) {
+        const folder = await storage.getTemplateFolder(entry.folderId);
+        if (!folder) {
+          return res.status(404).json({ message: `Folder not found: ${entry.folderId}` });
+        }
+        if (folder.type !== parsed.data.type) {
+          return res.status(400).json({ message: "Folder type does not match template type" });
+        }
+      }
+    }
+
+    await storage.reorderTemplates(parsed.data.type, parsed.data.items);
     res.json({ success: true });
   });
 

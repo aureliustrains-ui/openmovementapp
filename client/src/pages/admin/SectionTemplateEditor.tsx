@@ -74,7 +74,7 @@ export default function SectionTemplateEditor() {
     if (!window.confirm(`Delete "${model.name}"?`)) return;
     try {
       await deleteTemplate.mutateAsync(model.id);
-      setLocation("/app/admin/templates");
+      setLocation("/app/admin/templates?tab=sections");
     } catch {
       toast({ title: "Could not delete section template", variant: "destructive" });
     }
@@ -89,14 +89,14 @@ export default function SectionTemplateEditor() {
         exercises: model.exercises,
       });
       toast({ title: "Section template duplicated" });
-      setLocation(`/app/admin/templates/sections/${created.id}`);
+      setLocation(`/app/admin/templates/sections/${created.id}?tab=sections`);
     } catch {
       toast({ title: "Could not duplicate section template", variant: "destructive" });
     }
   };
 
   if (!model) {
-    return <div className="max-w-6xl mx-auto py-12 text-slate-500">Loading section template...</div>;
+    return <div className="w-full py-12 text-slate-500">Loading section template...</div>;
   }
 
   const sectionForEditor: BlueprintSection = {
@@ -106,9 +106,9 @@ export default function SectionTemplateEditor() {
   };
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-20">
+    <div className="space-y-6 w-full pb-20">
       <TemplateEditorHeader
-        backHref="/app/admin/templates"
+        backHref="/app/admin/templates?tab=sections"
         title="Section Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}

@@ -100,7 +100,7 @@ export default function ExerciseTemplateEditor() {
     if (!window.confirm(`Delete "${model.name}"?`)) return;
     try {
       await deleteTemplate.mutateAsync(model.id);
-      setLocation("/app/admin/templates");
+      setLocation("/app/admin/templates?tab=exercises");
     } catch {
       toast({ title: "Could not delete exercise template", variant: "destructive" });
     }
@@ -124,20 +124,20 @@ export default function ExerciseTemplateEditor() {
         enableStructuredLogging: model.enableStructuredLogging,
       });
       toast({ title: "Exercise template duplicated" });
-      setLocation(`/app/admin/templates/exercises/${created.id}`);
+      setLocation(`/app/admin/templates/exercises/${created.id}?tab=exercises`);
     } catch {
       toast({ title: "Could not duplicate exercise template", variant: "destructive" });
     }
   };
 
   if (!model) {
-    return <div className="max-w-6xl mx-auto py-12 text-slate-500">Loading exercise template...</div>;
+    return <div className="w-full py-12 text-slate-500">Loading exercise template...</div>;
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-20">
+    <div className="space-y-6 w-full pb-20">
       <TemplateEditorHeader
-        backHref="/app/admin/templates"
+        backHref="/app/admin/templates?tab=exercises"
         title="Exercise Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}

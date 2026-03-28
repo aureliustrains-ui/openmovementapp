@@ -10,6 +10,10 @@ import {
   createClientVideoUploadSchema,
   submitProgressReportSchema,
   reviewProgressReportItemSchema,
+  createTemplateFolderSchema,
+  updateTemplateFolderSchema,
+  moveTemplateToFolderSchema,
+  reorderTemplatesSchema,
 } from "./request-schemas";
 
 test("createMessageSchema rejects unknown fields used for identity spoofing", () => {
@@ -186,4 +190,41 @@ test("reviewProgressReportItemSchema validates admin decision payload", () => {
     decision: "invalid",
   });
   assert.equal(invalid.success, false);
+});
+
+test("template folder schemas validate folder CRUD and move/reorder payloads", () => {
+  const createValid = createTemplateFolderSchema.safeParse({
+    name: "Upper body",
+    type: "session",
+    parentId: null,
+    sortOrder: 0,
+  });
+  assert.equal(createValid.success, true);
+
+  const createInvalid = createTemplateFolderSchema.safeParse({
+    name: "",
+    type: "unknown",
+  });
+  assert.equal(createInvalid.success, false);
+
+  const updateValid = updateTemplateFolderSchema.safeParse({
+    name: "Renamed",
+  });
+  assert.equal(updateValid.success, true);
+
+  const updateInvalid = updateTemplateFolderSchema.safeParse({});
+  assert.equal(updateInvalid.success, false);
+
+  const moveValid = moveTemplateToFolderSchema.safeParse({
+    type: "exercise",
+    templateId: "tpl_1",
+    folderId: "folder_1",
+  });
+  assert.equal(moveValid.success, true);
+
+  const reorderValid = reorderTemplatesSchema.safeParse({
+    type: "phase",
+    items: [{ id: "phase_tpl_1", sortOrder: 0, folderId: null }],
+  });
+  assert.equal(reorderValid.success, true);
 });

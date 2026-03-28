@@ -120,7 +120,7 @@ export default function TemplateBuilder() {
       if (isNew) {
         const created = await createTemplate.mutateAsync(payload);
         toast({ title: "Phase template created" });
-        setLocation(`/app/admin/templates/phases/${created.id}`);
+        setLocation(`/app/admin/templates/phases/${created.id}?tab=phases`);
       } else {
         await updateTemplate.mutateAsync({ id: templateId, ...payload });
         toast({ title: "Phase template saved" });
@@ -138,7 +138,7 @@ export default function TemplateBuilder() {
     try {
       await deleteTemplate.mutateAsync(templateId);
       toast({ title: "Phase template deleted" });
-      setLocation("/app/admin/templates");
+      setLocation("/app/admin/templates?tab=phases");
     } catch {
       toast({ title: "Delete failed", variant: "destructive" });
     }
@@ -160,7 +160,7 @@ export default function TemplateBuilder() {
         schedule: cloned.schedule,
       });
       toast({ title: "Phase template duplicated" });
-      setLocation(`/app/admin/templates/phases/${created.id}`);
+      setLocation(`/app/admin/templates/phases/${created.id}?tab=phases`);
     } catch {
       toast({ title: "Duplicate failed", variant: "destructive" });
     }
@@ -196,9 +196,9 @@ export default function TemplateBuilder() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-16">
+    <div className="space-y-6 w-full pb-16">
       <TemplateEditorHeader
-        backHref="/app/admin/templates"
+        backHref="/app/admin/templates?tab=phases"
         title="Phase Templates"
         name={name}
         onNameChange={setName}
@@ -324,11 +324,14 @@ export default function TemplateBuilder() {
         title="Add Session"
         description="Create a new session or insert one from Session Templates."
         createLabel="Create new session"
+        allLabel="All Sessions"
         searchPlaceholder="Search session templates..."
+        folderType="session"
         templates={sessionTemplates as any[]}
         getTemplateId={(item: any) => item.id}
         getTemplateName={(item: any) => item.name}
         getTemplateMeta={(item: any) => `${(item.sections || []).length} section(s)`}
+        getTemplateFolderId={(item: any) => item.folderId ?? null}
         onCreateNew={addSession}
         onInsertTemplate={(item: any) => addSessionFromTemplate(item)}
       />

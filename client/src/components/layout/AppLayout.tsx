@@ -1,16 +1,20 @@
 import { ReactNode, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { chatUnreadQuery } from "@/lib/api";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
+import {
+  adminClientsNotificationSummaryQuery,
+  myNotificationSummaryQuery,
+} from "@/lib/api";
 import { 
   Users, 
   Library, 
   Settings, 
   Dumbbell, 
   House,
-  MessageCircle, 
+  MessageCircle,
+  TrendingUp,
   Info,
   LogOut,
   Repeat
@@ -27,30 +31,82 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
-const getAdminNavItems = () => [
-  { href: "/app/admin/clients", label: "Clients", icon: Users },
+const getAdminNavItems = (attentionClientsCount: number) => [
+  { href: "/app/admin/clients", label: "Clients", icon: Users, badgeCount: attentionClientsCount },
   { href: "/app/admin/templates", label: "Templates", icon: Library },
 ];
 
-const getClientPrimaryNavItems = () => [
+const getClientPrimaryNavItems = (input: {
+  unreadChatCount: number;
+  phaseAttentionCount: number;
+}) => [
   { href: "/app/client/home", label: "Home", icon: House },
-  { href: "/app/client/my-phase", label: "Current Phase", icon: Dumbbell },
+  {
+    href: "/app/client/my-phase",
+    label: "Current Phase",
+    icon: Dumbbell,
+    badgeCount: input.phaseAttentionCount,
+  },
+  {
+    href: "/app/client/chat",
+    label: "Chat",
+    icon: MessageCircle,
+    badgeCount: input.unreadChatCount,
+  },
+  { href: "/app/client/readiness", label: "Readiness", icon: TrendingUp },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user, sessionUser, logout, impersonating, stopImpersonating } = useAuth();
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  
-  const { data: unreadData } = useQuery({
-    ...chatUnreadQuery(sessionUser?.id || "", sessionUser?.role || "Client"),
-    enabled: !!sessionUser,
-  });
 
   if (!user || !sessionUser) return null;
 
-  const navItems = sessionUser.role === 'Admin' ? getAdminNavItems() : getClientPrimaryNavItems();
-  const totalUnread = unreadData?.total || 0;
+  const { data: adminNotificationSummary } = useQuery({
+    ...adminClientsNotificationSummaryQuery,
+    enabled: sessionUser.role === "Admin",
+  });
+  const { data: clientNotificationSummary } = useQuery({
+    ...myNotificationSummaryQuery,
+    enabled: sessionUser.role === "Client" && !impersonating,
+  });
+
+  const attentionClientsCount =
+    sessionUser.role === "Admin"
+      ? ((adminNotificationSummary as { clients?: Array<{ hasAttention?: boolean }> } | undefined)
+          ?.clients || []
+        ).filter((summary) => Boolean(summary?.hasAttention)).length
+      : 0;
+  const clientSummary = (clientNotificationSummary as
+    | {
+        unreadChatCount?: number;
+        movementActionCount?: number;
+        progressActionCount?: number;
+        weeklyCheckinDue?: boolean;
+      }
+    | undefined) || {
+    unreadChatCount: 0,
+    movementActionCount: 0,
+    progressActionCount: 0,
+    weeklyCheckinDue: false,
+  };
+  const clientUnreadChatCount =
+    sessionUser.role === "Client" ? clientSummary.unreadChatCount || 0 : 0;
+  const clientPhaseAttentionCount =
+    sessionUser.role === "Client"
+      ? (clientSummary.movementActionCount || 0) +
+        (clientSummary.progressActionCount || 0) +
+        (clientSummary.weeklyCheckinDue ? 1 : 0)
+      : 0;
+
+  const navItems =
+    sessionUser.role === "Admin"
+      ? getAdminNavItems(attentionClientsCount)
+      : getClientPrimaryNavItems({
+          unreadChatCount: clientUnreadChatCount,
+          phaseAttentionCount: clientPhaseAttentionCount,
+        });
   const menuDisplayName = useMemo(() => {
     if (sessionUser.role !== "Admin") {
       return user.name || user.email;
@@ -81,6 +137,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     stopImpersonating();
     setLocation("/app/admin/clients");
   };
+
+  const contentContainerClass =
+    sessionUser.role === "Admin"
+      ? "w-full max-w-[1680px] mx-auto p-6 md:p-8"
+      : "w-full max-w-7xl mx-auto p-6 md:p-8";
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -119,6 +180,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 >
                   <item.icon className="h-4 w-4" />
                   <span className={labelClassName}>{item.label}</span>
+                  {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+                      {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}
@@ -163,17 +229,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {sessionUser.role === "Client" ? (
                 <>
                   <DropdownMenuItem asChild>
-                    <Link href="/app/client/chat" className="flex items-center gap-2">
-                      <MessageCircle className="h-4 w-4" />
-                      <span>Chat</span>
-                      {totalUnread > 0 ? (
-                        <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1" data-testid="badge-chat-unread-menu">
-                          {totalUnread > 99 ? "99+" : totalUnread}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
                     <Link href="/app/settings" className="flex items-center gap-2">
                       <Settings className="h-4 w-4" />
                       <span>Profile</span>
@@ -213,7 +268,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </header>
 
       <main className="flex-1 overflow-auto bg-white">
-        <div className="max-w-7xl mx-auto p-6 md:p-8">
+        <div className={contentContainerClass}>
           {children}
         </div>
       </main>

@@ -83,7 +83,7 @@ export default function SessionTemplateEditor() {
     if (!window.confirm(`Delete "${model.name}"?`)) return;
     try {
       await deleteTemplate.mutateAsync(model.id);
-      setLocation("/app/admin/templates");
+      setLocation("/app/admin/templates?tab=sessions");
     } catch {
       toast({ title: "Could not delete session template", variant: "destructive" });
     }
@@ -98,7 +98,7 @@ export default function SessionTemplateEditor() {
         sections: model.sections,
       });
       toast({ title: "Session template duplicated" });
-      setLocation(`/app/admin/templates/sessions/${created.id}`);
+      setLocation(`/app/admin/templates/sessions/${created.id}?tab=sessions`);
     } catch {
       toast({ title: "Could not duplicate session template", variant: "destructive" });
     }
@@ -106,14 +106,14 @@ export default function SessionTemplateEditor() {
 
   if (!model) {
     return (
-      <div className="max-w-6xl mx-auto py-12 text-slate-500">Loading session template...</div>
+      <div className="w-full py-12 text-slate-500">Loading session template...</div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-20">
+    <div className="space-y-6 w-full pb-20">
       <TemplateEditorHeader
-        backHref="/app/admin/templates"
+        backHref="/app/admin/templates?tab=sessions"
         title="Session Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}

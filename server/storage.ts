@@ -1,9 +1,10 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, asc } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
   phases,
   sessions,
+  templateFolders,
   exerciseTemplates,
   sectionTemplates,
   sessionTemplates,
@@ -21,6 +22,8 @@ import {
   type InsertPhase,
   type Session,
   type InsertSession,
+  type TemplateFolder,
+  type TemplateFolderType,
   type ExerciseTemplate,
   type InsertExerciseTemplate,
   type SectionTemplate,
@@ -44,6 +47,13 @@ import {
   type ChatReadStatus,
 } from "@shared/schema";
 
+type TemplateFolderWriteInput = {
+  name: string;
+  type: TemplateFolderType;
+  parentId?: string | null;
+  sortOrder?: number;
+};
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -64,6 +74,24 @@ export interface IStorage {
   createSession(session: InsertSession): Promise<Session>;
   updateSession(id: string, data: Partial<InsertSession>): Promise<Session | undefined>;
   deleteSession(id: string): Promise<boolean>;
+
+  getTemplateFolders(type: TemplateFolderType): Promise<TemplateFolder[]>;
+  getTemplateFolder(id: string): Promise<TemplateFolder | undefined>;
+  createTemplateFolder(data: TemplateFolderWriteInput): Promise<TemplateFolder>;
+  updateTemplateFolder(
+    id: string,
+    data: Partial<TemplateFolderWriteInput>,
+  ): Promise<TemplateFolder | undefined>;
+  deleteTemplateFolder(id: string): Promise<boolean>;
+  moveTemplateToFolder(
+    type: TemplateFolderType,
+    templateId: string,
+    folderId: string | null,
+  ): Promise<boolean>;
+  reorderTemplates(
+    type: TemplateFolderType,
+    items: Array<{ id: string; sortOrder: number; folderId: string | null }>,
+  ): Promise<void>;
 
   getExerciseTemplates(): Promise<ExerciseTemplate[]>;
   createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate>;
@@ -516,8 +544,194 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  async getTemplateFolders(type: TemplateFolderType): Promise<TemplateFolder[]> {
+    return db
+      .select()
+      .from(templateFolders)
+      .where(eq(templateFolders.type, type))
+      .orderBy(asc(templateFolders.sortOrder), asc(templateFolders.name));
+  }
+
+  async getTemplateFolder(id: string): Promise<TemplateFolder | undefined> {
+    const [folder] = await db.select().from(templateFolders).where(eq(templateFolders.id, id));
+    return folder;
+  }
+
+  async createTemplateFolder(data: TemplateFolderWriteInput): Promise<TemplateFolder> {
+    const now = new Date().toISOString();
+    const [created] = await db
+      .insert(templateFolders)
+      .values({
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return created;
+  }
+
+  async updateTemplateFolder(
+    id: string,
+    data: Partial<TemplateFolderWriteInput>,
+  ): Promise<TemplateFolder | undefined> {
+    const [updated] = await db
+      .update(templateFolders)
+      .set({
+        ...data,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(templateFolders.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTemplateFolder(id: string): Promise<boolean> {
+    await db.update(phaseTemplates).set({ folderId: null }).where(eq(phaseTemplates.folderId, id));
+    await db
+      .update(sessionTemplates)
+      .set({ folderId: null })
+      .where(eq(sessionTemplates.folderId, id));
+    await db
+      .update(sectionTemplates)
+      .set({ folderId: null })
+      .where(eq(sectionTemplates.folderId, id));
+    await db
+      .update(exerciseTemplates)
+      .set({ folderId: null })
+      .where(eq(exerciseTemplates.folderId, id));
+
+    const deleted = await db.delete(templateFolders).where(eq(templateFolders.id, id)).returning();
+    return deleted.length > 0;
+  }
+
+  private async getNextTemplateSortOrder(
+    type: TemplateFolderType,
+    folderId: string | null,
+  ): Promise<number> {
+    if (type === "phase") {
+      const result =
+        folderId === null
+          ? await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from phase_templates where folder_id is null`,
+            )
+          : await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from phase_templates where folder_id = ${folderId}`,
+            );
+      return Number((result.rows[0] as { next?: unknown })?.next ?? 0);
+    }
+    if (type === "session") {
+      const result =
+        folderId === null
+          ? await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from session_templates where folder_id is null`,
+            )
+          : await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from session_templates where folder_id = ${folderId}`,
+            );
+      return Number((result.rows[0] as { next?: unknown })?.next ?? 0);
+    }
+    if (type === "section") {
+      const result =
+        folderId === null
+          ? await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from section_templates where folder_id is null`,
+            )
+          : await db.execute(
+              sql`select coalesce(max(sort_order), -1) + 1 as next from section_templates where folder_id = ${folderId}`,
+            );
+      return Number((result.rows[0] as { next?: unknown })?.next ?? 0);
+    }
+    const result =
+      folderId === null
+        ? await db.execute(
+            sql`select coalesce(max(sort_order), -1) + 1 as next from exercise_templates where folder_id is null`,
+          )
+        : await db.execute(
+            sql`select coalesce(max(sort_order), -1) + 1 as next from exercise_templates where folder_id = ${folderId}`,
+          );
+    return Number((result.rows[0] as { next?: unknown })?.next ?? 0);
+  }
+
+  async moveTemplateToFolder(
+    type: TemplateFolderType,
+    templateId: string,
+    folderId: string | null,
+  ): Promise<boolean> {
+    if (folderId) {
+      const folder = await this.getTemplateFolder(folderId);
+      if (!folder || folder.type !== type) {
+        return false;
+      }
+    }
+
+    const nextSortOrder = await this.getNextTemplateSortOrder(type, folderId);
+
+    if (type === "phase") {
+      const updated = await db
+        .update(phaseTemplates)
+        .set({ folderId, sortOrder: nextSortOrder })
+        .where(eq(phaseTemplates.id, templateId))
+        .returning();
+      return updated.length > 0;
+    }
+    if (type === "session") {
+      const updated = await db
+        .update(sessionTemplates)
+        .set({ folderId, sortOrder: nextSortOrder })
+        .where(eq(sessionTemplates.id, templateId))
+        .returning();
+      return updated.length > 0;
+    }
+    if (type === "section") {
+      const updated = await db
+        .update(sectionTemplates)
+        .set({ folderId, sortOrder: nextSortOrder })
+        .where(eq(sectionTemplates.id, templateId))
+        .returning();
+      return updated.length > 0;
+    }
+    const updated = await db
+      .update(exerciseTemplates)
+      .set({ folderId, sortOrder: nextSortOrder })
+      .where(eq(exerciseTemplates.id, templateId))
+      .returning();
+    return updated.length > 0;
+  }
+
+  async reorderTemplates(
+    type: TemplateFolderType,
+    items: Array<{ id: string; sortOrder: number; folderId: string | null }>,
+  ): Promise<void> {
+    for (const item of items) {
+      if (type === "phase") {
+        await db
+          .update(phaseTemplates)
+          .set({ sortOrder: item.sortOrder, folderId: item.folderId })
+          .where(eq(phaseTemplates.id, item.id));
+      } else if (type === "session") {
+        await db
+          .update(sessionTemplates)
+          .set({ sortOrder: item.sortOrder, folderId: item.folderId })
+          .where(eq(sessionTemplates.id, item.id));
+      } else if (type === "section") {
+        await db
+          .update(sectionTemplates)
+          .set({ sortOrder: item.sortOrder, folderId: item.folderId })
+          .where(eq(sectionTemplates.id, item.id));
+      } else {
+        await db
+          .update(exerciseTemplates)
+          .set({ sortOrder: item.sortOrder, folderId: item.folderId })
+          .where(eq(exerciseTemplates.id, item.id));
+      }
+    }
+  }
+
   async getExerciseTemplates(): Promise<ExerciseTemplate[]> {
-    return db.select().from(exerciseTemplates);
+    return db
+      .select()
+      .from(exerciseTemplates)
+      .orderBy(asc(exerciseTemplates.sortOrder), asc(exerciseTemplates.name));
   }
 
   async createExerciseTemplate(template: InsertExerciseTemplate): Promise<ExerciseTemplate> {
@@ -546,7 +760,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSectionTemplates(): Promise<SectionTemplate[]> {
-    return db.select().from(sectionTemplates);
+    return db
+      .select()
+      .from(sectionTemplates)
+      .orderBy(asc(sectionTemplates.sortOrder), asc(sectionTemplates.name));
   }
 
   async createSectionTemplate(template: InsertSectionTemplate): Promise<SectionTemplate> {
@@ -572,7 +789,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSessionTemplates(): Promise<SessionTemplate[]> {
-    return db.select().from(sessionTemplates);
+    return db
+      .select()
+      .from(sessionTemplates)
+      .orderBy(asc(sessionTemplates.sortOrder), asc(sessionTemplates.name));
   }
 
   async createSessionTemplate(template: InsertSessionTemplate): Promise<SessionTemplate> {
@@ -598,7 +818,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPhaseTemplates(): Promise<PhaseTemplate[]> {
-    return db.select().from(phaseTemplates);
+    return db
+      .select()
+      .from(phaseTemplates)
+      .orderBy(asc(phaseTemplates.sortOrder), asc(phaseTemplates.name));
   }
 
   async getPhaseTemplate(id: string): Promise<PhaseTemplate | undefined> {
@@ -766,11 +989,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChatReadStatus(userId: string, clientId: string): Promise<ChatReadStatus | undefined> {
-    const [status] = await db
+    const statuses = await db
       .select()
       .from(chatReadStatus)
       .where(and(eq(chatReadStatus.userId, userId), eq(chatReadStatus.clientId, clientId)));
-    return status;
+    if (statuses.length === 0) return undefined;
+    return statuses.reduce((latest, status) => {
+      const latestMs = Date.parse(latest.lastReadAt);
+      const currentMs = Date.parse(status.lastReadAt);
+      if (Number.isFinite(latestMs) && Number.isFinite(currentMs)) {
+        return currentMs > latestMs ? status : latest;
+      }
+      return status.lastReadAt > latest.lastReadAt ? status : latest;
+    });
   }
 
   async upsertChatReadStatus(
@@ -778,14 +1009,27 @@ export class DatabaseStorage implements IStorage {
     clientId: string,
     lastReadAt: string,
   ): Promise<ChatReadStatus> {
-    const existing = await this.getChatReadStatus(userId, clientId);
-    if (existing) {
-      const [updated] = await db
+    const existing = await db
+      .select()
+      .from(chatReadStatus)
+      .where(and(eq(chatReadStatus.userId, userId), eq(chatReadStatus.clientId, clientId)));
+    if (existing.length > 0) {
+      const updatedRows = await db
         .update(chatReadStatus)
         .set({ lastReadAt })
-        .where(eq(chatReadStatus.id, existing.id))
+        .where(and(eq(chatReadStatus.userId, userId), eq(chatReadStatus.clientId, clientId)))
         .returning();
-      return updated;
+      if (updatedRows.length === 1) return updatedRows[0];
+      return (
+        updatedRows.reduce((latest, status) => {
+          const latestMs = Date.parse(latest.lastReadAt);
+          const currentMs = Date.parse(status.lastReadAt);
+          if (Number.isFinite(latestMs) && Number.isFinite(currentMs)) {
+            return currentMs > latestMs ? status : latest;
+          }
+          return status.lastReadAt > latest.lastReadAt ? status : latest;
+        }) || existing[0]
+      );
     }
     const [created] = await db
       .insert(chatReadStatus)
@@ -795,7 +1039,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getChatReadStatusByUser(userId: string): Promise<ChatReadStatus[]> {
-    return db.select().from(chatReadStatus).where(eq(chatReadStatus.userId, userId));
+    const statuses = await db
+      .select()
+      .from(chatReadStatus)
+      .where(eq(chatReadStatus.userId, userId));
+    const latestByClientId = new Map<string, ChatReadStatus>();
+    for (const status of statuses) {
+      const current = latestByClientId.get(status.clientId);
+      if (!current) {
+        latestByClientId.set(status.clientId, status);
+        continue;
+      }
+      const currentMs = Date.parse(current.lastReadAt);
+      const nextMs = Date.parse(status.lastReadAt);
+      if (Number.isFinite(currentMs) && Number.isFinite(nextMs)) {
+        if (nextMs > currentMs) latestByClientId.set(status.clientId, status);
+      } else if (status.lastReadAt > current.lastReadAt) {
+        latestByClientId.set(status.clientId, status);
+      }
+    }
+    return Array.from(latestByClientId.values());
   }
 }
 
