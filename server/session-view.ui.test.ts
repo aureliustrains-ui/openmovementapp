@@ -22,13 +22,13 @@ test("session view removes fake per-exercise check UI", () => {
   );
 });
 
-test("session view keeps coach details always visible and Track Progress collapsible", () => {
+test("session view keeps coach details always visible and session notes collapsible", () => {
   const source = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(source.includes("button-personal-notes-logs-"));
   assert.ok(source.includes("<ExerciseStandardDetails"));
   assert.ok(source.includes("integrated"));
-  assert.ok(source.includes("Track Progress"));
+  assert.ok(source.includes("Session notes"));
   assert.ok(source.includes("Reps, weight, effort, or quick notes"));
   assert.equal(
     source.includes("button-details-"),

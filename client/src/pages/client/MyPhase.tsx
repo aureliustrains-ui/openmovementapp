@@ -30,13 +30,13 @@ import {
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview, isScheduleEntryCompleted } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
-import { getSessionAccentColor } from "@/lib/sessionAccent";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { VideoUploadField } from "@/components/client/VideoUploadField";
 import { buildActionRequiredItems, pickLatestProgressReportForPhase } from "@/lib/actionRequired";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const PLAN_SCHEDULE_ACCENT = "#1F2937";
 const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
   "video/mp4",
   "video/quicktime",
@@ -56,7 +56,7 @@ function getProgressReportStatusMeta(status: string): {
     return {
       label: "Resubmission requested",
       tone: "warning",
-      ctaLabel: "Update progress report",
+      ctaLabel: "Open update",
       description: "Coach requested an updated submission. Please resubmit with improvements.",
     };
   }
@@ -64,7 +64,7 @@ function getProgressReportStatusMeta(status: string): {
     return {
       label: "Submitted",
       tone: "success",
-      ctaLabel: "View progress report",
+      ctaLabel: "View update",
       description: "Your submission is in. Keep training while your coach reviews it.",
     };
   }
@@ -72,22 +72,22 @@ function getProgressReportStatusMeta(status: string): {
     return {
       label: "Approved",
       tone: "success",
-      ctaLabel: "View progress report",
-      description: "Coach approved this progress report for your active phase.",
+      ctaLabel: "View update",
+      description: "Coach approved this progress update for your active plan.",
     };
   }
   if (status === "reviewed") {
     return {
       label: "Reviewed",
       tone: "neutral",
-      ctaLabel: "View progress report",
+      ctaLabel: "View update",
       description: "Coach review is completed for this phase report.",
     };
   }
   return {
     label: "Requested",
     tone: "info",
-    ctaLabel: "Open progress report",
+    ctaLabel: "Open update",
     description: "Submit quick links for selected exercises while continuing normal training.",
   };
 }
@@ -429,8 +429,8 @@ export default function ClientMyPhase() {
         <div className="h-20 w-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
           <CalIcon className="h-10 w-10 text-slate-300" />
         </div>
-        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">No Active Phases</h2>
-        <p className="text-slate-500 mt-2 max-w-md">You don't have any active training phases right now. Your coach is likely building your next block.</p>
+        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">No Active Plan</h2>
+        <p className="text-slate-500 mt-2 max-w-md">You don't have an active training plan right now. Your coach is likely building your next block.</p>
       </div>
     );
   }
@@ -561,7 +561,7 @@ export default function ClientMyPhase() {
   return (
     <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
       {isCheckinReadOnly && (
-        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-2xl" data-testid="card-impersonation-read-only">
+        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-xl" data-testid="card-impersonation-read-only">
           <CardContent className="p-4 text-sm text-amber-800">
             Client check-ins are read-only unless you are logged in as this client account.
           </CardContent>
@@ -569,10 +569,10 @@ export default function ClientMyPhase() {
       )}
       {visiblePhases.length > 1 && (
         <div className="flex items-center gap-3">
-          <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">My Phases</Label>
+          <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">Plans</Label>
           <Select value={selectedPhaseId || ''} onValueChange={(val) => { setSelectedPhaseId(val); setSelectedWeek(1); }}>
             <SelectTrigger className="w-full max-w-xs bg-white border-slate-200 shadow-sm" data-testid="select-phase">
-              <SelectValue placeholder="Select a phase" />
+              <SelectValue placeholder="Select a plan" />
             </SelectTrigger>
             <SelectContent>
               {visiblePhases.map((p: any) => (
@@ -597,12 +597,16 @@ export default function ClientMyPhase() {
             </div>
             <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">Movement Check Required</h1>
             <p className="text-slate-600 mt-3 text-lg">Your coach needs to review your form before unlocking: <span className="font-semibold text-slate-900">{currentPhase.name}</span></p>
-            {currentPhase.goal && <p className="text-slate-500 mt-2">{currentPhase.goal} &middot; {currentPhase.durationWeeks} weeks</p>}
+            {currentPhase.goal && (
+              <p className="text-slate-500 mt-2 whitespace-pre-line break-words">
+                {currentPhase.goal} &middot; {currentPhase.durationWeeks} weeks
+              </p>
+            )}
           </div>
 
           <div className="space-y-4">
             {movementChecks.map((mc: any, i: number) => (
-              <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-2xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
+              <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
                 <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
                     {(() => {
@@ -651,7 +655,7 @@ export default function ClientMyPhase() {
                       </div>
                     ) : (
                       <Button 
-                        className="btn-primary-action w-full rounded-xl h-12 px-6"
+                        className="w-full md:w-auto"
                         onClick={() => handleOpenUpload(currentPhase.id, mc.exerciseId)}
                         data-testid={`button-upload-video-${i}`}
                       >
@@ -666,29 +670,19 @@ export default function ClientMyPhase() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm" data-testid="card-phase-hero">
-            <p className="text-[11px] md:text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">
-              Week {selectedWeek}/{currentPhase.durationWeeks}
-            </p>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm" data-testid="card-phase-hero">
             <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight text-slate-900 leading-tight" data-testid="text-phase-name">
               {currentPhase.name}
             </h1>
             {currentPhase.goal ? (
-              <p className="text-sm md:text-base text-slate-600 mt-1.5 max-w-2xl leading-relaxed">{currentPhase.goal}</p>
+              <p className="text-sm md:text-base text-slate-600 mt-1.5 max-w-2xl leading-relaxed whitespace-pre-line break-words">
+                {currentPhase.goal}
+              </p>
             ) : null}
             {nextScheduleItem && (
-              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3" data-testid="card-start-next-session">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{nextScheduleItem.session.name}</p>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    Week {selectedWeek} · {nextScheduleItem.entry.day} {nextScheduleItem.entry.slot || "AM"}
-                    {formatSessionDuration(nextScheduleItem.session)
-                      ? ` · ${formatSessionDuration(nextScheduleItem.session)}`
-                      : ""}
-                  </p>
-                </div>
+              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col md:flex-row md:items-center md:justify-end gap-3" data-testid="card-start-next-session">
                 <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
-                  <Button className="btn-primary-action rounded-xl w-full md:w-auto h-10 shadow-sm" data-testid="button-start-next-session">
+                  <Button className="w-full md:w-auto" data-testid="button-start-next-session">
                     Start next session <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </Link>
@@ -698,12 +692,12 @@ export default function ClientMyPhase() {
 
           {hasActionRequiredSection && (
             <section className="space-y-2.5" data-testid="section-action-required">
-              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900">Action Required</h2>
+              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900">Needs your attention</h2>
               <div className="space-y-3">
                 {weeklyCheckinDue && (
                   <ActionRequiredCard
-                    title={`Week ${weeklyCheckinWeek} closing check`}
-                    ctaLabel="Complete check"
+                    title="Weekly check-in"
+                    ctaLabel="Complete weekly check-in"
                     onCtaClick={openWeeklyCheckin}
                     ctaDisabled={isCheckinReadOnly}
                     testId="card-action-weekly-checkin"
@@ -711,9 +705,10 @@ export default function ClientMyPhase() {
                 )}
                 {progressNeedsAction && latestPhaseProgressReport && progressStatusMeta && (
                   <ActionRequiredCard
-                    title="Progress report"
-                    ctaLabel="Submit update"
+                    title="Progress update"
+                    ctaLabel="Open update"
                     ctaHref={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}
+                    ctaVariant="secondaryDark"
                     testId="card-action-progress-report"
                   />
                 )}
@@ -725,7 +720,7 @@ export default function ClientMyPhase() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
               <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-slate-700" />
-                Week
+                Plan schedule
               </h2>
               {currentPhase.durationWeeks > 1 && (
                 <div className="self-start md:self-auto inline-flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1">
@@ -741,7 +736,7 @@ export default function ClientMyPhase() {
                       onClick={() => setSelectedWeek(w)}
                       className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 ${
                         isSelected
-                          ? "bg-slate-700 text-white shadow-sm"
+                          ? "bg-[var(--color-brand-600)] text-white shadow-sm"
                           : weekStatus.state === "ready_for_checkin"
                             ? "bg-slate-200 text-slate-800 hover:bg-slate-300"
                             : weekStatus.state === "completed"
@@ -757,7 +752,7 @@ export default function ClientMyPhase() {
                         <span className="text-[10px] font-bold">!</span>
                       )}
                       {isCurrent && !isSelected && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-slate-700" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand-600)]" />
                       )}
                     </button>
                     );
@@ -767,25 +762,27 @@ export default function ClientMyPhase() {
             </div>
             <div className="mb-4" data-testid="text-week-progress">
               {selectedWeekStatus.scheduledCount > 0 ? (
-                <p className="text-xs md:text-sm text-slate-600">
-                  Week {selectedWeek}: {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed{" "}
-                  {selectedWeekStatus.state === "completed" ? (
-                    <span className="font-semibold text-slate-700">· Completed</span>
-                  ) : selectedWeekStatus.state === "ready_for_checkin" ? (
-                    <span className="font-semibold text-slate-700">· Ready for weekly check-in</span>
-                  ) : selectedWeekStatus.state === "future" ? (
-                    <span className="text-slate-500 font-semibold">· Future week</span>
-                  ) : (
-                    <span className="font-semibold text-slate-700">· Current</span>
-                  )}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs md:text-sm text-slate-600">
+                    {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed
+                  </p>
+                  <p className="text-xs font-semibold text-slate-700">
+                    {selectedWeekStatus.state === "completed"
+                      ? "Completed"
+                      : selectedWeekStatus.state === "ready_for_checkin"
+                        ? "Ready for weekly check-in"
+                        : selectedWeekStatus.state === "future"
+                          ? "Future"
+                          : "Current"}
+                  </p>
+                </div>
               ) : (
-                <p className="text-sm text-slate-500">Week {selectedWeek}: No scheduled sessions</p>
+                <p className="text-sm text-slate-500">No scheduled sessions</p>
               )}
             </div>
 
             {hasGridSchedule ? (
-              <Card className="border-slate-200 shadow-sm rounded-2xl bg-white overflow-hidden" data-testid="card-schedule-grid">
+              <Card className="border-slate-200 shadow-sm rounded-xl bg-white overflow-hidden" data-testid="card-schedule-grid">
                 <div>
                   <div className="grid grid-cols-[72px_1fr_1fr] border-b border-slate-200 bg-slate-50">
                     <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
@@ -811,10 +808,7 @@ export default function ClientMyPhase() {
                                 const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
                                 if (!session) return null;
                                 const completed = isEntryCompleted(entry, session);
-                                const accentColor = getSessionAccentColor({
-                                  id: session.id,
-                                  name: session.name,
-                                });
+                                const accentColor = PLAN_SCHEDULE_ACCENT;
                                 return (
                                   <Link key={i} href={buildSessionUrl(session.id, day, slotVal)} className="block">
                                     <Badge
@@ -861,14 +855,11 @@ export default function ClientMyPhase() {
                     if (!session) return null;
                     const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
                     const isCompleted = completedInstances.includes(instanceKey);
-                    const accentColor = getSessionAccentColor({
-                      id: session.id,
-                      name: session.name,
-                    });
+                    const accentColor = PLAN_SCHEDULE_ACCENT;
                     
                     return (
                       <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
-                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group bg-white rounded-2xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
+                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group bg-white rounded-xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
                           <CardContent className="p-0 h-full">
                             <div
                               className={`flex items-stretch h-full ${isCompleted ? "opacity-85" : ""}`}
@@ -904,7 +895,7 @@ export default function ClientMyPhase() {
 
             {latestPhaseProgressReport && progressStatusMeta && progressSecondaryStatus && (
               <Card
-                className={`mt-6 rounded-2xl shadow-sm ${
+                className={`mt-6 rounded-xl shadow-sm ${
                   progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
                     ? "border-[var(--color-done-border)] bg-[var(--color-done-background)]"
                     : "border-slate-200 bg-white"
@@ -914,7 +905,7 @@ export default function ClientMyPhase() {
                 <CardContent className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress Report</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress update</p>
                       <Badge
                         variant="outline"
                         className={
@@ -929,8 +920,9 @@ export default function ClientMyPhase() {
                     <p className="text-slate-700">{progressStatusMeta.description}</p>
                   </div>
                   <Link href={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}>
-                    <Button className="btn-primary-action rounded-xl">
-                      View progress report
+                    <Button variant="secondaryDark">
+                      {progressStatusMeta.ctaLabel}
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </Link>
                 </CardContent>
@@ -1068,10 +1060,9 @@ export default function ClientMyPhase() {
               </Button>
             )}
             {weeklyCheckinStep === 1 ? (
-              <Button className="btn-primary-action" onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
+              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
             ) : (
               <Button
-                className="btn-primary-action"
                 onClick={handleSubmitWeeklyCheckin}
                 disabled={
                   submittingWeeklyCheckin ||
@@ -1128,7 +1119,6 @@ export default function ClientMyPhase() {
             </Button>
             <Button 
               onClick={handleSubmitVideo}
-              className="btn-primary-action"
               disabled={isSubmitting}
               data-testid="button-submit-video"
             >

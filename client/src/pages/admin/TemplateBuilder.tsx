@@ -25,6 +25,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -219,7 +220,11 @@ export default function TemplateBuilder() {
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <Label>Goal</Label>
-            <Input value={goal} onChange={(e) => setGoal(e.target.value)} />
+            <Textarea
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              className="min-h-[96px] bg-slate-50"
+            />
           </div>
           <div>
             <Label>Duration (weeks)</Label>

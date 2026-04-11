@@ -5,6 +5,7 @@ import { phasesQuery, phaseQuery, sessionsByPhaseQuery, exerciseTemplatesQuery, 
 import { cloneExerciseFromTemplate, clonePhaseTemplate, cloneSectionFromTemplate, cloneSessionFromTemplate, toBlueprintExercise } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, ArrowLeft, Save, Loader2, AlertCircle, Send, CalendarDays, CheckCircle2, X, Copy } from "lucide-react";
@@ -901,7 +902,12 @@ export default function AdminPhaseBuilder() {
         <CardContent className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label className="text-slate-600">Goal</Label>
-            <Input value={goal} onChange={e => setGoal(e.target.value)} className="bg-slate-50" data-testid="input-phase-goal" />
+            <Textarea
+              value={goal}
+              onChange={e => setGoal(e.target.value)}
+              className="min-h-[96px] bg-slate-50"
+              data-testid="input-phase-goal"
+            />
           </div>
           <div className="space-y-2">
             <Label className="text-slate-600">Duration (Weeks)</Label>

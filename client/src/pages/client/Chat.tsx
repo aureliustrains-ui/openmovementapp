@@ -94,11 +94,11 @@ export default function ClientChat() {
   return (
     <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col animate-in fade-in">
       <div className="mb-6">
-        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-chat-title">Chat</h1>
+        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-chat-title">Messages</h1>
         <p className="text-slate-500 mt-1">Ask questions, share updates, or discuss your form.</p>
       </div>
 
-      <Card className="flex-1 flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-2xl">
+      <Card className="flex-1 flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-xl">
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
@@ -122,7 +122,7 @@ export default function ClientChat() {
                   className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-600)] focus-visible:ring-offset-2"
                   data-testid={`button-open-chat-profile-${msg.id}`}
                 >
-                  <Avatar className="h-10 w-10 shrink-0 border border-slate-100 shadow-sm">
+                  <Avatar className="h-10 w-10 shrink-0 border border-slate-200">
                     <AvatarImage src={msg.senderAvatar || undefined} alt={senderDisplayName || undefined} />
                     <AvatarFallback className={isClientMessage ? "bg-[var(--color-brand-100)] text-[var(--color-brand-600)]" : "bg-slate-100 text-slate-700"}>
                       {senderInitial}
@@ -131,18 +131,12 @@ export default function ClientChat() {
                 </button>
                 <div className={`flex flex-col ${isClientMessage ? 'items-end' : 'items-start'}`}>
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        isClientMessage
-                          ? "bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
+                    <span className="text-[11px] font-semibold text-slate-600">
                       {roleLabel}
                     </span>
                     <span className="text-xs text-slate-500">{formatTime(msg.time)}</span>
                   </div>
-                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words p-4 rounded-2xl max-w-md ${
+                  <div className={`text-sm leading-relaxed whitespace-pre-wrap break-words p-4 rounded-xl max-w-md ${
                     isClientMessage
                       ? "rounded-br-md border border-slate-300 bg-slate-100 text-slate-900"
                       : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
@@ -169,7 +163,7 @@ export default function ClientChat() {
             <Button 
               type="submit" 
               size="icon" 
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg border-slate-900 bg-slate-900 text-white hover:bg-slate-800 disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500 shadow-sm"
+              className="absolute right-2 bottom-2"
               data-testid="button-send-message"
             >
               <Send className="h-4 w-4 text-white" />

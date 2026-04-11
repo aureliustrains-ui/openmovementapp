@@ -95,7 +95,7 @@ export default function ClientSessionView() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand-600)]" />
       </div>
     );
   }
@@ -378,7 +378,7 @@ export default function ClientSessionView() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
-          <div className="sticky top-24 rounded-2xl border border-slate-200/70 bg-slate-50/40 p-2.5" data-testid="rail-session-sections-desktop">
+          <div className="sticky top-24 rounded-xl border border-slate-200/70 bg-slate-50/40 p-2.5" data-testid="rail-session-sections-desktop">
             <p className="px-2 text-[9px] font-medium uppercase tracking-wider text-slate-400">Session flow</p>
             <div className="mt-2 space-y-1.5">
               {sessionSections.map((section: any, index: number) => {
@@ -390,7 +390,7 @@ export default function ClientSessionView() {
                     onClick={() => jumpToSection(section.id)}
                     className={`w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-medium transition-colors ${
                       isCurrent
-                        ? "bg-indigo-50 text-indigo-600"
+                        ? "bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
                         : isPrevious
                           ? "bg-slate-100 text-slate-500"
                           : "bg-transparent text-slate-500 hover:bg-slate-100/70"
@@ -424,7 +424,7 @@ export default function ClientSessionView() {
                 const isNotesOpen = !!expandedNotesAndLogs[ex.id];
 
                 return (
-                  <Card key={ex.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" data-testid={`card-exercise-${ex.id}`}>
+                  <Card key={ex.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" data-testid={`card-exercise-${ex.id}`}>
                     <div className="space-y-0 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -482,7 +482,7 @@ export default function ClientSessionView() {
                             className="flex w-full items-center py-2.5 text-left text-sm font-semibold text-slate-700 hover:text-slate-900"
                             data-testid={`button-personal-notes-logs-${ex.id}`}
                           >
-                            <span className="flex-1">Track Progress</span>
+                            <span className="flex-1">Session notes</span>
                             {isNotesOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                           </button>
                         </CollapsibleTrigger>
@@ -534,7 +534,7 @@ export default function ClientSessionView() {
                           {hasHistory && (
                             <div className="space-y-2 pt-2 border-t border-slate-200/70" data-testid={`past-notes-logs-${ex.id}`}>
                               <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
-                                Past notes &amp; logs ({history.length})
+                                Past session notes ({history.length})
                               </p>
                               <div className="divide-y divide-slate-200/70">
                                 {history.map((h, hi) => (
@@ -576,7 +576,7 @@ export default function ClientSessionView() {
       <div className="pt-4">
         <Button
           onClick={handleFinish}
-          className={`w-full h-14 text-base font-semibold rounded-2xl ${isSessionComplete ? "bg-slate-400 text-white" : "bg-green-600 hover:bg-green-700 text-white shadow-lg"}`}
+          className={`w-full h-14 text-base font-semibold rounded-md ${isSessionComplete ? "border-slate-300 bg-slate-300 text-slate-700 hover:bg-slate-300" : ""}`}
           disabled={isSessionComplete || finishing || isCheckinReadOnly}
           data-testid="button-finish-session"
         >
@@ -602,7 +602,7 @@ export default function ClientSessionView() {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Quick session review</DialogTitle>
+            <DialogTitle>Session review</DialogTitle>
             <DialogDescription>This takes about 10–20 seconds.</DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
@@ -616,7 +616,7 @@ export default function ClientSessionView() {
                     onClick={() => setAfterSessionRpe(value)}
                     className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
                       afterSessionRpe === value
-                        ? "border-slate-900 bg-slate-900 text-white"
+                        ? "border-[var(--color-brand-700)] bg-[var(--color-brand-700)] text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
@@ -637,7 +637,7 @@ export default function ClientSessionView() {
                     onClick={() => setAfterSessionSleep(value)}
                     className={`rounded-xl border px-2 py-3 text-sm font-semibold ${
                       afterSessionSleep === value
-                        ? "border-slate-900 bg-slate-900 text-white"
+                        ? "border-[var(--color-brand-700)] bg-[var(--color-brand-700)] text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
@@ -656,7 +656,7 @@ export default function ClientSessionView() {
                   onClick={() => setAfterSessionFeltOff(false)}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
                     !afterSessionFeltOff
-                      ? "border-green-300 bg-green-50 text-green-700"
+                      ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
@@ -667,7 +667,7 @@ export default function ClientSessionView() {
                   onClick={() => setAfterSessionFeltOff(true)}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
                     afterSessionFeltOff
-                      ? "border-amber-300 bg-amber-50 text-amber-700"
+                      ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
@@ -702,7 +702,7 @@ export default function ClientSessionView() {
           <DialogFooter>
             <Button onClick={handleSubmitAfterSessionCheckin} disabled={savingAfterSession || isCheckinReadOnly}>
               {savingAfterSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Save session review
+              Save review
             </Button>
           </DialogFooter>
         </DialogContent>
