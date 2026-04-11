@@ -74,7 +74,7 @@ function getReportStatusMeta(status: ProgressReport["status"]) {
   if (status === "submitted") {
     return {
       label: "Submitted",
-      badgeClass: "bg-indigo-100 text-indigo-700 border-indigo-200",
+      badgeClass: "bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-500)]",
     };
   }
   return {
@@ -208,7 +208,7 @@ export default function ClientProgressReport() {
 
       await submitProgressReport.mutateAsync({ reportId, items: submissionItems });
       toast({
-        title: "Progress report submitted",
+        title: "Progress update submitted",
         description: "Your coach can now review your submissions.",
       });
     } catch (error) {
@@ -225,7 +225,7 @@ export default function ClientProgressReport() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand-600)]" />
       </div>
     );
   }
@@ -233,9 +233,9 @@ export default function ClientProgressReport() {
   if (!typedReport) {
     return (
       <div className="py-16 text-center">
-        <p className="text-slate-500">Progress report not found.</p>
+        <p className="text-slate-500">Progress update not found.</p>
         <Link href="/app/client/my-phase">
-          <Button className="mt-4" variant="outline">Back to My Phase</Button>
+          <Button className="mt-4" variant="outline">Back to Plan</Button>
         </Link>
       </div>
     );
@@ -252,7 +252,7 @@ export default function ClientProgressReport() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-display font-bold text-slate-900">Progress Report</h1>
+          <h1 className="text-2xl font-display font-bold text-slate-900">Progress update</h1>
           <p className="text-sm text-slate-500">Submit requested updates while continuing your normal training.</p>
           <p className="text-xs text-slate-500 mt-1">
             Describe measurable progress for each exercise, for example more reps, more weight, cleaner form, or longer holds.
@@ -262,9 +262,9 @@ export default function ClientProgressReport() {
       </div>
 
       {isImpersonationReadOnly && (
-        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-2xl">
+        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-xl">
           <CardContent className="p-4 text-sm text-amber-800">
-            Progress report is read-only in impersonation mode.
+            Progress update is read-only in impersonation mode.
           </CardContent>
         </Card>
       )}
@@ -275,7 +275,7 @@ export default function ClientProgressReport() {
           const name = exercise?.name || item.exerciseName;
           const hasFeedback = typeof item.feedbackNote === "string" && item.feedbackNote.trim().length > 0;
           return (
-            <Card key={item.id} className="border-slate-200 shadow-sm rounded-2xl bg-white">
+            <Card key={item.id} className="border-slate-200 shadow-sm rounded-xl bg-white">
               <CardHeader className="border-b border-slate-100">
                 <CardTitle className="text-lg">{name}</CardTitle>
               </CardHeader>
@@ -384,7 +384,7 @@ export default function ClientProgressReport() {
       {submissionEditable ? (
         <div className="flex justify-end">
           <Button
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl"
+            className="rounded-md"
             disabled={readOnly || submitProgressReport.isPending || !!uploadingItemId}
             onClick={handleSubmit}
           >
@@ -393,7 +393,7 @@ export default function ClientProgressReport() {
             ) : (
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            {typedReport.status === "resubmission_requested" ? "Resubmit Progress Report" : "Submit Progress Report"}
+            {typedReport.status === "resubmission_requested" ? "Resubmit progress update" : "Submit progress update"}
           </Button>
         </div>
       ) : null}

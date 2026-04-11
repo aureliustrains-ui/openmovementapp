@@ -4,10 +4,12 @@ import {
   phasesQuery,
   sessionsQuery,
   weeklyCheckinsMeQuery,
+  myNotificationSummaryQuery,
+  myActivePhaseProgressReportsQuery,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
-import { buildScheduleInstanceKey, getWeekSchedulePreview } from "@/lib/clientSchedule";
+import { getWeekSchedulePreview } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { getClientCounterpartDisplayName } from "@/lib/counterpartDisplayName";
@@ -15,53 +17,36 @@ import { cn } from "@/lib/utils";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { HomeChatCard } from "@/components/client/HomeChatCard";
-import ClientReadinessSection from "@/components/client/ClientReadinessSection";
+import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { Loader2, CheckCircle2, ChevronRight, CalendarDays } from "lucide-react";
 
-function getActivePlanCompletion(phase: any | null): {
-  completedInstances: number;
-  totalInstances: number;
-  percent: number;
-} {
-  if (!phase) {
-    return { completedInstances: 0, totalInstances: 0, percent: 0 };
-  }
+const PLAN_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-  const schedule = ((phase.schedule as any[]) || []) as TrainingScheduleEntry[];
-  const expectedKeys = schedule
-    .map((entry) => {
-      if (typeof entry.sessionId !== "string" || entry.sessionId.length === 0) return null;
-      const week = typeof entry.week === "number" && entry.week > 0 ? entry.week : 1;
-      const day = typeof entry.day === "string" && entry.day.length > 0 ? entry.day : "Monday";
-      const slot = typeof entry.slot === "string" && entry.slot.length > 0 ? entry.slot : "AM";
-      return buildScheduleInstanceKey(week, day, slot, entry.sessionId);
-    })
-    .filter((key): key is string => typeof key === "string");
-  const expectedSet = new Set(expectedKeys);
-  const completedSet = new Set(
-    (((phase.completedScheduleInstances as string[]) || []) as string[]).filter(
-      (value): value is string => typeof value === "string",
-    ),
-  );
-  const completedInstances = Array.from(expectedSet).filter((key) => completedSet.has(key)).length;
-  const totalInstances = expectedSet.size;
-  const percent =
-    totalInstances > 0 ? Math.max(0, Math.min(100, Math.round((completedInstances / totalInstances) * 100))) : 0;
-
-  return { completedInstances, totalInstances, percent };
+function resolvePlanDayNumber(day: string | null | undefined): number | null {
+  if (!day) return null;
+  const dayIndex = PLAN_WEEKDAYS.findIndex((weekday) => weekday.toLowerCase() === day.toLowerCase());
+  return dayIndex >= 0 ? dayIndex + 1 : null;
 }
 
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
   const counterpartName = getClientCounterpartDisplayName();
+  const isClientSession = sessionUser?.role === "Client";
 
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { data: weeklyCheckins = [] } = useQuery({
     ...weeklyCheckinsMeQuery,
     enabled: !!sessionUser && !impersonating,
+  });
+  const { data: notificationSummary } = useQuery({
+    ...myNotificationSummaryQuery,
+    enabled: !!sessionUser && !impersonating && isClientSession,
+  });
+  const { data: activePhaseProgressReports = [] } = useQuery({
+    ...myActivePhaseProgressReportsQuery,
+    enabled: !!sessionUser && !impersonating && isClientSession,
   });
 
   if (!viewedUser) return null;
@@ -96,9 +81,6 @@ export default function ClientHome() {
   const currentWeekStatus =
     weekLifecycle?.weeks.find((status) => status.week === currentTrainingWeek) || null;
 
-  const weeklyScheduledCount = currentWeekStatus?.scheduledCount || 0;
-  const weeklyCompletedCount = currentWeekStatus?.completedCount || 0;
-  const activePlanCompletion = getActivePlanCompletion(activePhase);
   const weekSchedulePreview = getWeekSchedulePreview(
     currentTrainingWeek,
     phaseSchedule,
@@ -114,22 +96,26 @@ export default function ClientHome() {
         slot: weekSchedulePreview.nextScheduleItem.entry.slot,
       })
     : null;
+  const nextSessionWeek = weekSchedulePreview.nextScheduleItem?.entry.week ?? currentTrainingWeek;
+  const nextSessionDayNumber = weekSchedulePreview.nextScheduleItem
+    ? resolvePlanDayNumber(weekSchedulePreview.nextScheduleItem.entry.day)
+    : null;
 
-  const primaryProgressCopy =
-    activePlanCompletion.totalInstances > 0
-      ? `${activePlanCompletion.percent}% of current phase complete`
-      : "Your plan is ready to start";
-  const mobilePrimaryProgressCopy =
-    activePlanCompletion.totalInstances > 0 ? `${activePlanCompletion.percent}% complete` : "Plan ready";
-  const weeklyProgressCopy =
-    weeklyScheduledCount > 0 &&
-    (currentWeekStatus?.state === "ready_for_checkin" || weeklyCompletedCount >= weeklyScheduledCount)
-      ? "Training week complete"
-      : `${weeklyCompletedCount} of ${weeklyScheduledCount} sessions done this week`;
   const introVideoUrl =
     typeof progressPhase?.homeIntroVideoUrl === "string" && progressPhase.homeIntroVideoUrl.trim().length > 0
       ? progressPhase.homeIntroVideoUrl.trim()
       : null;
+  const latestProgressReport = [...(activePhaseProgressReports as Array<{ id: string; phaseId: string; status: string; createdAt: string }>)].sort(
+    (a, b) => b.createdAt.localeCompare(a.createdAt),
+  )[0];
+  const progressNeedsAction =
+    latestProgressReport?.status === "requested" || latestProgressReport?.status === "resubmission_requested";
+  const weeklyCheckinDue = Boolean(
+    (notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue,
+  );
+  const movementActionCount =
+    (notificationSummary as { movementActionCount?: number } | undefined)?.movementActionCount || 0;
+  const dueCount = Number(weeklyCheckinDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
 
   if (loadingPhases) {
     return (
@@ -154,107 +140,129 @@ export default function ClientHome() {
           )}
           .
         </h1>
-        <p className="mt-1 text-sm text-slate-500">Here&apos;s your week at a glance.</p>
+        <p className="mt-1 text-sm text-slate-500">Today&apos;s plan, your next session, and pending check-ins.</p>
       </section>
 
       {introVideoUrl ? (
         <section>
           <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">From {counterpartName}</p>
-          <InlineVideoPlayer url={introVideoUrl} testId="client-home-intro-video" />
+          <InlineVideoPlayer url={introVideoUrl} testId="client-home-intro-video" flush />
         </section>
       ) : null}
 
-      <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
-        <CardContent className="p-5 md:p-6 space-y-4">
-          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-slate-500">Progress</p>
-              <h2 className="text-[1.55rem] leading-tight font-semibold text-slate-800 sm:text-2xl">
-                <span className="sm:hidden">{mobilePrimaryProgressCopy}</span>
-                <span className="hidden sm:inline">{primaryProgressCopy}</span>
-              </h2>
-            </div>
-            <p className="text-sm text-slate-500 whitespace-nowrap sm:text-right">Week {currentTrainingWeek}</p>
-          </div>
-          <div className="relative h-2 w-full rounded-full bg-[var(--color-ui-hover)] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[var(--color-brand-700)] transition-all"
-              style={{ width: `${activePlanCompletion.totalInstances > 0 ? activePlanCompletion.percent : 0}%` }}
-            />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-between px-[2px]">
-              {[25, 50, 75, 100].map((mark) => (
-                <span
-                  key={mark}
-                  className={cn(
-                    "h-1.5 w-px rounded-full",
-                    activePlanCompletion.percent >= mark ? "bg-slate-500" : "bg-slate-300",
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col gap-2.5 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-600">{weeklyProgressCopy}</p>
-            {currentPhase ? (
-              <Link href="/app/client/my-phase">
-                <Button
-                  variant="outline"
-                  className="h-8 w-full border-[var(--color-ui-border)] bg-[var(--color-ui-hover)] text-slate-900 hover:border-slate-400 hover:bg-[var(--color-ui-surface)] active:bg-slate-200 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:w-auto"
-                  data-testid="button-home-go-to-current-phase"
-                >
-                  Open phase
-                </Button>
-              </Link>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="xl:col-span-2 border-slate-200 shadow-sm rounded-2xl bg-white">
+      <div className="grid grid-cols-1 gap-4">
+        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
           <CardContent className="p-5 md:p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500">Next up</p>
-                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">Start next session</h2>
+                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">Next session</h2>
                 {weekSchedulePreview.nextScheduleItem ? (
                   <p className="text-sm text-slate-600 mt-1">
-                    Week {currentTrainingWeek} · {weekSchedulePreview.nextScheduleItem.entry.day} {weekSchedulePreview.nextScheduleItem.entry.slot}
+                    {nextSessionDayNumber !== null
+                      ? `Week ${nextSessionWeek} • Day ${nextSessionDayNumber}`
+                      : `Week ${nextSessionWeek}`}
                   </p>
                 ) : null}
               </div>
               {weekSchedulePreview.nextScheduleItem && nextSessionDestination ? (
                 <Link href={nextSessionDestination.href}>
-                  <Button className="btn-primary-action w-full sm:w-auto" data-testid="button-home-start-next-session">
-                    Start next session
+                  <Button className="w-full sm:w-auto" data-testid="button-home-start-next-session">
+                    Start session
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </Link>
               ) : (
                 <Link href={currentPhase ? "/app/client/my-phase" : "/app/client/home"}>
-                  <Button className="w-full sm:w-auto border-slate-300 bg-white text-slate-800 hover:bg-slate-50" data-testid="button-home-open-phase-fallback">
-                    Open current phase
+                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-home-open-phase-fallback">
+                    Open plan
                   </Button>
                 </Link>
               )}
             </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            <div className="border-t border-slate-100 pt-4 space-y-2.5">
+      <section className="space-y-3">
+        {dueCount === 0 ? (
+          <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
+            <CardContent className="p-4 text-sm text-slate-600">No pending check-ins right now.</CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {weeklyCheckinDue ? (
+              <ActionRequiredCard
+                title="Weekly check-in"
+                description="Your current training week is ready to close."
+                ctaLabel="Open weekly check-in"
+                ctaHref="/app/client/check-ins"
+                ctaVariant="secondaryDark"
+              />
+            ) : null}
+            {movementActionCount > 0 ? (
+              <ActionRequiredCard
+                title="Movement check"
+                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
+                ctaLabel="Open movement checks"
+                ctaHref="/app/client/check-ins"
+                ctaVariant="secondaryDark"
+              />
+            ) : null}
+            {progressNeedsAction ? (
+              <Card className="border-slate-200 shadow-sm rounded-xl bg-white" data-testid="card-home-progress-update">
+                <CardContent className="p-3.5 md:p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                      Progress update
+                    </span>
+                    <Link href={latestProgressReport ? `/app/client/progress-reports/${latestProgressReport.id}` : "/app/client/check-ins"}>
+                      <Button variant="secondaryDark" size="sm" className="h-9 min-h-9 px-3 text-xs">
+                        Open update
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
+          <CardContent className="p-5 md:p-6 space-y-4">
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500">
                 <CalendarDays className="h-3.5 w-3.5 text-slate-600" />
-                This Week
+                This week
               </div>
-              {weekSchedulePreview.sortedEntries.length === 0 ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  No sessions scheduled this week.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {weekSchedulePreview.sortedEntries.map((item) => (
-                    <div
-                      key={item.instanceKey}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5"
-                    >
+              <Link href="/app/client/my-phase" className="text-xs font-medium text-slate-600 hover:text-slate-900">
+                Open plan
+              </Link>
+            </div>
+
+            {weekSchedulePreview.sortedEntries.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                No sessions scheduled this week.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {weekSchedulePreview.sortedEntries.map((item) => {
+                  const dayNumber = resolvePlanDayNumber(item.entry.day);
+                  return (
+                  <Link
+                    key={item.instanceKey}
+                    href={resolveClientSessionEntryDestination({
+                      phase: progressPhase as any,
+                      sessionId: item.session.id,
+                      week: item.entry.week,
+                      day: item.entry.day,
+                      slot: item.entry.slot,
+                    }).href}
+                    className="block"
+                  >
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
                       <div className="min-w-0">
                         <p
                           className={cn(
@@ -265,27 +273,26 @@ export default function ClientHome() {
                           {item.session.name}
                         </p>
                         <p className="text-xs text-slate-500">
-                          {item.entry.day} {item.entry.slot}
+                          Week {item.entry.week}
+                          {dayNumber !== null ? ` • Day ${dayNumber}` : ""}
                         </p>
                       </div>
                       {item.isCompleted ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)] px-2 py-0.5 text-[11px] font-medium">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-brand-700)]">
                           <CheckCircle2 className="h-3 w-3" />
                           Done
                         </span>
-                      ) : null}
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </Link>
+                )})}
+              </div>
+            )}
           </CardContent>
         </Card>
-
-        <HomeChatCard />
-      </div>
-
-      <ClientReadinessSection />
+      </section>
     </div>
   );
 }

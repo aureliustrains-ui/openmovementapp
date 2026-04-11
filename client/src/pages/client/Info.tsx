@@ -28,9 +28,9 @@ export default function ClientInfo() {
       ],
     },
     {
-      title: "Track progress",
+      title: "Session notes",
       body: [
-        "Use Track Progress to log your reps, weight, effort, and any quick notes after the session.",
+        "Use Session notes to log your reps, weight, effort, and any quick notes after the session.",
       ],
     },
     {
@@ -40,9 +40,9 @@ export default function ClientInfo() {
       ],
     },
     {
-      title: "Progress reports",
+      title: "Progress updates",
       body: [
-        "Progress reports are used to show how the phase is going and capture your progress over time.",
+        "Progress updates are used to show how the plan is going and capture your progress over time.",
       ],
     },
     {

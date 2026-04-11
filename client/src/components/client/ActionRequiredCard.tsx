@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
+import { ChevronRight } from "lucide-react";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
   ctaHref?: string;
   onCtaClick?: () => void;
   ctaDisabled?: boolean;
+  ctaVariant?: ButtonProps["variant"];
   secondaryText?: string;
   testId?: string;
 };
@@ -20,11 +22,12 @@ export function ActionRequiredCard({
   ctaHref,
   onCtaClick,
   ctaDisabled,
+  ctaVariant = "default",
   secondaryText,
   testId,
 }: Props) {
   return (
-    <Card className="border-slate-200 shadow-sm rounded-2xl bg-white" data-testid={testId}>
+    <Card className="border-slate-200 shadow-sm rounded-xl bg-white" data-testid={testId}>
       <CardContent className="p-3.5 md:p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base md:text-lg font-semibold text-slate-900 leading-tight">{title}</h2>
@@ -35,13 +38,15 @@ export function ActionRequiredCard({
         </div>
         {ctaHref ? (
           <Link href={ctaHref}>
-            <Button className="rounded-xl w-full md:w-auto bg-slate-700 hover:bg-slate-800 text-white">
+            <Button className="w-full md:w-auto" variant={ctaVariant}>
               {ctaLabel}
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
         ) : (
           <Button
-            className="rounded-xl w-full md:w-auto bg-slate-700 hover:bg-slate-800 text-white"
+            className="w-full md:w-auto"
+            variant={ctaVariant}
             onClick={onCtaClick}
             disabled={ctaDisabled}
           >

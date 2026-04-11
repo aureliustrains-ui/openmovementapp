@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const adminProfilePath = path.resolve(serverDir, "../client/src/pages/admin/ClientProfile.tsx");
 const clientHomePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
+const clientAppPath = path.resolve(serverDir, "../client/src/App.tsx");
+const clientCheckinsPath = path.resolve(serverDir, "../client/src/pages/client/CheckIns.tsx");
 const clientReadinessPath = path.resolve(serverDir, "../client/src/pages/client/Readiness.tsx");
 const clientReadinessSectionPath = path.resolve(
   serverDir,
@@ -167,27 +169,34 @@ test("checkins trend mappers normalize numeric fields for chart rendering", () =
   assert.ok(checkinsSource.includes("trendWeekLabel"));
 });
 
-test("client readiness full page reuses shared readiness section and includes recent check-ins", () => {
+test("client check-ins route reuses shared readiness section while home stays action-focused", () => {
   const homeSource = fs.readFileSync(clientHomePath, "utf8");
+  const appSource = fs.readFileSync(clientAppPath, "utf8");
+  const checkinsSource = fs.readFileSync(clientCheckinsPath, "utf8");
   const readinessPageSource = fs.readFileSync(clientReadinessPath, "utf8");
   const readinessSectionSource = fs.readFileSync(clientReadinessSectionPath, "utf8");
 
-  assert.ok(
-    homeSource.includes("<ClientReadinessSection />"),
-    "Home should keep the readiness preview section",
-  );
+  assert.equal(homeSource.includes("<ClientReadinessSection"), false);
   assert.equal(
     homeSource.includes("<ClientReadinessSection showFullDetails />"),
     false,
-    "Home should not use the full readiness mode that renders the dedicated injury chart",
+    "Home should stay focused on next actions instead of embedding readiness charts",
+  );
+  assert.ok(
+    appSource.includes('return <Redirect to="/app/client/check-ins" />'),
+    "Legacy readiness route should redirect to the new check-ins destination",
+  );
+  assert.ok(
+    checkinsSource.includes("<ClientReadinessSection showFullDetails />"),
+    "Check-ins should host the full readiness explorer section",
   );
   assert.ok(
     readinessPageSource.includes("<ClientReadinessSection showFullDetails />"),
-    "Readiness route should open the full readiness view",
+    "Legacy readiness page should remain full-details if routed directly",
   );
   assert.ok(
     readinessSectionSource.includes("clientCheckinsRecentQuery(clientId)"),
-    "Full readiness should fetch recent check-ins from the same backend path",
+    "Full readiness should fetch recent check-ins from the shared backend path",
   );
   assert.ok(
     readinessSectionSource.includes("Recent session check-ins"),

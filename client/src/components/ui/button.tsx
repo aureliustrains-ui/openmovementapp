@@ -10,21 +10,23 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-black bg-black text-white hover:bg-[#222222]",
+          "border-[var(--color-brand-700)] bg-[var(--color-brand-700)] text-white hover:border-[var(--color-brand-600)] hover:bg-[var(--color-brand-600)]",
+        secondaryDark:
+          "border-[var(--color-brand-600)] bg-[var(--color-brand-600)] text-white hover:border-[var(--color-brand-700)] hover:bg-[var(--color-brand-700)]",
         destructive:
           "border-[#7a2323] bg-[#9a2e2e] text-white hover:bg-[#8a2a2a]",
         outline:
-          "border-border bg-white text-foreground hover:bg-slate-50",
+          "border-slate-300 bg-white text-slate-800 hover:bg-slate-50",
         secondary:
-          "border-border bg-slate-100 text-foreground hover:bg-slate-200",
-        ghost: "border-transparent bg-transparent text-foreground hover:bg-slate-100",
+          "border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200",
+        ghost: "border-transparent bg-transparent text-slate-700 hover:bg-slate-100",
         link: "border-transparent bg-transparent p-0 text-[#2B4A42] underline-offset-4 hover:underline",
       },
       size: {
-        default: "min-h-9 px-4 py-2",
-        sm: "min-h-8 rounded-md px-3 text-xs",
-        lg: "min-h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "min-h-10 px-4 py-2",
+        sm: "min-h-9 rounded-md px-3 text-xs",
+        lg: "min-h-11 rounded-md px-8",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {

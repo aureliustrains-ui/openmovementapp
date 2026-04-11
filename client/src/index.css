@@ -59,10 +59,10 @@
   --color-ui-surface: #f7f7f5;
   --color-ui-hover: #efefea;
 
-  --color-brand-100: #e7f2ec;
-  --color-brand-500: #3f8a67;
-  --color-brand-600: #2f6f53;
-  --color-brand-700: #1f4a3a;
+  --color-brand-100: #f3f4f6;
+  --color-brand-500: #2b2b2b;
+  --color-brand-600: #2b2b2b;
+  --color-brand-700: #1f2937;
 
   --color-done-background: #f3f4f6;
   --color-done-foreground: #4b5563;
@@ -113,7 +113,7 @@
   --card-foreground: 0 0% 7%;
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 7%;
-  --primary: 152 40% 31%;
+  --primary: 220 28% 17%;
   --primary-foreground: 0 0% 100%;
   --secondary: 40 14% 97%;
   --secondary-foreground: 0 0% 7%;
@@ -125,7 +125,7 @@
   --destructive-foreground: 210 40% 98%;
   --border: 220 13% 91%;
   --input: 220 13% 91%;
-  --ring: 152 40% 31%;
+  --ring: 220 28% 17%;
   --radius: 0.375rem;
 
   --sidebar: 0 0% 100%;

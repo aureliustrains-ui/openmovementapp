@@ -89,7 +89,7 @@ export default function Login() {
 
             {error && <p className="text-sm text-rose-600">{error}</p>}
 
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" className="w-full" variant="secondaryDark" disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </Button>
           </form>

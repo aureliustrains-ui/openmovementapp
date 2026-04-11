@@ -385,11 +385,11 @@ export default function MyProfilePage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-display font-bold text-slate-900">My Profile</h1>
-        <p className="text-slate-500">Manage your account profile details.</p>
+        <h1 className="text-3xl font-display font-bold text-slate-900">Profile</h1>
+        <p className="text-slate-500">Manage your account profile and security details.</p>
       </div>
 
-      <Card className="border-slate-200 shadow-sm">
+      <Card id="profile" className="border-slate-200 shadow-sm">
         <CardHeader>
           <CardTitle>Profile</CardTitle>
         </CardHeader>
@@ -472,7 +472,7 @@ export default function MyProfilePage() {
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200 shadow-sm">
+      <Card id="security" className="border-slate-200 shadow-sm">
         <CardHeader>
           <CardTitle>Security</CardTitle>
         </CardHeader>

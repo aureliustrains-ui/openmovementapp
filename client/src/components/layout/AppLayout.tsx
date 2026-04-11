@@ -14,7 +14,8 @@ import {
   Dumbbell, 
   House,
   MessageCircle,
-  TrendingUp,
+  ListChecks,
+  User,
   Info,
   LogOut,
   Repeat
@@ -38,22 +39,27 @@ const getAdminNavItems = (attentionClientsCount: number) => [
 
 const getClientPrimaryNavItems = (input: {
   unreadChatCount: number;
-  phaseAttentionCount: number;
+  checkinsAttentionCount: number;
 }) => [
-  { href: "/app/client/home", label: "Home", icon: House },
+  { href: "/app/client/home", label: "Today", icon: House },
   {
     href: "/app/client/my-phase",
-    label: "Current Phase",
+    label: "Plan",
     icon: Dumbbell,
-    badgeCount: input.phaseAttentionCount,
+  },
+  {
+    href: "/app/client/check-ins",
+    label: "Check-ins",
+    icon: ListChecks,
+    badgeCount: input.checkinsAttentionCount,
   },
   {
     href: "/app/client/chat",
-    label: "Chat",
+    label: "Messages",
     icon: MessageCircle,
     badgeCount: input.unreadChatCount,
   },
-  { href: "/app/client/readiness", label: "Readiness", icon: TrendingUp },
+  { href: "/app/client/you", label: "You", icon: User },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -93,7 +99,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   };
   const clientUnreadChatCount =
     sessionUser.role === "Client" ? clientSummary.unreadChatCount || 0 : 0;
-  const clientPhaseAttentionCount =
+  const clientCheckinsAttentionCount =
     sessionUser.role === "Client"
       ? (clientSummary.movementActionCount || 0) +
         (clientSummary.progressActionCount || 0) +
@@ -105,7 +111,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       ? getAdminNavItems(attentionClientsCount)
       : getClientPrimaryNavItems({
           unreadChatCount: clientUnreadChatCount,
-          phaseAttentionCount: clientPhaseAttentionCount,
+          checkinsAttentionCount: clientCheckinsAttentionCount,
         });
   const menuDisplayName = useMemo(() => {
     if (sessionUser.role !== "Admin") {
@@ -141,7 +147,29 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const contentContainerClass =
     sessionUser.role === "Admin"
       ? "w-full max-w-[1680px] mx-auto p-6 md:p-8"
-      : "w-full max-w-7xl mx-auto p-6 md:p-8";
+      : "w-full max-w-7xl mx-auto px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8";
+
+  const isClientRouteActive = (href: string) => {
+    if (sessionUser.role !== "Client") return false;
+    if (href === "/app/client/you") {
+      return (
+        location.startsWith("/app/client/you") ||
+        location.startsWith("/app/settings") ||
+        location.startsWith("/app/client/info")
+      );
+    }
+    if (href === "/app/client/check-ins") {
+      return (
+        location.startsWith("/app/client/check-ins") ||
+        location.startsWith("/app/client/readiness") ||
+        location.startsWith("/app/client/progress-reports")
+      );
+    }
+    if (href === "/app/client/my-phase") {
+      return location.startsWith("/app/client/my-phase") || location.startsWith("/app/client/session");
+    }
+    return location.startsWith(href);
+  };
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -151,9 +179,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <BrandLogo textClassName="text-sm sm:text-base" />
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav className={`items-center gap-1 ${sessionUser.role === "Client" ? "hidden sm:flex" : "flex"}`}>
             {navItems.map((item) => {
-              const isActive = location.startsWith(item.href) && (item.href !== '/app/settings' || location === '/app/settings');
+              const isActive =
+                sessionUser.role === "Client"
+                  ? isClientRouteActive(item.href)
+                  : location.startsWith(item.href) && (item.href !== "/app/settings" || location === "/app/settings");
               const isAdminNav = sessionUser.role === "Admin";
               const isClientNav = sessionUser.role === "Client";
               const spacingClassName = isAdminNav
@@ -229,6 +260,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
               {sessionUser.role === "Client" ? (
                 <>
                   <DropdownMenuItem asChild>
+                    <Link href="/app/client/you" className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>You</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
                     <Link href="/app/settings" className="flex items-center gap-2">
                       <Settings className="h-4 w-4" />
                       <span>Profile</span>
@@ -272,6 +310,35 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
+
+      {sessionUser.role === "Client" ? (
+        <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur sm:hidden">
+          <div className="grid grid-cols-5 gap-1 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5">
+            {navItems.map((item) => {
+              const isActive = isClientRouteActive(item.href);
+              return (
+                <Link
+                  key={`mobile-${item.href}`}
+                  href={item.href}
+                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-medium ${
+                    isActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="relative">
+                    <item.icon className="h-4 w-4" />
+                    {typeof item.badgeCount === "number" && item.badgeCount > 0 ? (
+                      <span className="absolute -right-3 -top-2 inline-flex min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                        {item.badgeCount > 9 ? "9+" : item.badgeCount}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

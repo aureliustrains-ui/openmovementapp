@@ -31,9 +31,10 @@ import ClientHome from "@/pages/client/Home";
 import ClientMyPhase from "@/pages/client/MyPhase";
 import ClientSessionView from "@/pages/client/SessionView";
 import ClientChat from "@/pages/client/Chat";
-import ClientReadiness from "@/pages/client/Readiness";
 import ClientInfo from "@/pages/client/Info";
 import ClientProgressReport from "@/pages/client/ProgressReport";
+import ClientCheckIns from "@/pages/client/CheckIns";
+import ClientYou from "@/pages/client/You";
 
 function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
   const { sessionUser, impersonating } = useAuth();
@@ -48,6 +49,10 @@ function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
   }
   
   return <Component {...rest} />;
+}
+
+function ClientReadinessRedirect() {
+  return <Redirect to="/app/client/check-ins" />;
 }
 
 function Router() {
@@ -132,6 +137,9 @@ function Router() {
                 <Route path="/app/client/my-phase">
                   {() => <ProtectedRoute component={ClientMyPhase} allowedRole="Client" />}
                 </Route>
+                <Route path="/app/client/check-ins">
+                  {() => <ProtectedRoute component={ClientCheckIns} allowedRole="Client" />}
+                </Route>
                 <Route path="/app/client/session/:sessionId">
                   {() => <ProtectedRoute component={ClientSessionView} allowedRole="Client" />}
                 </Route>
@@ -142,7 +150,10 @@ function Router() {
                   {() => <ProtectedRoute component={ClientChat} allowedRole="Client" />}
                 </Route>
                 <Route path="/app/client/readiness">
-                  {() => <ProtectedRoute component={ClientReadiness} allowedRole="Client" />}
+                  {() => <ProtectedRoute component={ClientReadinessRedirect} allowedRole="Client" />}
+                </Route>
+                <Route path="/app/client/you">
+                  {() => <ProtectedRoute component={ClientYou} allowedRole="Client" />}
                 </Route>
                 <Route path="/app/client/info">
                   {() => <ProtectedRoute component={ClientInfo} allowedRole="Client" />}
