@@ -73,7 +73,13 @@ export const createWeeklyCheckinSchema = z
     }
   });
 
-const phaseStatusSchema = z.enum(["Draft", "Active", "Waiting for Movement Check", "Archived"]);
+const phaseStatusSchema = z.enum([
+  "Draft",
+  "Active",
+  "Waiting for Movement Check",
+  "Completed",
+  "Archived",
+]);
 
 const nullableText = (max: number) => z.string().max(max).nullable().optional();
 

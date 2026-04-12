@@ -16,7 +16,7 @@ import { buildReadinessSummaryCards } from "@/lib/readinessSummary";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, TrendingUp } from "lucide-react";
+import { ChevronDown, Loader2, TrendingUp } from "lucide-react";
 import {
   ComposedChart,
   CartesianGrid,
@@ -90,6 +90,7 @@ export default function ClientReadinessSection({
     recoveryThisTrainingWeek: true,
     stressOutsideTrainingThisWeek: true,
   });
+  const [showTrendOrientation, setShowTrendOrientation] = useState(false);
 
   const toggleSessionMetric = (metric: SessionMetricKey) => {
     setSessionMetrics((prev) => {
@@ -263,9 +264,27 @@ export default function ClientReadinessSection({
         <CardHeader className="border-b border-slate-100 bg-slate-50/40">
           {compactForCheckins ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-600 leading-relaxed">
-                These check-ins show the data you entered about your sessions and your weeks. They are there to help us notice patterns, reflect on how training is going, and give a rough orientation over time. They can show us whether recovery, stress, effort, sleep, or other factors are moving in a certain direction, but they should not be treated as something absolute. In a world with so much data, it is easy to rely too much on numbers and forget the most important thing: learning to sense our own body well. The real goal is to become better at noticing how we feel, how recovered we are, how much effort something really takes, and when small changes begin to happen. The better we get at sensing this ourselves, the less we need from the outside to tell us what is going on. These check-ins should support that process, not replace it.
-              </p>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTrendOrientation((prev) => !prev)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-800"
+                  aria-expanded={showTrendOrientation}
+                >
+                  What is this?
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 transition-transform",
+                      showTrendOrientation ? "rotate-180" : "rotate-0",
+                    )}
+                  />
+                </button>
+                {showTrendOrientation ? (
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    These check-ins show the data you entered about your sessions and your weeks. They are there to help us notice patterns, reflect on how training is going, and give a rough orientation over time. They can show us whether recovery, stress, effort, sleep, or other factors are moving in a certain direction, but they should not be treated as something absolute. In a world with so much data, it is easy to rely too much on numbers and forget the most important thing: learning to sense our own body well. The real goal is to become better at noticing how we feel, how recovered we are, how much effort something really takes, and when small changes begin to happen. The better we get at sensing this ourselves, the less we need from the outside to tell us what is going on. These check-ins should support that process, not replace it.
+                  </p>
+                ) : null}
+              </div>
               <div className="flex justify-start sm:justify-end">
                 <Select value={checkinsRange} onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}>
                   <SelectTrigger className="w-[160px] bg-white border-slate-200" data-testid="select-client-home-checkins-range">

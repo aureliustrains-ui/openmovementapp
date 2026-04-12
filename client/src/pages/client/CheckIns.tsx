@@ -193,10 +193,7 @@ export default function ClientCheckIns() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in">
-      <section>
-        <h1 className="text-3xl font-display font-bold tracking-tight text-slate-900">Check-ins</h1>
-      </section>
+    <div className="max-w-5xl mx-auto space-y-5 animate-in fade-in">
 
       {isReadOnly ? (
         <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-xl">

@@ -92,17 +92,12 @@ export default function ClientChat() {
     .join("");
 
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-8rem)] flex flex-col animate-in fade-in">
-      <div className="mb-6">
-        <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-chat-title">Messages</h1>
-        <p className="text-slate-500 mt-1">Ask questions, share updates, or discuss your form.</p>
-      </div>
-
-      <Card className="flex-1 flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-xl">
+    <div className="max-w-4xl mx-auto w-full flex-1 min-h-0 overflow-hidden flex flex-col animate-in fade-in">
+      <Card className="flex-1 min-h-0 max-h-full flex flex-col border-slate-200 shadow-sm overflow-hidden bg-white rounded-xl">
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-6 space-y-6"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-6 [-webkit-overflow-scrolling:touch]"
         >
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -150,7 +145,7 @@ export default function ClientChat() {
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        <div className="shrink-0 p-4 border-t border-slate-100 bg-slate-50/50">
           <form className="relative" onSubmit={handleSend}>
             <Textarea
               placeholder="Ask about your session, schedule, or recovery..."

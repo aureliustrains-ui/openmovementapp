@@ -1397,7 +1397,7 @@ test("PATCH /api/phases/:id returns clear validation error for invalid movement-
   );
 });
 
-test("PATCH /api/phases/:id lets admin publish to Active or Waiting for Movement Check and persists status", async (t) => {
+test("PATCH /api/phases/:id lets admin set Active, Waiting for Movement Check, and Completed statuses", async (t) => {
   const { registerRoutes, storage } = await loadRouteDeps();
   const users = new Map<string, User>([
     ["admin_1", buildUser({ id: "admin_1", role: "Admin", email: "admin@example.com" })],
@@ -1473,6 +1473,21 @@ test("PATCH /api/phases/:id lets admin publish to Active or Waiting for Movement
           assert.equal(waitingBody.status, "Waiting for Movement Check");
           assert.equal(phases.get("phase_1")?.status, "Waiting for Movement Check");
           assert.deepEqual(waitingBody.movementChecks, movementChecks);
+
+          const publishCompleted = await fetch(`${baseUrl}/api/phases/phase_1`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "x-test-user-id": "admin_1",
+            },
+            body: JSON.stringify({
+              status: "Completed",
+            }),
+          });
+          assert.equal(publishCompleted.status, 200);
+          const completedBody = (await publishCompleted.json()) as Phase;
+          assert.equal(completedBody.status, "Completed");
+          assert.equal(phases.get("phase_1")?.status, "Completed");
         });
       } catch (error: unknown) {
         if (isEpermSocketError(error)) {

@@ -25,6 +25,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { resolveUserFullName } from "@/lib/userDisplayName";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -334,6 +335,7 @@ export default function AdminClientsList() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activeClients.map((client: any) => {
                 const status = getClientStatus(client);
+                const clientDisplayName = resolveUserFullName(client);
                 return (
                   <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-${client.id}`}>
                     <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
@@ -342,10 +344,12 @@ export default function AdminClientsList() {
                           <div className="flex items-center gap-4">
                             <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
                               <AvatarImage src={client.avatar} />
-                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">{client.name.charAt(0)}</AvatarFallback>
+                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">
+                                {(clientDisplayName || "U").charAt(0)}
+                              </AvatarFallback>
                             </Avatar>
                             <div>
-                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{client.name}</h3>
+                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{clientDisplayName}</h3>
                               <p className="text-sm text-slate-500">{client.email}</p>
                               {renderAttentionIndicators(client.id)}
                             </div>
@@ -383,6 +387,7 @@ export default function AdminClientsList() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {inactiveClients.map((client: any) => {
                 const status = getClientStatus(client);
+                const clientDisplayName = resolveUserFullName(client);
                 return (
                   <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-inactive-${client.id}`}>
                     <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
@@ -391,10 +396,12 @@ export default function AdminClientsList() {
                           <div className="flex items-center gap-4">
                             <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
                               <AvatarImage src={client.avatar} />
-                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">{client.name.charAt(0)}</AvatarFallback>
+                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">
+                                {(clientDisplayName || "U").charAt(0)}
+                              </AvatarFallback>
                             </Avatar>
                             <div>
-                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{client.name}</h3>
+                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{clientDisplayName}</h3>
                               <p className="text-sm text-slate-500">{client.email}</p>
                               {renderAttentionIndicators(client.id)}
                             </div>

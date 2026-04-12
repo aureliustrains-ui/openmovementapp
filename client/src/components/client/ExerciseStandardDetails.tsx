@@ -31,7 +31,7 @@ export function ExerciseStandardDetails({
   integrated = false,
 }: Props) {
   const offset = sectionOffsetClassName ? `${sectionOffsetClassName} ` : "";
-  const integratedLabelClass = "mb-1 text-[13px] md:text-sm font-semibold leading-5 text-[#2B4A42]";
+  const integratedLabelClass = "mb-1 text-[13px] md:text-sm font-semibold leading-5 text-[var(--color-brand-700)]";
   const integratedValueClass = "text-[15px] md:text-base font-medium leading-6 text-slate-900";
 
   return (

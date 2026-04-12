@@ -40,6 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ReviewSubmissionRow } from "@/components/admin/review/ReviewSubmissionRow";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
+import { resolveUserFullName } from "@/lib/userDisplayName";
 import { mapSessionCheckinTrendData, mapWeeklyCheckinTrendData } from "@/lib/checkins";
 import { buildReadinessSummaryCards } from "@/lib/readinessSummary";
 import { normalizeVideoSource } from "@/lib/video";
@@ -252,6 +253,8 @@ export default function AdminClientProfile() {
       <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
     </div>
   );
+
+  const clientDisplayName = resolveUserFullName(client);
 
   const submitChatMessage = () => {
     if (!chatMessage.trim() || !clientId) return;
@@ -517,7 +520,7 @@ export default function AdminClientProfile() {
   const handleRemoveClient = async () => {
     if (!clientId || updateUserStatus.isPending || removeClient.isPending) return;
     const confirmed = window.confirm(
-      `Remove ${client?.name}? This permanently deletes their phases and removes account access.`,
+      `Remove ${clientDisplayName}? This permanently deletes their phases and removes account access.`,
     );
     if (!confirmed) return;
 
@@ -1007,10 +1010,10 @@ export default function AdminClientProfile() {
           <div className="flex items-center gap-5">
             <Avatar className="h-20 w-20 border-2 border-white shadow-md">
               <AvatarImage src={client.avatar} />
-              <AvatarFallback className="text-2xl bg-indigo-100 text-indigo-700">{client.name.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="text-2xl bg-indigo-100 text-indigo-700">{(clientDisplayName || "U").charAt(0)}</AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-client-profile-name">{client.name}</h1>
+              <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-client-profile-name">{clientDisplayName}</h1>
               <p className="text-slate-500 mt-1">{client.email}</p>
             </div>
           </div>

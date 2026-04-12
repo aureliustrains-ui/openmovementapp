@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { usersQuery, phasesQuery, sessionsQuery } from "@/lib/api";
+import { resolveUserFullName } from "@/lib/userDisplayName";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart3, TrendingUp, Activity, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -74,10 +75,11 @@ export default function AdminAnalytics() {
              <div className="divide-y divide-slate-100">
                {clients.map((client: any) => {
                  const clientPhase = allPhases.find((p: any) => p.clientId === client.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check'));
+                 const clientDisplayName = resolveUserFullName(client);
                  return (
                    <div key={client.id} className="p-4 flex items-center justify-between" data-testid={`row-adherence-${client.id}`}>
                      <div>
-                       <div className="font-semibold text-slate-900">{client.name}</div>
+                       <div className="font-semibold text-slate-900">{clientDisplayName}</div>
                        <div className="text-sm text-slate-500">{clientPhase?.name || 'No active phase'}</div>
                      </div>
                      <div className="text-right">

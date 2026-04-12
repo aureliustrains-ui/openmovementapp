@@ -2,7 +2,7 @@ import { ReactNode, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { resolveUserFirstName } from "@/lib/userDisplayName";
+import { resolveUserFullName } from "@/lib/userDisplayName";
 import {
   adminClientsNotificationSummaryQuery,
   myNotificationSummaryQuery,
@@ -112,25 +112,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           unreadChatCount: clientUnreadChatCount,
           checkinsAttentionCount: clientCheckinsAttentionCount,
         });
+  const isClientChatRoute =
+    sessionUser.role === "Client" && location.startsWith("/app/client/chat");
   const menuDisplayName = useMemo(() => {
-    if (sessionUser.role !== "Admin") {
-      return user.name || user.email;
-    }
-
-    const firstNameCandidate = resolveUserFirstName(user);
-    const nameCandidate = (user.name || "").trim();
-
-    if (firstNameCandidate && nameCandidate) {
-      const firstLower = firstNameCandidate.toLowerCase();
-      const nameLower = nameCandidate.toLowerCase();
-      if (nameLower === firstLower || nameLower.startsWith(`${firstLower} `)) {
-        return nameCandidate;
-      }
-      return `${firstNameCandidate} ${nameCandidate}`;
-    }
-    if (firstNameCandidate && firstNameCandidate !== "there") return firstNameCandidate;
-    return nameCandidate || user.email;
-  }, [sessionUser.role, user]);
+    return resolveUserFullName(user);
+  }, [user]);
 
   const handleLogout = () => {
     fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => undefined);
@@ -146,7 +132,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const contentContainerClass =
     sessionUser.role === "Admin"
       ? "w-full max-w-[1680px] mx-auto p-6 md:p-8"
-      : "w-full max-w-7xl mx-auto px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8";
+      : isClientChatRoute
+        ? "w-full max-w-7xl mx-auto h-full min-h-0 box-border flex flex-col px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+5.25rem)] sm:px-6 sm:pt-4 sm:pb-8 md:px-8"
+        : "w-full max-w-7xl mx-auto px-4 py-6 pb-24 sm:px-6 sm:pb-8 md:px-8";
 
   const isClientRouteActive = (href: string) => {
     if (sessionUser.role !== "Client") return false;
@@ -171,7 +159,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className={`${isClientChatRoute ? "h-[100dvh] min-h-0" : "min-h-screen"} bg-white flex flex-col`}>
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex items-center gap-8">
           <Link href={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} className="flex items-center gap-2.5 shrink-0">
@@ -291,7 +279,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto bg-white">
+      <main className={`flex-1 min-h-0 bg-white ${isClientChatRoute ? "overflow-hidden" : "overflow-auto"}`}>
         <div className={contentContainerClass}>
           {children}
         </div>

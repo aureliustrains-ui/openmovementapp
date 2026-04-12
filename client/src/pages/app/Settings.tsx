@@ -124,6 +124,7 @@ export default function MyProfilePage() {
         role: sessionUser.role,
         status: sessionUser.status,
         avatar: updatedProfile.avatar || null,
+        infos: updatedProfile.infos ?? (form.firstName.trim() || null),
       });
       toast({ title: "Profile saved" });
     } catch (error: any) {
@@ -338,6 +339,7 @@ export default function MyProfilePage() {
         role: sessionUser.role,
         status: sessionUser.status,
         avatar: avatarPath || null,
+        infos: sessionUser.infos ?? null,
       });
       toast({ title: "Profile photo updated" });
       clearAvatarDraft();
@@ -360,6 +362,7 @@ export default function MyProfilePage() {
         role: sessionUser.role,
         status: sessionUser.status,
         avatar: null,
+        infos: updatedProfile.infos ?? sessionUser.infos ?? null,
       });
       toast({ title: "Profile photo removed" });
     } catch {
@@ -442,7 +445,7 @@ export default function MyProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Name</Label>
+              <Label>Last name</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
