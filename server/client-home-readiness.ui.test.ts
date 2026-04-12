@@ -187,8 +187,8 @@ test("client check-ins route reuses shared readiness section while home stays ac
     "Legacy readiness route should redirect to the new check-ins destination",
   );
   assert.ok(
-    checkinsSource.includes("<ClientReadinessSection showFullDetails />"),
-    "Check-ins should host the full readiness explorer section",
+    checkinsSource.includes("<ClientReadinessSection compactForCheckins />"),
+    "Check-ins should host the compact trends-focused readiness section",
   );
   assert.ok(
     readinessPageSource.includes("<ClientReadinessSection showFullDetails />"),

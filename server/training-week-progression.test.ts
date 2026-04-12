@@ -85,16 +85,23 @@ test("incomplete week stays current and not ready_for_checkin", () => {
 
 test("client dashboard renders weekly check-in inside Action Required section", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
+  const homePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
-  const source = fs.readFileSync(myPhasePath, "utf8");
-  const actionRequiredSectionIndex = source.indexOf('data-testid="section-action-required"');
-  const weeklyCardIndex = source.indexOf('testId="card-action-weekly-checkin"');
+  const homeSource = fs.readFileSync(homePath, "utf8");
+  const myPhaseSource = fs.readFileSync(myPhasePath, "utf8");
 
-  assert.ok(actionRequiredSectionIndex >= 0, "Action Required section should exist");
-  assert.ok(weeklyCardIndex >= 0, "Weekly check-in action card should exist");
   assert.ok(
-    actionRequiredSectionIndex <= weeklyCardIndex,
-    "Weekly check-in card should be rendered inside Action Required",
+    homeSource.includes('testId="card-home-weekly-checkin"'),
+    "Home should include a weekly check-in action card",
+  );
+  assert.ok(
+    myPhaseSource.includes("const weeklyCheckinDue ="),
+    "Plan should still compute due-week state for weekly check-in gating",
+  );
+  assert.equal(
+    myPhaseSource.includes('testId="card-home-weekly-checkin"'),
+    false,
+    "Plan should not duplicate Home action cards",
   );
 });
 
@@ -174,7 +181,9 @@ test("client dashboard defaults selected phase to active phase with deterministi
 test("weekly action visibility uses server due status with lifecycle fallback", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
+  const homePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
   const source = fs.readFileSync(myPhasePath, "utf8");
+  const homeSource = fs.readFileSync(homePath, "utf8");
 
   assert.ok(
     source.includes("weeklyCheckinsCurrentOrDueQuery"),
@@ -199,8 +208,12 @@ test("weekly action visibility uses server due status with lifecycle fallback", 
     "Weekly action visibility should never hide due card when lifecycle marks a due week",
   );
   assert.ok(
-    source.includes("buildActionRequiredItems({"),
-    "Action Required section should derive weekly card visibility from shared action item builder",
+    homeSource.includes("const weeklyCheckinDue = Boolean("),
+    "Home action cards should derive weekly due state from notification summary",
+  );
+  assert.ok(
+    homeSource.includes('testId="card-home-weekly-checkin"'),
+    "Home should expose weekly check-in entry card when due",
   );
 });
 
@@ -227,16 +240,19 @@ test("client check-in actions are gated by real session identity and impersonati
 
 test("client dashboard keeps core main items rendered in the same conditional flow", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
+  const homePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
+  const homeSource = fs.readFileSync(homePath, "utf8");
   const source = fs.readFileSync(myPhasePath, "utf8");
 
   assert.ok(source.includes('data-testid="card-start-next-session"'));
   assert.ok(source.includes('data-testid="button-start-next-session"'));
-  assert.ok(source.includes('data-testid="section-action-required"'));
-  assert.ok(source.includes('testId="card-action-weekly-checkin"'));
-  assert.ok(source.includes('testId="card-action-progress-report"'));
   assert.ok(source.includes('data-testid="card-schedule-grid"'));
   assert.ok(source.includes('data-testid="text-week-progress"'));
+  assert.ok(homeSource.includes('data-testid="button-home-start-next-session"'));
+  assert.ok(homeSource.includes('testId="card-home-weekly-checkin"'));
+  assert.ok(homeSource.includes('testId="card-home-progress-update"'));
+  assert.ok(homeSource.includes('testId="card-home-movement-check"'));
 });
 
 test("week area is compact and non-horizontal-scroll while keeping schedule content", () => {

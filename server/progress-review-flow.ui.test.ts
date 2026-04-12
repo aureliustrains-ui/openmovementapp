@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const sessionViewPath = path.resolve(serverDir, "../client/src/pages/client/SessionView.tsx");
 const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
+const homePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
 const progressReportPath = path.resolve(serverDir, "../client/src/pages/client/ProgressReport.tsx");
 const clientProfilePath = path.resolve(serverDir, "../client/src/pages/admin/ClientProfile.tsx");
 const reviewSubmissionRowPath = path.resolve(
@@ -55,46 +56,35 @@ test("standard exercise details renderer is reused across plan, movement check, 
     "Progress report should render one exercise title/header and avoid duplicate in details block",
   );
   assert.ok(
-    progressReportSource.includes("Describe measurable progress"),
-    "Progress report should include helper text for measurable improvements",
+    progressReportSource.includes("Describe achieved parameters for each movement."),
+    "Progress report should include concise movement-focused helper text",
   );
 });
 
-test("client dashboard uses unified Action Required cards for weekly check-in and progress report", () => {
-  const source = fs.readFileSync(myPhasePath, "utf8");
+test("client action cards are surfaced on Home while Plan stays schedule-focused", () => {
+  const homeSource = fs.readFileSync(homePath, "utf8");
+  const myPhaseSource = fs.readFileSync(myPhasePath, "utf8");
 
   assert.ok(
-    source.includes('import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";'),
-    "MyPhase should use the shared ActionRequiredCard component",
+    homeSource.includes('import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";'),
+    "Home should use shared ActionRequiredCard entries for due items",
   );
   assert.ok(
-    source.includes('data-testid="section-action-required"'),
-    "Dashboard should render a unified Action Required section",
+    homeSource.includes('testId="card-home-weekly-checkin"'),
+    "Home should expose the weekly check-in action card",
   );
   assert.ok(
-    source.includes("{hasActionRequiredSection && ("),
-    "Action Required section should be conditional and hidden when no tasks exist",
+    homeSource.includes('testId="card-home-progress-update"'),
+    "Home should expose the progress update action card",
   );
   assert.ok(
-    source.includes('testId="card-action-weekly-checkin"'),
-    "Action Required should include weekly check-in card",
-  );
-  assert.ok(
-    source.includes('testId="card-action-progress-report"'),
-    "Action Required should include progress report card",
-  );
-  assert.ok(
-    source.includes("buildActionRequiredItems({"),
-    "Action Required rendering should be driven by shared visibility logic",
+    homeSource.includes('testId="card-home-movement-check"'),
+    "Home should expose the movement-check action card",
   );
   assert.equal(
-    source.includes('testId="card-progress-report"'),
+    myPhaseSource.includes('testId="card-home-weekly-checkin"'),
     false,
-    "Progress report should not render a duplicate second banner below the schedule",
-  );
-  assert.ok(
-    source.includes('data-testid="card-phase-progress-report-context"'),
-    "Dashboard should render a phase-context progress report card below schedule when not actionable",
+    "Plan should not duplicate Home check-in action cards",
   );
 });
 

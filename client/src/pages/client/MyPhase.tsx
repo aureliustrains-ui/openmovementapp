@@ -6,7 +6,6 @@ import {
   weeklyCheckinsMeQuery,
   weeklyCheckinsCurrentOrDueQuery,
   useCreateWeeklyCheckin,
-  myActivePhaseProgressReportsQuery,
   useCreateClientVideoUploadTarget,
   uploadClientVideoToObjectStorage,
 } from "@/lib/api";
@@ -15,7 +14,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Lock, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays, ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronRight, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays, ChevronDown } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -31,9 +30,7 @@ import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview, isScheduleEntryCompleted } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
-import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { VideoUploadField } from "@/components/client/VideoUploadField";
-import { buildActionRequiredItems, pickLatestProgressReportForPhase } from "@/lib/actionRequired";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const PLAN_SCHEDULE_ACCENT = "#1F2937";
@@ -46,50 +43,14 @@ const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
 ]);
 const MAX_CLIENT_VIDEO_BYTES = 250 * 1024 * 1024;
 
-function getProgressReportStatusMeta(status: string): {
-  label: string;
-  tone: "info" | "success" | "neutral" | "warning";
-  ctaLabel: string;
-  description: string;
-} {
-  if (status === "resubmission_requested") {
-    return {
-      label: "Resubmission requested",
-      tone: "warning",
-      ctaLabel: "Open update",
-      description: "Coach requested an updated submission. Please resubmit with improvements.",
-    };
+function hasValidHttpVideoLink(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
   }
-  if (status === "submitted") {
-    return {
-      label: "Submitted",
-      tone: "success",
-      ctaLabel: "View update",
-      description: "Your submission is in. Keep training while your coach reviews it.",
-    };
-  }
-  if (status === "approved") {
-    return {
-      label: "Approved",
-      tone: "success",
-      ctaLabel: "View update",
-      description: "Coach approved this progress update for your active plan.",
-    };
-  }
-  if (status === "reviewed") {
-    return {
-      label: "Reviewed",
-      tone: "neutral",
-      ctaLabel: "View update",
-      description: "Coach review is completed for this phase report.",
-    };
-  }
-  return {
-    label: "Requested",
-    tone: "info",
-    ctaLabel: "Open update",
-    description: "Submit quick links for selected exercises while continuing normal training.",
-  };
 }
 
 export default function ClientMyPhase() {
@@ -108,10 +69,6 @@ export default function ClientMyPhase() {
   const { data: weeklyCheckinStatus } = useQuery({
     ...weeklyCheckinsCurrentOrDueQuery,
     enabled: !!sessionUser && !isCheckinReadOnly,
-  });
-  const { data: activePhaseProgressReports = [] } = useQuery({
-    ...myActivePhaseProgressReportsQuery,
-    enabled: !!sessionUser && !impersonating && sessionUser.role === "Client",
   });
   const updatePhase = useUpdatePhase();
   const createWeeklyCheckin = useCreateWeeklyCheckin();
@@ -136,6 +93,14 @@ export default function ClientMyPhase() {
   const [weeklyNote, setWeeklyNote] = useState("");
   const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
   const previousRecommendedWeekRef = useRef<number | null>(null);
+  const weeklyCheckinQueryHandledRef = useRef(false);
+  const movementLinkDraft = videoUrl.trim();
+  const movementFileReady = movementUploadFile
+    ? ALLOWED_CLIENT_VIDEO_TYPES.has(movementUploadFile.type) &&
+      movementUploadFile.size <= MAX_CLIENT_VIDEO_BYTES
+    : false;
+  const movementLinkReady = hasValidHttpVideoLink(movementLinkDraft);
+  const movementDraftReady = movementFileReady || movementLinkReady;
 
   if (!viewedUser) return null;
 
@@ -350,25 +315,6 @@ export default function ClientMyPhase() {
     }
   };
 
-  const openWeeklyCheckin = () => {
-    if (isCheckinReadOnly) {
-      toast({
-        title: "Read-only client context",
-        description:
-          "Weekly check-ins can be submitted only in a real client session for this client.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setWeeklyCheckinStep(1);
-    setWeeklySleep(3);
-    setWeeklyEnergy(3);
-    setWeeklyInjuryAffected(false);
-    setWeeklyInjuryImpact(null);
-    setWeeklyNote("");
-    setWeeklyCheckinOpen(true);
-  };
-
   const handleSubmitWeeklyCheckin = async () => {
     if (isCheckinReadOnly) {
       toast({
@@ -494,32 +440,29 @@ export default function ClientMyPhase() {
     Boolean(dueWeekStatus) ||
     Boolean(weeklyCheckinStatusForPhase?.due) ||
     currentWeekStatus?.state === "ready_for_checkin";
-  const latestPhaseProgressReport = currentPhase
-    ? pickLatestProgressReportForPhase(
-        activePhaseProgressReports as Array<{
-          id: string;
-          phaseId: string;
-          status: "requested" | "submitted" | "approved" | "resubmission_requested" | "reviewed";
-          createdAt: string;
-        }>,
-        currentPhase.id,
-      )
-    : null;
-  const progressStatusMeta = latestPhaseProgressReport
-    ? getProgressReportStatusMeta(latestPhaseProgressReport.status)
-    : null;
-  const progressNeedsAction =
-    latestPhaseProgressReport &&
-    (latestPhaseProgressReport.status === "requested" ||
-      latestPhaseProgressReport.status === "resubmission_requested");
-  const progressSecondaryStatus =
-    latestPhaseProgressReport && !progressNeedsAction ? latestPhaseProgressReport.status : null;
-  const actionRequiredItems = buildActionRequiredItems({
-    weeklyDue: weeklyCheckinDue,
-    weeklyWeekNumber: weeklyCheckinWeek,
-    progressReport: progressNeedsAction ? latestPhaseProgressReport : null,
-  });
-  const hasActionRequiredSection = actionRequiredItems.length > 0;
+
+  useEffect(() => {
+    if (weeklyCheckinQueryHandledRef.current) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("weeklyCheckin") !== "1") return;
+
+    weeklyCheckinQueryHandledRef.current = true;
+    if (!isMovementCheckPhase && !isCheckinReadOnly && weeklyCheckinDue) {
+      setWeeklyCheckinStep(1);
+      setWeeklySleep(3);
+      setWeeklyEnergy(3);
+      setWeeklyInjuryAffected(false);
+      setWeeklyInjuryImpact(null);
+      setWeeklyNote("");
+      setWeeklyCheckinOpen(true);
+    }
+
+    params.delete("weeklyCheckin");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [isCheckinReadOnly, isMovementCheckPhase, weeklyCheckinDue]);
 
   const isEntryCompleted = (entry: any, session: any) => {
     return isScheduleEntryCompleted(
@@ -590,23 +533,31 @@ export default function ClientMyPhase() {
       )}
 
       {isMovementCheckPhase ? (
-        <div className="animate-in fade-in slide-in-from-bottom-4">
-          <div className="text-center mb-10 mt-4">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-6">
-              <Lock className="h-8 w-8" />
-            </div>
-            <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">Movement Check Required</h1>
-            <p className="text-slate-600 mt-3 text-lg">Your coach needs to review your form before unlocking: <span className="font-semibold text-slate-900">{currentPhase.name}</span></p>
-            {currentPhase.goal && (
-              <p className="text-slate-500 mt-2 whitespace-pre-line break-words">
-                {currentPhase.goal} &middot; {currentPhase.durationWeeks} weeks
-              </p>
-            )}
+        <div id="movement-checks" className="animate-in fade-in slide-in-from-bottom-4">
+          <div className="mb-3 mt-1">
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">
+              Movement check
+            </h1>
+            <p className="mt-2 text-[15px] leading-6 text-slate-600">
+              To unlock your new phase, complete the movement check. Watch the reference video closely and match the movement quality, tempo, and execution. Trim the video so the whole person is visible and walking in or out of frame is not included.
+            </p>
           </div>
 
           <div className="space-y-4">
             {movementChecks.map((mc: any, i: number) => (
-              <Card key={i} className="border-2 border-slate-200 shadow-sm rounded-xl overflow-hidden bg-white" data-testid={`card-movement-check-${i}`}>
+              <Card
+                key={i}
+                className={`border-2 shadow-sm rounded-xl overflow-hidden transition-colors ${
+                  isUploadOpen &&
+                  selectedExerciseId === mc.exerciseId &&
+                  movementDraftReady &&
+                  mc.status !== "Approved" &&
+                  mc.status !== "Pending"
+                    ? "border-[var(--color-brand-500)] bg-[var(--color-brand-50)]/20"
+                    : "border-slate-200 bg-white"
+                }`}
+                data-testid={`card-movement-check-${i}`}
+              >
                 <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                   <div className="flex-1">
                     {(() => {
@@ -622,6 +573,19 @@ export default function ClientMyPhase() {
                       }>
                         {mc.status || 'Not Submitted'}
                       </Badge>
+                      {isUploadOpen &&
+                      selectedExerciseId === mc.exerciseId &&
+                      movementDraftReady &&
+                      mc.status !== "Approved" &&
+                      mc.status !== "Pending" ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-400)]"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          Ready
+                        </Badge>
+                      ) : null}
                     </div>
                     <ExerciseStandardDetails exercise={{ ...exercise, name: exercise?.name || mc.name }} />
                     {mc.approvedNote && mc.status === 'Approved' && (
@@ -689,32 +653,6 @@ export default function ClientMyPhase() {
               </div>
             )}
           </div>
-
-          {hasActionRequiredSection && (
-            <section className="space-y-2.5" data-testid="section-action-required">
-              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900">Needs your attention</h2>
-              <div className="space-y-3">
-                {weeklyCheckinDue && (
-                  <ActionRequiredCard
-                    title="Weekly check-in"
-                    ctaLabel="Complete weekly check-in"
-                    onCtaClick={openWeeklyCheckin}
-                    ctaDisabled={isCheckinReadOnly}
-                    testId="card-action-weekly-checkin"
-                  />
-                )}
-                {progressNeedsAction && latestPhaseProgressReport && progressStatusMeta && (
-                  <ActionRequiredCard
-                    title="Progress update"
-                    ctaLabel="Open update"
-                    ctaHref={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}
-                    ctaVariant="secondaryDark"
-                    testId="card-action-progress-report"
-                  />
-                )}
-              </div>
-            </section>
-          )}
 
           <div>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
@@ -893,41 +831,6 @@ export default function ClientMyPhase() {
               </div>
             )}
 
-            {latestPhaseProgressReport && progressStatusMeta && progressSecondaryStatus && (
-              <Card
-                className={`mt-6 rounded-xl shadow-sm ${
-                  progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
-                    ? "border-[var(--color-done-border)] bg-[var(--color-done-background)]"
-                    : "border-slate-200 bg-white"
-                }`}
-                data-testid="card-phase-progress-report-context"
-              >
-                <CardContent className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress update</p>
-                      <Badge
-                        variant="outline"
-                        className={
-                          progressSecondaryStatus === "approved" || progressSecondaryStatus === "reviewed"
-                            ? "bg-white text-[var(--color-done-foreground)] border-[var(--color-done-border)]"
-                            : "bg-slate-100 text-slate-700 border-slate-200"
-                        }
-                      >
-                        {progressStatusMeta.label}
-                      </Badge>
-                    </div>
-                    <p className="text-slate-700">{progressStatusMeta.description}</p>
-                  </div>
-                  <Link href={`/app/client/progress-reports/${latestPhaseProgressReport.id}`}>
-                    <Button variant="secondaryDark">
-                      {progressStatusMeta.ctaLabel}
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </>
       )}
@@ -1087,6 +990,12 @@ export default function ClientMyPhase() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {movementDraftReady ? (
+              <div className="rounded-lg border border-[var(--color-brand-400)] bg-[var(--color-brand-100)] px-3 py-2 text-sm text-[var(--color-brand-700)] font-medium">
+                <CheckCircle2 className="h-4 w-4 inline mr-1.5 align-text-bottom" />
+                Ready to submit
+              </div>
+            ) : null}
             <VideoUploadField
               fileInputId="video-file"
               linkInputId="video-url"
@@ -1123,7 +1032,7 @@ export default function ClientMyPhase() {
               data-testid="button-submit-video"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
-              Submit for Review
+              {isSubmitting ? "Submitting..." : "Submit for Review"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,9 +1,10 @@
-import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { UploadCloud } from "lucide-react";
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { ChevronDown, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const ACCEPTED_VIDEO_TYPES =
   "video/mp4,video/quicktime,video/webm,video/x-matroska,video/3gpp";
@@ -33,6 +34,13 @@ export function VideoUploadField({
 }: VideoUploadFieldProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(Boolean(linkValue.trim()));
+
+  useEffect(() => {
+    if (linkValue.trim().length > 0) {
+      setShowLinkInput(true);
+    }
+  }, [linkValue]);
 
   const openFilePicker = () => {
     if (disabled) return;
@@ -119,18 +127,33 @@ export function VideoUploadField({
         </div>
       ) : null}
 
-      <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
-        <Label htmlFor={linkInputId}>Video link (optional)</Label>
-        <p className="text-xs text-slate-500">Use this if you cannot upload your video directly.</p>
-        <Input
-          id={linkInputId}
-          placeholder="https://youtube.com/... or https://drive.google.com/..."
-          value={linkValue}
-          onChange={(event) => onLinkChange(event.target.value)}
-          disabled={disabled}
-          data-testid={linkTestId}
-        />
-      </div>
+      <Collapsible open={showLinkInput} onOpenChange={setShowLinkInput}>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            disabled={disabled}
+          >
+            <span>Video link</span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showLinkInput ? "rotate-180" : "")} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2">
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+            <Label htmlFor={linkInputId}>Video link</Label>
+            <p className="text-xs text-slate-500">Use this if you cannot upload your video directly.</p>
+            <Input
+              id={linkInputId}
+              placeholder="https://youtube.com/... or https://drive.google.com/..."
+              value={linkValue}
+              onChange={(event) => onLinkChange(event.target.value)}
+              disabled={disabled}
+              data-testid={linkTestId}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

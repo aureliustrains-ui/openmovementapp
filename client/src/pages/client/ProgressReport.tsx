@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { VideoUploadField } from "@/components/client/VideoUploadField";
+import { cn } from "@/lib/utils";
 
 type ProgressReportItem = {
   id: string;
@@ -58,29 +59,14 @@ const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
 ]);
 const MAX_CLIENT_VIDEO_BYTES = 250 * 1024 * 1024;
 
-function getReportStatusMeta(status: ProgressReport["status"]) {
-  if (status === "approved" || status === "reviewed") {
-    return {
-      label: "Approved",
-      badgeClass: "bg-green-100 text-green-700 border-green-200",
-    };
+function hasValidHttpVideoLink(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
   }
-  if (status === "resubmission_requested") {
-    return {
-      label: "Resubmission requested",
-      badgeClass: "bg-red-100 text-red-700 border-red-200",
-    };
-  }
-  if (status === "submitted") {
-    return {
-      label: "Submitted",
-      badgeClass: "bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-500)]",
-    };
-  }
-  return {
-    label: "Requested",
-    badgeClass: "bg-amber-100 text-amber-700 border-amber-200",
-  };
 }
 
 export default function ClientProgressReport() {
@@ -241,11 +227,9 @@ export default function ClientProgressReport() {
     );
   }
 
-  const reportStatusMeta = getReportStatusMeta(typedReport.status);
-
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <Link href="/app/client/my-phase">
           <Button variant="ghost" size="icon" className="h-10 w-10 rounded-full bg-white border border-slate-200 shadow-sm">
             <ChevronLeft className="h-5 w-5" />
@@ -253,12 +237,11 @@ export default function ClientProgressReport() {
         </Link>
         <div>
           <h1 className="text-2xl font-display font-bold text-slate-900">Progress update</h1>
-          <p className="text-sm text-slate-500">Submit requested updates while continuing your normal training.</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Describe measurable progress for each exercise, for example more reps, more weight, cleaner form, or longer holds.
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500 leading-snug">
+            <p>Describe achieved parameters for each movement.</p>
+            <p>Trim the video so the whole person is visible and walking in or out of frame is not included.</p>
+          </div>
         </div>
-        <Badge className={`ml-auto capitalize ${reportStatusMeta.badgeClass}`}>{reportStatusMeta.label}</Badge>
       </div>
 
       {isImpersonationReadOnly && (
@@ -274,10 +257,35 @@ export default function ClientProgressReport() {
           const exercise = phaseExercisesById.get(item.exerciseId);
           const name = exercise?.name || item.exerciseName;
           const hasFeedback = typeof item.feedbackNote === "string" && item.feedbackNote.trim().length > 0;
+          const linkValue = (draft[item.id]?.submissionLink || "").trim();
+          const selectedFile = draftFiles[item.id] || null;
+          const fileReady = selectedFile
+            ? ALLOWED_CLIENT_VIDEO_TYPES.has(selectedFile.type) &&
+              selectedFile.size <= MAX_CLIENT_VIDEO_BYTES
+            : false;
+          const linkReady = hasValidHttpVideoLink(linkValue);
+          const isReady = submissionEditable && (fileReady || linkReady);
           return (
-            <Card key={item.id} className="border-slate-200 shadow-sm rounded-xl bg-white">
-              <CardHeader className="border-b border-slate-100">
+            <Card
+              key={item.id}
+              className={cn(
+                "shadow-sm rounded-xl bg-white transition-colors",
+                isReady
+                  ? "border-[var(--color-brand-500)] bg-[var(--color-brand-50)]/20"
+                  : "border-slate-200",
+              )}
+            >
+              <CardHeader className="border-b border-slate-100 flex flex-row items-center justify-between gap-3 space-y-0">
                 <CardTitle className="text-lg">{name}</CardTitle>
+                {isReady ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-400)]"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                    Ready
+                  </Badge>
+                ) : null}
               </CardHeader>
               <CardContent className="p-5 space-y-4">
                 <ExerciseStandardDetails exercise={{ ...exercise, name }} showName={false} />
@@ -393,7 +401,11 @@ export default function ClientProgressReport() {
             ) : (
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            {typedReport.status === "resubmission_requested" ? "Resubmit progress update" : "Submit progress update"}
+            {submitProgressReport.isPending || uploadingItemId
+              ? "Submitting..."
+              : typedReport.status === "resubmission_requested"
+                ? "Resubmit progress update"
+                : "Submit progress update"}
           </Button>
         </div>
       ) : null}

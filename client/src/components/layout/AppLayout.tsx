@@ -16,7 +16,6 @@ import {
   MessageCircle,
   ListChecks,
   User,
-  Info,
   LogOut,
   Repeat
 } from "lucide-react";
@@ -263,19 +262,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
                     <Link href="/app/client/you" className="flex items-center gap-2">
                       <User className="h-4 w-4" />
                       <span>You</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/app/settings" className="flex items-center gap-2">
-                      <Settings className="h-4 w-4" />
-                      <span>Profile</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/app/client/info" className="flex items-center gap-2">
-                      <Info className="h-4 w-4" />
-                      <span>Guide</span>
                     </Link>
                   </DropdownMenuItem>
                 </>

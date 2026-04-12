@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import ClientReadinessSection from "@/components/client/ClientReadinessSection";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 type ProgressStatus = "requested" | "submitted" | "approved" | "resubmission_requested" | "reviewed";
@@ -23,6 +23,13 @@ type ActivePhaseProgressReport = {
   status: ProgressStatus;
   createdAt: string;
 };
+type RecentActivityItem = {
+  id: string;
+  type: "Weekly" | "Session" | "Progress";
+  submittedAt: string | null;
+  detail: string;
+  href?: string;
+};
 
 function formatDateLabel(value: string | null | undefined): string {
   if (!value) return "—";
@@ -31,6 +38,12 @@ function formatDateLabel(value: string | null | undefined): string {
   } catch {
     return value;
   }
+}
+
+function toTimestamp(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function getProgressStatusLabel(status: ProgressStatus | null | undefined): string {
@@ -101,6 +114,7 @@ export default function ClientCheckIns() {
   const movementActionCount =
     (notificationSummary as { movementActionCount?: number } | undefined)?.movementActionCount ??
     computedMovementActions;
+  const isMovementCheckBlocking = currentPhase?.status === "Waiting for Movement Check";
   const weeklyDue =
     Boolean((notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue) ||
     Boolean((weeklyCurrentOrDue as { due?: boolean } | undefined)?.due);
@@ -108,36 +122,80 @@ export default function ClientCheckIns() {
     latestProgressReport?.status === "requested" ||
     latestProgressReport?.status === "resubmission_requested";
 
-  const dueCount = Number(weeklyDue) + (movementActionCount > 0 ? 1 : 0) + Number(progressNeedsAction);
-  const progressCtaLabel =
-    latestProgressReport &&
-    (latestProgressReport.status === "requested" ||
-      latestProgressReport.status === "resubmission_requested")
-      ? "Open update"
-      : "View update";
+  const dueCount = Number(weeklyDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
 
   const recentWeekly = [...(weeklyCheckins as Array<{ id: string; submittedAt?: string; phaseWeekNumber?: number | null }>)].sort(
     (a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")),
-  ).slice(0, 3);
+  );
   const recentSession = [...(sessionCheckins as Array<{ id: string; submittedAt?: string; rpeOverall?: number; sleepLastNight?: number | null }>)].sort(
     (a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")),
-  ).slice(0, 3);
+  );
 
   const movementSummary = {
     approved: movementChecks.filter((check) => check.status === "Approved").length,
     pending: movementChecks.filter((check) => check.status === "Pending").length,
-    needsResubmission: movementChecks.filter((check) => check.status === "Needs Resubmission").length,
-    notSubmitted: movementChecks.filter((check) => {
-      const normalized = typeof check.status === "string" ? check.status.trim() : "";
-      return !normalized || normalized === "Not Submitted";
-    }).length,
   };
+  const hasMovementInReview = movementSummary.pending > 0 || movementSummary.approved > 0;
+  const hasProgressInReview =
+    latestProgressReport?.status === "submitted" ||
+    latestProgressReport?.status === "approved" ||
+    latestProgressReport?.status === "reviewed";
+
+  const recentActivity: RecentActivityItem[] = [
+    ...recentWeekly.slice(0, 4).map((entry) => ({
+      id: `weekly-${entry.id}`,
+      type: "Weekly" as const,
+      submittedAt: entry.submittedAt || null,
+      detail: `Week ${entry.phaseWeekNumber ?? "—"} check-in submitted.`,
+    })),
+    ...recentSession.slice(0, 4).map((entry) => ({
+      id: `session-${entry.id}`,
+      type: "Session" as const,
+      submittedAt: entry.submittedAt || null,
+      detail: `Effort ${entry.rpeOverall ?? "—"}/10 · Sleep ${entry.sleepLastNight ?? "—"}/10`,
+    })),
+    ...(latestProgressReport && latestProgressReport.status !== "requested"
+      ? [
+          {
+            id: `progress-${latestProgressReport.id}`,
+            type: "Progress" as const,
+            submittedAt: latestProgressReport.createdAt || null,
+            detail: `Progress update status: ${getProgressStatusLabel(latestProgressReport.status)}.`,
+            href: `/app/client/progress-reports/${latestProgressReport.id}`,
+          },
+        ]
+      : []),
+  ]
+    .sort((a, b) => toTimestamp(b.submittedAt) - toTimestamp(a.submittedAt))
+    .slice(0, 8);
+  const recentActivityList = (
+    <div className="divide-y divide-slate-100">
+      {recentActivity.map((entry) => (
+        <div key={entry.id} className="py-2.5 first:pt-0 last:pb-0">
+          <div className="flex items-center justify-between gap-3">
+            <Badge variant="outline" className="border-slate-300 text-slate-700 text-[11px]">
+              {entry.type}
+            </Badge>
+            <p className="text-xs text-slate-500">{formatDateLabel(entry.submittedAt)}</p>
+          </div>
+          <p className="mt-1 text-sm text-slate-700">{entry.detail}</p>
+          {entry.href ? (
+            <Link
+              href={entry.href}
+              className="mt-1 inline-block text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
+            >
+              Open
+            </Link>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in">
       <section>
         <h1 className="text-3xl font-display font-bold tracking-tight text-slate-900">Check-ins</h1>
-        <p className="mt-1 text-sm text-slate-500">Due items, recent submissions, and trends in one place.</p>
       </section>
 
       {isReadOnly ? (
@@ -149,8 +207,8 @@ export default function ClientCheckIns() {
       ) : null}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-display font-bold text-slate-900">Due</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-display font-bold text-slate-900">Action required</h2>
           <Badge variant="outline" className="border-slate-300 text-slate-700">
             {dueCount} open
           </Badge>
@@ -159,28 +217,28 @@ export default function ClientCheckIns() {
         {dueCount === 0 ? (
           <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
             <CardContent className="p-4 text-sm text-slate-600">
-              You are all caught up.
+              You are all caught up for now.
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
-            {weeklyDue ? (
+            {movementActionCount > 0 && isMovementCheckBlocking ? (
               <ActionRequiredCard
-                title="Weekly check-in"
-                description="Your current training week is ready to close."
-                ctaLabel="Open weekly check-in"
-                ctaHref="/app/client/my-phase"
+                title="Movement check"
+                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
+                ctaLabel="Open movement checks"
+                ctaHref="/app/client/my-phase#movement-checks"
                 ctaDisabled={isReadOnly}
                 ctaVariant="secondaryDark"
               />
             ) : null}
 
-            {movementActionCount > 0 ? (
+            {weeklyDue ? (
               <ActionRequiredCard
-                title="Movement check"
-                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
-                ctaLabel="Open movement checks"
-                ctaHref="/app/client/my-phase"
+                title="Weekly check-in"
+                description="Your current training week is ready to close."
+                ctaLabel="Complete weekly check-in"
+                ctaHref="/app/client/my-phase?weeklyCheckin=1"
                 ctaDisabled={isReadOnly}
                 ctaVariant="secondaryDark"
               />
@@ -196,98 +254,103 @@ export default function ClientCheckIns() {
                 ctaVariant="secondaryDark"
               />
             ) : null}
+
+            {movementActionCount > 0 && !isMovementCheckBlocking ? (
+              <ActionRequiredCard
+                title="Movement check"
+                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
+                ctaLabel="Open movement checks"
+                ctaHref="/app/client/my-phase#movement-checks"
+                ctaDisabled={isReadOnly}
+                ctaVariant="secondaryDark"
+              />
+            ) : null}
           </div>
         )}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="space-y-3">
+        <h2 className="text-xl font-display font-bold text-slate-900">In review</h2>
         <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent weekly check-ins</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 pt-0">
-            {recentWeekly.length === 0 ? (
-              <p className="text-sm text-slate-500">No weekly check-ins yet.</p>
+          <CardContent className="p-4 space-y-3">
+            {!hasMovementInReview && !hasProgressInReview ? (
+              <p className="text-sm text-slate-600">No items are currently waiting for review.</p>
             ) : (
-              recentWeekly.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <p className="font-medium text-slate-800">
-                    Week {entry.phaseWeekNumber ?? "—"}
-                  </p>
-                  <p className="text-xs text-slate-500">{formatDateLabel(entry.submittedAt)}</p>
-                </div>
-              ))
+              <>
+                {movementSummary.pending > 0 ? (
+                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Movement checks</p>
+                      <p className="text-xs text-slate-600">
+                        {movementSummary.pending} pending coach review
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="border-slate-300 text-slate-700">
+                      Pending review
+                    </Badge>
+                  </div>
+                ) : null}
+                {movementSummary.approved > 0 ? (
+                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Movement checks</p>
+                      <p className="text-xs text-slate-600">{movementSummary.approved} approved</p>
+                    </div>
+                    <Badge variant="outline" className="border-slate-300 text-slate-700">
+                      Approved
+                    </Badge>
+                  </div>
+                ) : null}
+                {hasProgressInReview && latestProgressReport ? (
+                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">Progress update</p>
+                      <p className="text-xs text-slate-600">
+                        {getProgressStatusLabel(latestProgressReport.status)}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/app/client/progress-reports/${latestProgressReport.id}`}
+                      className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
+                    >
+                      Open
+                    </Link>
+                  </div>
+                ) : null}
+              </>
             )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent session reviews</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 pt-0">
-            {recentSession.length === 0 ? (
-              <p className="text-sm text-slate-500">No session reviews yet.</p>
-            ) : (
-              recentSession.map((entry) => (
-                <div key={entry.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <p className="font-medium text-slate-800">RPE {entry.rpeOverall ?? "—"}/10</p>
-                  <p className="text-xs text-slate-500">
-                    Sleep {entry.sleepLastNight ?? "—"}/10 · {formatDateLabel(entry.submittedAt)}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Movement check status</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-sm text-slate-700 space-y-1.5">
-            <p>Approved: {movementSummary.approved}</p>
-            <p>Pending review: {movementSummary.pending}</p>
-            <p>Needs resubmission: {movementSummary.needsResubmission}</p>
-            <p>Not submitted: {movementSummary.notSubmitted}</p>
-            <div className="pt-2">
-              <Link href="/app/client/my-phase" className="text-sm font-medium text-slate-700 underline-offset-2 hover:underline">
-                Open Plan
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Progress update status</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-sm text-slate-700 space-y-1.5">
-            <p>{getProgressStatusLabel((latestProgressReport?.status || null) as ProgressStatus | null)}</p>
-            {latestProgressReport ? (
-              <p className="text-xs text-slate-500">Requested {formatDateLabel(latestProgressReport.createdAt)}</p>
-            ) : (
-              <p className="text-xs text-slate-500">No update requested for your active plan.</p>
-            )}
-            {latestProgressReport ? (
-              <div className="pt-2">
-                <Link
-                  href={`/app/client/progress-reports/${latestProgressReport.id}`}
-                  className="text-sm font-medium text-slate-700 underline-offset-2 hover:underline"
-                >
-                  {progressCtaLabel}
-                </Link>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-display font-bold text-slate-900">Trends</h2>
-        <ClientReadinessSection showFullDetails />
+        <ClientReadinessSection compactForCheckins />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-xl font-display font-bold text-slate-900">Recent activity</h2>
+        {recentActivity.length === 0 ? (
+          <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
+            <CardContent className="p-4">
+              <p className="text-sm text-slate-600">No recent check-in activity yet.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <div className="md:hidden">
+              <details className="rounded-xl border border-slate-200 bg-white p-3" data-testid="details-checkins-recent-activity-mobile">
+                <summary className="cursor-pointer text-sm font-medium text-slate-700">
+                  Show recent activity
+                </summary>
+                <div className="mt-2">{recentActivityList}</div>
+              </details>
+            </div>
+            <Card className="hidden md:block border-slate-200 shadow-sm rounded-xl bg-white">
+              <CardContent className="p-4">{recentActivityList}</CardContent>
+            </Card>
+          </>
+        )}
       </section>
     </div>
   );

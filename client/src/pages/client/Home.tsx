@@ -12,12 +12,11 @@ import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
-import { getClientCounterpartDisplayName } from "@/lib/counterpartDisplayName";
 import { cn } from "@/lib/utils";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
+import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { Loader2, CheckCircle2, ChevronRight, CalendarDays } from "lucide-react";
 
@@ -31,7 +30,6 @@ function resolvePlanDayNumber(day: string | null | undefined): number | null {
 
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
-  const counterpartName = getClientCounterpartDisplayName();
   const isClientSession = sessionUser?.role === "Client";
 
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
@@ -78,8 +76,6 @@ export default function ClientHome() {
       )
     : null;
   const currentTrainingWeek = weekLifecycle?.currentWeek || 1;
-  const currentWeekStatus =
-    weekLifecycle?.weeks.find((status) => status.week === currentTrainingWeek) || null;
 
   const weekSchedulePreview = getWeekSchedulePreview(
     currentTrainingWeek,
@@ -96,10 +92,6 @@ export default function ClientHome() {
         slot: weekSchedulePreview.nextScheduleItem.entry.slot,
       })
     : null;
-  const nextSessionWeek = weekSchedulePreview.nextScheduleItem?.entry.week ?? currentTrainingWeek;
-  const nextSessionDayNumber = weekSchedulePreview.nextScheduleItem
-    ? resolvePlanDayNumber(weekSchedulePreview.nextScheduleItem.entry.day)
-    : null;
 
   const introVideoUrl =
     typeof progressPhase?.homeIntroVideoUrl === "string" && progressPhase.homeIntroVideoUrl.trim().length > 0
@@ -115,7 +107,8 @@ export default function ClientHome() {
   );
   const movementActionCount =
     (notificationSummary as { movementActionCount?: number } | undefined)?.movementActionCount || 0;
-  const dueCount = Number(weeklyCheckinDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
+  const dueCount =
+    Number(progressNeedsAction) + Number(weeklyCheckinDue) + Number(movementActionCount > 0);
 
   if (loadingPhases) {
     return (
@@ -140,12 +133,10 @@ export default function ClientHome() {
           )}
           .
         </h1>
-        <p className="mt-1 text-sm text-slate-500">Today&apos;s plan, your next session, and pending check-ins.</p>
       </section>
 
       {introVideoUrl ? (
         <section>
-          <p className="mb-2 text-xs uppercase tracking-wider text-slate-500">From {counterpartName}</p>
           <InlineVideoPlayer url={introVideoUrl} testId="client-home-intro-video" flush />
         </section>
       ) : null}
@@ -155,14 +146,10 @@ export default function ClientHome() {
           <CardContent className="p-5 md:p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">Next session</h2>
-                {weekSchedulePreview.nextScheduleItem ? (
-                  <p className="text-sm text-slate-600 mt-1">
-                    {nextSessionDayNumber !== null
-                      ? `Week ${nextSessionWeek} • Day ${nextSessionDayNumber}`
-                      : `Week ${nextSessionWeek}`}
-                  </p>
-                ) : null}
+                <p className="text-xs uppercase tracking-wider text-slate-500">Next movement session</p>
+                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
+                  {weekSchedulePreview.nextScheduleItem?.session.name || "No session scheduled"}
+                </h2>
               </div>
               {weekSchedulePreview.nextScheduleItem && nextSessionDestination ? (
                 <Link href={nextSessionDestination.href}>
@@ -183,51 +170,44 @@ export default function ClientHome() {
         </Card>
       </div>
 
-      <section className="space-y-3">
-        {dueCount === 0 ? (
-          <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-            <CardContent className="p-4 text-sm text-slate-600">No pending check-ins right now.</CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {weeklyCheckinDue ? (
-              <ActionRequiredCard
-                title="Weekly check-in"
-                description="Your current training week is ready to close."
-                ctaLabel="Open weekly check-in"
-                ctaHref="/app/client/check-ins"
-                ctaVariant="secondaryDark"
-              />
-            ) : null}
-            {movementActionCount > 0 ? (
-              <ActionRequiredCard
-                title="Movement check"
-                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
-                ctaLabel="Open movement checks"
-                ctaHref="/app/client/check-ins"
-                ctaVariant="secondaryDark"
-              />
-            ) : null}
-            {progressNeedsAction ? (
-              <Card className="border-slate-200 shadow-sm rounded-xl bg-white" data-testid="card-home-progress-update">
-                <CardContent className="p-3.5 md:p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
-                      Progress update
-                    </span>
-                    <Link href={latestProgressReport ? `/app/client/progress-reports/${latestProgressReport.id}` : "/app/client/check-ins"}>
-                      <Button variant="secondaryDark" size="sm" className="h-9 min-h-9 px-3 text-xs">
-                        Open update
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
-          </div>
-        )}
-      </section>
+      {dueCount > 0 ? (
+        <section className="space-y-3">
+          {progressNeedsAction ? (
+            <ActionRequiredCard
+              title="Progress update"
+              description="A progress update is requested for your active plan."
+              ctaLabel="Open update"
+              ctaHref={latestProgressReport ? `/app/client/progress-reports/${latestProgressReport.id}` : "/app/client/my-phase"}
+              ctaVariant="secondaryDark"
+              testId="card-home-progress-update"
+            />
+          ) : null}
+          {movementActionCount > 0 ? (
+            <ActionRequiredCard
+              title="Movement check"
+              description={
+                movementActionCount === 1
+                  ? "One movement check needs your input."
+                  : `${movementActionCount} movement check items need your input.`
+              }
+              ctaLabel="Open movement checks"
+              ctaHref="/app/client/my-phase#movement-checks"
+              ctaVariant="secondaryDark"
+              testId="card-home-movement-check"
+            />
+          ) : null}
+          {weeklyCheckinDue ? (
+            <ActionRequiredCard
+              title="Weekly check-in"
+              description="Your current training week is ready to close."
+              ctaLabel="Complete weekly check-in"
+              ctaHref="/app/client/my-phase?weeklyCheckin=1"
+              ctaVariant="secondaryDark"
+              testId="card-home-weekly-checkin"
+            />
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
@@ -235,7 +215,7 @@ export default function ClientHome() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500">
                 <CalendarDays className="h-3.5 w-3.5 text-slate-600" />
-                This week
+                Week {currentTrainingWeek}
               </div>
               <Link href="/app/client/my-phase" className="text-xs font-medium text-slate-600 hover:text-slate-900">
                 Open plan
@@ -267,14 +247,13 @@ export default function ClientHome() {
                         <p
                           className={cn(
                             "text-sm font-medium truncate",
-                            item.isCompleted ? "text-slate-500" : "text-slate-900",
+                            item.isCompleted ? "text-slate-500 line-through" : "text-slate-900",
                           )}
                         >
                           {item.session.name}
                         </p>
                         <p className="text-xs text-slate-500">
-                          Week {item.entry.week}
-                          {dayNumber !== null ? ` • Day ${dayNumber}` : ""}
+                          {dayNumber !== null ? `Day ${dayNumber}` : item.entry.day}
                         </p>
                       </div>
                       {item.isCompleted ? (
