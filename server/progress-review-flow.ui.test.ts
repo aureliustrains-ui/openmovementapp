@@ -66,7 +66,9 @@ test("client action cards are surfaced on Home while Plan stays schedule-focused
   const myPhaseSource = fs.readFileSync(myPhasePath, "utf8");
 
   assert.ok(
-    homeSource.includes('import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";'),
+    homeSource.includes(
+      'import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";',
+    ),
     "Home should use shared ActionRequiredCard entries for due items",
   );
   assert.ok(
