@@ -151,6 +151,7 @@ export default function AdminClientProfile() {
   const [progressResubmitFeedback, setProgressResubmitFeedback] = useState("");
   const [submittingProgressReview, setSubmittingProgressReview] = useState(false);
   const [phaseHomeVideoDrafts, setPhaseHomeVideoDrafts] = useState<Record<string, string>>({});
+  const [phaseGuideVideoDrafts, setPhaseGuideVideoDrafts] = useState<Record<string, string>>({});
   const [savingPhaseVideoId, setSavingPhaseVideoId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
@@ -304,6 +305,20 @@ export default function AdminClientProfile() {
     }));
   };
 
+  const getPhaseGuideVideoDraft = (phase: any): string => {
+    if (Object.prototype.hasOwnProperty.call(phaseGuideVideoDrafts, phase.id)) {
+      return phaseGuideVideoDrafts[phase.id] || "";
+    }
+    return typeof phase.homeGuideVideoUrl === "string" ? phase.homeGuideVideoUrl : "";
+  };
+
+  const setPhaseGuideVideoDraft = (phaseId: string, value: string) => {
+    setPhaseGuideVideoDrafts((prev) => ({
+      ...prev,
+      [phaseId]: value,
+    }));
+  };
+
   const savePhaseHomeVideo = async (phase: any, nextValue: string) => {
     const trimmed = nextValue.trim();
     if (trimmed && !normalizeVideoSource(trimmed)) {
@@ -332,6 +347,41 @@ export default function AdminClientProfile() {
       toast({
         title: "Error",
         description: "Could not save the client home video.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPhaseVideoId(null);
+    }
+  };
+
+  const savePhaseGuideVideo = async (phase: any, nextValue: string) => {
+    const trimmed = nextValue.trim();
+    if (trimmed && !normalizeVideoSource(trimmed)) {
+      toast({
+        title: "Invalid video URL",
+        description: "Please add a valid YouTube, Drive, or direct video URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSavingPhaseVideoId(phase.id);
+      await updatePhase.mutateAsync({
+        id: phase.id,
+        homeGuideVideoUrl: trimmed || null,
+      });
+      setPhaseGuideVideoDraft(phase.id, trimmed);
+      toast({
+        title: "Saved",
+        description: trimmed
+          ? "Client guide video updated."
+          : "Client guide video removed.",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "Could not save the client guide video.",
         variant: "destructive",
       });
     } finally {
@@ -835,11 +885,23 @@ export default function AdminClientProfile() {
     const homeVideoDraftParsed = homeVideoDraftTrimmed
       ? normalizeVideoSource(homeVideoDraftTrimmed)
       : null;
+    const guideVideoDraft = getPhaseGuideVideoDraft(phase);
+    const guideVideoDraftTrimmed = guideVideoDraft.trim();
+    const guideVideoDraftParsed = guideVideoDraftTrimmed
+      ? normalizeVideoSource(guideVideoDraftTrimmed)
+      : null;
     const storedHomeVideoUrl =
       typeof phase.homeIntroVideoUrl === "string" && phase.homeIntroVideoUrl.trim().length > 0
         ? phase.homeIntroVideoUrl.trim()
         : "";
+    const storedGuideVideoUrl =
+      typeof phase.homeGuideVideoUrl === "string" && phase.homeGuideVideoUrl.trim().length > 0
+        ? phase.homeGuideVideoUrl.trim()
+        : "";
     const previewVideoUrl = homeVideoDraftParsed ? homeVideoDraftTrimmed : storedHomeVideoUrl;
+    const previewGuideVideoUrl = guideVideoDraftParsed
+      ? guideVideoDraftTrimmed
+      : storedGuideVideoUrl;
     const isSavingHomeVideo = savingPhaseVideoId === phase.id;
 
     return (
@@ -986,11 +1048,65 @@ export default function AdminClientProfile() {
               <p className="text-xs text-red-600">Please enter a valid video URL.</p>
             ) : null}
             {previewVideoUrl ? (
-              <InlineVideoPlayer
-                url={previewVideoUrl}
-                testId={`preview-home-video-${phase.id}`}
-                openLinkLabel="Open intro video"
+              <div className="max-w-md">
+                <InlineVideoPlayer
+                  url={previewVideoUrl}
+                  testId={`preview-home-video-${phase.id}`}
+                  openLinkLabel="Open intro video"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-5 space-y-3">
+            <h5 className="text-sm font-semibold text-slate-600">Client guide video</h5>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={guideVideoDraft}
+                onChange={(event) => setPhaseGuideVideoDraft(phase.id, event.target.value)}
+                placeholder="Paste YouTube, Google Drive, or direct video URL"
+                className="border-slate-200"
+                data-testid={`input-guide-video-${phase.id}`}
               />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  onClick={() => savePhaseGuideVideo(phase, guideVideoDraft)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white"
+                  disabled={isSavingHomeVideo}
+                  data-testid={`button-save-guide-video-${phase.id}`}
+                >
+                  {isSavingHomeVideo ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Save
+                </Button>
+                {storedGuideVideoUrl || guideVideoDraftTrimmed ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => savePhaseGuideVideo(phase, "")}
+                    disabled={isSavingHomeVideo}
+                    data-testid={`button-clear-guide-video-${phase.id}`}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {guideVideoDraftTrimmed && !guideVideoDraftParsed ? (
+              <p className="text-xs text-red-600">Please enter a valid video URL.</p>
+            ) : null}
+            {previewGuideVideoUrl ? (
+              <div className="max-w-md">
+                <InlineVideoPlayer
+                  url={previewGuideVideoUrl}
+                  testId={`preview-guide-video-${phase.id}`}
+                  openLinkLabel="Open guide video"
+                />
+              </div>
             ) : null}
           </div>
         </CardContent>
@@ -1034,7 +1150,6 @@ export default function AdminClientProfile() {
           >
             <Repeat className="mr-2 h-4 w-4" /> Impersonate
           </Button>
-          <Button variant="outline" className="bg-white" data-testid="button-message-client" onClick={() => setActiveTab("chat")}><MessageCircle className="mr-2 h-4 w-4" /> Message</Button>
         </div>
       </div>
 
@@ -1066,7 +1181,7 @@ export default function AdminClientProfile() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-200/50 p-1 rounded-xl w-full justify-start flex-wrap h-auto gap-1">
-          <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Programming</TabsTrigger>
+          <TabsTrigger value="programming" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-programming">Plan</TabsTrigger>
           <TabsTrigger value="chat" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-chat">
             Chat
             {adminNotificationSummary.unreadChatCount > 0 ? (
@@ -1075,7 +1190,7 @@ export default function AdminClientProfile() {
               </span>
             ) : null}
           </TabsTrigger>
-          <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Metrics</TabsTrigger>
+          <TabsTrigger value="checkins" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-checkins">Check-ins</TabsTrigger>
           <TabsTrigger value="structured-logs" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-structured-logs">Notes &amp; Logs</TabsTrigger>
           <TabsTrigger value="movement" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm px-6" data-testid="tab-movement">
             Movement Check

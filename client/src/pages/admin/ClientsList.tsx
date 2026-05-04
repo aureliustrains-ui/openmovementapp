@@ -205,11 +205,8 @@ export default function AdminClientsList() {
 
   return (
     <div className="space-y-8 animate-in fade-in">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-clients-title">Client Management</h1>
-          <p className="text-slate-500 mt-1">Manage active and inactive clients. Open a client to change account access.</p>
-        </div>
+      <div className="flex justify-end">
+        <h1 className="sr-only" data-testid="text-clients-title">Clients</h1>
         <Button 
           className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" 
           data-testid="button-add-client"

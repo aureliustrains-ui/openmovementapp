@@ -63,6 +63,10 @@ export function AddFromTemplatesModal<T>({
             {createLabel}
           </Button>
 
+          <p className="text-xs text-slate-500">
+            Search in this picker is scoped to the currently selected folder location.
+          </p>
+
           <TemplatePickerPanel
             templates={templates}
             folderType={folderType}

@@ -168,11 +168,14 @@ function getProfileFirstName(user: User | undefined): string {
   return getFirstToken(user.name);
 }
 
-function parseOptionalPhaseHomeIntroVideoUrl(value: unknown): string | null | undefined {
+function parseOptionalPhaseVideoUrl(
+  value: unknown,
+  fieldName: "homeIntroVideoUrl" | "homeGuideVideoUrl",
+): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== "string") {
-    throw new AppError("homeIntroVideoUrl must be a string", 400);
+    throw new AppError(`${fieldName} must be a string`, 400);
   }
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -181,10 +184,10 @@ function parseOptionalPhaseHomeIntroVideoUrl(value: unknown): string | null | un
   try {
     parsed = new URL(trimmed);
   } catch {
-    throw new AppError("Invalid home intro video URL", 400);
+    throw new AppError(`Invalid ${fieldName}`, 400);
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new AppError("Invalid home intro video URL protocol", 400);
+    throw new AppError(`Invalid ${fieldName} protocol`, 400);
   }
   return parsed.toString();
 }
@@ -1205,9 +1208,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (client.status === "Removed") {
       return res.status(400).json({ message: "Cannot create phases for removed clients" });
     }
-    const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(payload.homeIntroVideoUrl);
+    const parsedHomeIntroVideoUrl = parseOptionalPhaseVideoUrl(
+      payload.homeIntroVideoUrl,
+      "homeIntroVideoUrl",
+    );
+    const parsedHomeGuideVideoUrl = parseOptionalPhaseVideoUrl(
+      payload.homeGuideVideoUrl,
+      "homeGuideVideoUrl",
+    );
     if (parsedHomeIntroVideoUrl !== undefined) {
       payload.homeIntroVideoUrl = parsedHomeIntroVideoUrl;
+    }
+    if (parsedHomeGuideVideoUrl !== undefined) {
+      payload.homeGuideVideoUrl = parsedHomeGuideVideoUrl;
     }
     const phase = await storage.createPhase(payload as InsertPhase);
     res.status(201).json(phase);
@@ -1389,16 +1402,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const details = parsed.error.issues.map((issue) => issue.message).join("; ");
         return res.status(400).json({ message: details || "Invalid phase update payload" });
       }
-      const parsedHomeIntroVideoUrl = parseOptionalPhaseHomeIntroVideoUrl(
+      const parsedHomeIntroVideoUrl = parseOptionalPhaseVideoUrl(
         parsed.data.homeIntroVideoUrl,
+        "homeIntroVideoUrl",
       );
+      const parsedHomeGuideVideoUrl = parseOptionalPhaseVideoUrl(
+        parsed.data.homeGuideVideoUrl,
+        "homeGuideVideoUrl",
+      );
+      updatePayload = { ...parsed.data };
       if (parsedHomeIntroVideoUrl !== undefined) {
-        updatePayload = {
-          ...parsed.data,
-          homeIntroVideoUrl: parsedHomeIntroVideoUrl,
-        };
-      } else {
-        updatePayload = { ...parsed.data };
+        updatePayload.homeIntroVideoUrl = parsedHomeIntroVideoUrl;
+      }
+      if (parsedHomeGuideVideoUrl !== undefined) {
+        updatePayload.homeGuideVideoUrl = parsedHomeGuideVideoUrl;
       }
     }
 

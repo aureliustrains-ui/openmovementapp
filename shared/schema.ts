@@ -53,6 +53,7 @@ export const phases = pgTable("phases", {
   schedule: jsonb("schedule").notNull().default([]),
   completedScheduleInstances: jsonb("completed_schedule_instances").notNull().default([]),
   homeIntroVideoUrl: text("home_intro_video_url"),
+  homeGuideVideoUrl: text("home_guide_video_url"),
 });
 
 export const sessions = pgTable("sessions", {

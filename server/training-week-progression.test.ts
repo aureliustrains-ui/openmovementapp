@@ -238,15 +238,15 @@ test("client check-in actions are gated by real session identity and impersonati
   );
 });
 
-test("client dashboard keeps core main items rendered in the same conditional flow", () => {
+test("today keeps start-session CTA while plan stays schedule-focused", () => {
   const serverDir = path.dirname(fileURLToPath(import.meta.url));
   const homePath = path.resolve(serverDir, "../client/src/pages/client/Home.tsx");
   const myPhasePath = path.resolve(serverDir, "../client/src/pages/client/MyPhase.tsx");
   const homeSource = fs.readFileSync(homePath, "utf8");
   const source = fs.readFileSync(myPhasePath, "utf8");
 
-  assert.ok(source.includes('data-testid="card-start-next-session"'));
-  assert.ok(source.includes('data-testid="button-start-next-session"'));
+  assert.equal(source.includes('data-testid="card-start-next-session"'), false);
+  assert.equal(source.includes('data-testid="button-start-next-session"'), false);
   assert.ok(source.includes('data-testid="card-schedule-grid"'));
   assert.ok(source.includes('data-testid="text-week-progress"'));
   assert.ok(homeSource.includes('data-testid="button-home-start-next-session"'));
@@ -261,8 +261,8 @@ test("week area is compact and non-horizontal-scroll while keeping schedule cont
   const source = fs.readFileSync(myPhasePath, "utf8");
 
   assert.equal(source.includes("Weekly Schedule"), false);
-  assert.ok(source.includes("CalendarDays"));
+  assert.equal(source.includes("CalendarDays"), false);
   assert.equal(source.includes("overflow-x-auto"), false);
   assert.equal(source.includes("min-w-[500px]"), false);
-  assert.ok(source.includes("data-testid={`sched-session-${day}-${slotVal}-${i}`}"));
+  assert.ok(source.includes("data-testid={`sched-session-${group.day}-${item.slot}-${index}`}"));
 });

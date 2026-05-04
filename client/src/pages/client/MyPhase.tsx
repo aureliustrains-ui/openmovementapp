@@ -14,7 +14,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Calendar as CalIcon, UploadCloud, Loader2, CalendarDays, ChevronDown } from "lucide-react";
+import { CheckCircle2, ChevronRight, Calendar as CalIcon, UploadCloud, Loader2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -27,13 +27,12 @@ import {
   type TrainingScheduleEntry,
 } from "@/lib/trainingWeek";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
-import { getWeekSchedulePreview, isScheduleEntryCompleted } from "@/lib/clientSchedule";
+import { isScheduleEntryCompleted } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { VideoUploadField } from "@/components/client/VideoUploadField";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const PLAN_SCHEDULE_ACCENT = "#1F2937";
 const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
   "video/mp4",
   "video/quicktime",
@@ -385,7 +384,7 @@ export default function ClientMyPhase() {
 
   const isMovementCheckPhase = currentPhase.status === 'Waiting for Movement Check';
   const movementChecks = (currentPhase.movementChecks as any[]) || [];
-  const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id);
+  const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id) as any[];
   const movementCheckExerciseById = new Map<string, any>();
   for (const session of phaseSessions) {
     const sections = (session.sections as any[]) || [];
@@ -400,7 +399,6 @@ export default function ClientMyPhase() {
   }
   const schedule = ((currentPhase.schedule as any[]) || []) as TrainingScheduleEntry[];
   const weekSchedule = schedule.filter((s: any) => s.week === selectedWeek);
-  const hasGridSchedule = schedule.some((s: any) => s.slot);
   const completedInstances: string[] = (currentPhase.completedScheduleInstances as string[]) || [];
   const weekLifecycle = getTrainingWeekLifecycle(
     currentPhase.durationWeeks || 1,
@@ -494,12 +492,68 @@ export default function ClientMyPhase() {
     return minutes ? `${minutes} min` : null;
   };
 
-  const { nextScheduleItem } = getWeekSchedulePreview(
-    selectedWeek,
-    schedule,
-    phaseSessions as Array<{ id: string; name: string }>,
-    completedInstances,
-  );
+  const sessionsById = new Map(phaseSessions.map((session: any) => [session.id, session]));
+  const scheduleRows = weekSchedule
+    .map((entry: any, index: number) => {
+      const sessionId = typeof entry?.sessionId === "string" ? entry.sessionId : "";
+      const session = sessionsById.get(sessionId);
+      if (!session) return null;
+      const day = typeof entry?.day === "string" && entry.day.length > 0 ? entry.day : "Monday";
+      const slot = entry?.slot === "PM" ? "PM" : "AM";
+      const dayIndex = WEEKDAYS.indexOf(day);
+      return {
+        key: `${day}-${slot}-${session.id}-${index}`,
+        day,
+        dayIndex,
+        dayNumber: dayIndex >= 0 ? dayIndex + 1 : null,
+        slot,
+        session,
+        isCompleted: isEntryCompleted({ day, slot }, session),
+        href: buildSessionUrl(session.id, day, slot),
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        key: string;
+        day: string;
+        dayIndex: number;
+        dayNumber: number | null;
+        slot: "AM" | "PM";
+        session: any;
+        isCompleted: boolean;
+        href: string;
+      } => Boolean(item),
+    )
+    .sort((a, b) => {
+      const leftDay = a.dayIndex >= 0 ? a.dayIndex : Number.MAX_SAFE_INTEGER;
+      const rightDay = b.dayIndex >= 0 ? b.dayIndex : Number.MAX_SAFE_INTEGER;
+      if (leftDay !== rightDay) return leftDay - rightDay;
+      if (a.slot !== b.slot) return a.slot === "AM" ? -1 : 1;
+      return a.session.name.localeCompare(b.session.name);
+    });
+  const groupedSchedule = scheduleRows.reduce<
+    Array<{
+      day: string;
+      dayIndex: number;
+      dayNumber: number | null;
+      entries: typeof scheduleRows;
+    }>
+  >((groups, item) => {
+    const existing = groups.find((group) => group.day === item.day);
+    if (existing) {
+      existing.entries.push(item);
+      return groups;
+    }
+    groups.push({
+      day: item.day,
+      dayIndex: item.dayIndex,
+      dayNumber: item.dayNumber,
+      entries: [item],
+    });
+    return groups;
+  }, []);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
@@ -643,25 +697,12 @@ export default function ClientMyPhase() {
                 {currentPhase.goal}
               </p>
             ) : null}
-            {nextScheduleItem && (
-              <div className="mt-4 border-t border-slate-100 pt-4 flex flex-col md:flex-row md:items-center md:justify-end gap-3" data-testid="card-start-next-session">
-                <Link href={buildSessionUrl(nextScheduleItem.session.id, nextScheduleItem.entry.day, nextScheduleItem.entry.slot || "AM")}>
-                  <Button className="w-full md:w-auto" data-testid="button-start-next-session">
-                    Start next session <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-            )}
           </div>
 
           <div>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-              <h2 className="text-xl md:text-2xl font-display font-bold text-slate-900 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-slate-700" />
-                Plan schedule
-              </h2>
               {currentPhase.durationWeeks > 1 && (
-                <div className="self-start md:self-auto inline-flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1">
+                <div className="self-start md:self-auto inline-flex flex-wrap rounded-lg border border-slate-200 bg-[var(--color-ui-surface)] p-1 gap-1.5">
                   {Array.from({ length: currentPhase.durationWeeks }, (_, i) => i + 1).map((w) => {
                     const weekStatus =
                       weekStatuses.find((status) => status.week === w) ||
@@ -672,7 +713,7 @@ export default function ClientMyPhase() {
                     <button
                       key={w}
                       onClick={() => setSelectedWeek(w)}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 ${
+                      className={`min-h-8 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
                         isSelected
                           ? "bg-[var(--color-brand-600)] text-white shadow-sm"
                           : weekStatus.state === "ready_for_checkin"
@@ -698,136 +739,94 @@ export default function ClientMyPhase() {
                 </div>
               )}
             </div>
-            <div className="mb-4" data-testid="text-week-progress">
+            <div className="mb-4 px-3" data-testid="text-week-progress">
               {selectedWeekStatus.scheduledCount > 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs md:text-sm text-slate-600">
                     {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed
                   </p>
-                  <p className="text-xs font-semibold text-slate-700">
-                    {selectedWeekStatus.state === "completed"
-                      ? "Completed"
-                      : selectedWeekStatus.state === "ready_for_checkin"
-                        ? "Ready for weekly check-in"
-                        : selectedWeekStatus.state === "future"
-                          ? "Future"
-                          : "Current"}
-                  </p>
+                  {selectedWeekStatus.state !== "current" ? (
+                    <p className="text-xs font-semibold text-slate-700">
+                      {selectedWeekStatus.state === "completed"
+                        ? "Completed"
+                        : selectedWeekStatus.state === "ready_for_checkin"
+                          ? "Ready for weekly check-in"
+                          : "Future"}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">No scheduled sessions</p>
               )}
             </div>
 
-            {hasGridSchedule ? (
-              <Card className="border-slate-200 shadow-sm rounded-xl bg-white overflow-hidden" data-testid="card-schedule-grid">
-                <div>
-                  <div className="grid grid-cols-[72px_1fr_1fr] border-b border-slate-200 bg-slate-50">
-                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-r border-slate-200">Day</div>
-                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center border-r border-slate-200">AM</div>
-                    <div className="px-2 py-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center">PM</div>
-                  </div>
-                  {WEEKDAYS.map((day, dayIdx) => {
-                    const amEntries = weekSchedule.filter((e: any) => e.day === day && (e.slot || "AM") === "AM");
-                    const pmEntries = weekSchedule.filter((e: any) => e.day === day && e.slot === "PM");
-                    const hasEntries = amEntries.length > 0 || pmEntries.length > 0;
-
-                    return (
-                      <div key={day} className={`grid grid-cols-[72px_1fr_1fr] border-b border-slate-100 last:border-b-0 ${hasEntries ? '' : 'opacity-50'} ${dayIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
-                        <div className="px-2 py-2 text-xs font-medium text-slate-600 border-r border-slate-100 flex items-center gap-1.5">
-                          <span className="text-[10px] text-slate-400 font-mono w-3">{dayIdx + 1}</span>
-                          {day.slice(0, 3)}
-                        </div>
-                        {["AM", "PM"].map(slotVal => {
-                          const entries = slotVal === "AM" ? amEntries : pmEntries;
-                          return (
-                            <div key={slotVal} className="px-1.5 py-1.5 border-r last:border-r-0 border-slate-100 min-h-[42px] flex flex-col items-stretch gap-1">
-                              {entries.map((entry: any, i: number) => {
-                                const session = phaseSessions.find((s: any) => s.id === entry.sessionId);
-                                if (!session) return null;
-                                const completed = isEntryCompleted(entry, session);
-                                const accentColor = PLAN_SCHEDULE_ACCENT;
-                                return (
-                                  <Link key={i} href={buildSessionUrl(session.id, day, slotVal)} className="block">
-                                    <Badge
-                                      variant="outline"
-                                      className={`cursor-pointer transition-colors text-[11px] font-medium w-full justify-start ${
-                                        completed
-                                          ? "border-[var(--color-done-border)] bg-[var(--color-done-background)] text-[var(--color-done-foreground)] opacity-85"
-                                          : "border-slate-200 bg-white text-slate-800 hover:bg-[var(--color-ui-surface)]"
-                                      }`}
-                                      style={{ borderLeftWidth: "3px", borderLeftColor: accentColor }}
-                                      data-testid={`sched-session-${day}-${slotVal}-${i}`}
-                                    >
-                                      {completed ? <CheckCircle2 className="h-3 w-3 mr-1.5" /> : null}
-                                      <span className="h-1.5 w-1.5 rounded-full mr-1" style={{ backgroundColor: accentColor }} />
-                                      <span className={`truncate max-w-[110px] md:max-w-none ${completed ? "line-through" : ""}`}>{session.name}</span>
-                                    </Badge>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
+            {groupedSchedule.length === 0 ? (
+              <p className="text-sm text-slate-500 px-3 py-2">No scheduled sessions</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {(() => {
-                  const displayItems = weekSchedule.length > 0
-                    ? weekSchedule.map((sched: any, i: number) => {
-                        const session = allSessions.find((s: any) => s.id === sched.sessionId);
-                        return { session, day: sched.day, slot: sched.slot || "AM", key: i };
-                      })
-                    : phaseSessions.map((session: any, i: number) => ({
-                        session,
-                        day: WEEKDAYS[i % 7],
-                        slot: "AM",
-                        key: i,
-                      }));
-
-                  return displayItems.map(({ session, day, slot: slotVal, key }: any) => {
-                    if (!session) return null;
-                    const instanceKey = `w${selectedWeek}_${day}_${slotVal}_${session.id}`;
-                    const isCompleted = completedInstances.includes(instanceKey);
-                    const accentColor = PLAN_SCHEDULE_ACCENT;
-                    
-                    return (
-                      <Link key={key} href={buildSessionUrl(session.id, day, slotVal)}>
-                        <Card className="border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group bg-white rounded-xl overflow-hidden h-full" data-testid={`card-session-${key}`}>
-                          <CardContent className="p-0 h-full">
+              <div className="space-y-2" data-testid="card-schedule-grid">
+                {groupedSchedule.map((group) => (
+                  <div
+                    key={group.day}
+                    className="pb-2 border-b border-slate-100 last:border-b-0 last:pb-0"
+                  >
+                    <div className="px-3 py-1.5">
+                      <p className="text-[13px] font-semibold uppercase tracking-wide text-slate-800">
+                        {group.dayNumber !== null ? `Day ${group.dayNumber}` : group.day}
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {group.entries.map((item, index) => {
+                        const durationLabel = formatSessionDuration(item.session);
+                        const showSlot = group.entries.length > 1;
+                        const metadataLabel = durationLabel
+                          ? showSlot
+                            ? `${durationLabel} · ${item.slot}`
+                            : durationLabel
+                          : showSlot
+                            ? item.slot
+                            : "";
+                        return (
+                          <Link
+                            key={item.key}
+                            href={item.href}
+                            className="block"
+                            data-testid={`sched-session-${group.day}-${item.slot}-${index}`}
+                          >
                             <div
-                              className={`flex items-stretch h-full ${isCompleted ? "opacity-85" : ""}`}
-                              style={{ borderLeft: `4px solid ${accentColor}` }}
+                              className={`rounded-lg border bg-white px-3 py-2.5 transition-colors ${
+                                item.isCompleted
+                                  ? "border-slate-200 bg-slate-100 text-slate-600"
+                                  : "border-slate-200 bg-slate-50/40 hover:bg-[var(--color-ui-surface)]"
+                              }`}
                             >
-                              <div className="p-6 flex-1 flex justify-between items-center">
-                                <div>
-                                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{day}</div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
-                                    <h3 className={`text-xl font-bold ${isCompleted ? "text-slate-500 line-through" : "text-slate-900 group-hover:text-slate-700 transition-colors"}`}>{session?.name}</h3>
-                                  </div>
-                                  <p className="text-sm text-slate-500 mt-1">
-                                    {(session?.sections as any[])?.length} Blocks
-                                    {formatSessionDuration(session)
-                                      ? ` · ${formatSessionDuration(session)}`
-                                      : ""}
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={`text-sm font-semibold leading-tight truncate ${
+                                      item.isCompleted ? "line-through" : "text-slate-900"
+                                    }`}
+                                  >
+                                    {item.session.name}
                                   </p>
+                                  {metadataLabel && !item.isCompleted ? (
+                                    <p className="mt-1 text-xs text-slate-500">{metadataLabel}</p>
+                                  ) : null}
                                 </div>
-                                <div className="shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-slate-50 group-hover:bg-[var(--color-ui-surface)] group-hover:shadow-inner transition-all ml-4 border border-slate-200">
-                                   {isCompleted ? <CheckCircle2 className="h-6 w-6 text-[var(--color-done-foreground)]" /> : <ChevronRight className="h-6 w-6 text-[var(--color-brand-600)] group-hover:translate-x-0.5 transition-transform" />}
-                                </div>
+                                {item.isCompleted ? (
+                                  <span className="inline-flex shrink-0 items-center text-[var(--color-done-foreground)]">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                  </span>
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                                )}
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
-                    );
-                  });
-                })()}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

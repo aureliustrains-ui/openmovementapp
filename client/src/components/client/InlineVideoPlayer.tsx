@@ -25,7 +25,7 @@ export function InlineVideoPlayer({
   if (normalized.kind === "file") {
     return (
       <div className={flush ? "" : "rounded-xl border border-slate-200 bg-slate-50 p-3"} data-testid={testId}>
-        <div className={flush ? "aspect-[16/10] sm:aspect-video overflow-hidden rounded-xl bg-black" : "aspect-video overflow-hidden rounded-lg bg-black"}>
+        <div className={flush ? "aspect-video overflow-hidden rounded-xl bg-black" : "aspect-video overflow-hidden rounded-lg bg-black"}>
           <video
             src={normalized.href}
             controls
@@ -41,7 +41,7 @@ export function InlineVideoPlayer({
   if (normalized.embedUrl) {
     return (
       <div className={flush ? "" : "rounded-xl border border-slate-200 bg-slate-50 p-3"} data-testid={testId}>
-        <div className={flush ? "aspect-[16/10] sm:aspect-video overflow-hidden rounded-xl bg-black" : "aspect-video overflow-hidden rounded-lg bg-black"}>
+        <div className={flush ? "aspect-video overflow-hidden rounded-xl bg-black" : "aspect-video overflow-hidden rounded-lg bg-black"}>
           <iframe
             src={normalized.embedUrl}
             className="h-full w-full border-0"

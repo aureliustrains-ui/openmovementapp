@@ -637,12 +637,7 @@ export default function AdminTemplatesPage() {
 
   return (
     <div className="w-full space-y-6 pb-16">
-      <div className="rounded-2xl bg-slate-900 p-6 text-white">
-        <h1 className="font-display text-3xl font-bold">Templates</h1>
-        <p className="mt-1 text-slate-300">
-          Finder-style template organization with nested folders.
-        </p>
-      </div>
+      <h1 className="sr-only">Templates</h1>
 
       {loadErrors.length > 0 ? (
         <div

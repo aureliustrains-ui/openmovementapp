@@ -103,6 +103,7 @@ export const createPhaseSchema = z
     schedule: z.array(z.unknown()).optional(),
     completedScheduleInstances: z.array(z.string().max(120)).optional(),
     homeIntroVideoUrl: z.string().trim().max(2048).nullable().optional(),
+    homeGuideVideoUrl: z.string().trim().max(2048).nullable().optional(),
   })
   .strict();
 
@@ -117,6 +118,7 @@ export const updatePhaseAdminSchema = z
     schedule: z.array(z.unknown()).optional(),
     completedScheduleInstances: z.array(z.string().max(120)).optional(),
     homeIntroVideoUrl: z.string().trim().max(2048).nullable().optional(),
+    homeGuideVideoUrl: z.string().trim().max(2048).nullable().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");

@@ -12,21 +12,12 @@ import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
-import { cn } from "@/lib/utils";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
-import { Loader2, CheckCircle2, ChevronRight, CalendarDays } from "lucide-react";
-
-const PLAN_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-function resolvePlanDayNumber(day: string | null | undefined): number | null {
-  if (!day) return null;
-  const dayIndex = PLAN_WEEKDAYS.findIndex((weekday) => weekday.toLowerCase() === day.toLowerCase());
-  return dayIndex >= 0 ? dayIndex + 1 : null;
-}
+import { Loader2, ChevronRight } from "lucide-react";
 
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
@@ -93,6 +84,10 @@ export default function ClientHome() {
       })
     : null;
 
+  const guideVideoUrl =
+    typeof progressPhase?.homeGuideVideoUrl === "string" && progressPhase.homeGuideVideoUrl.trim().length > 0
+      ? progressPhase.homeGuideVideoUrl.trim()
+      : null;
   const introVideoUrl =
     typeof progressPhase?.homeIntroVideoUrl === "string" && progressPhase.homeIntroVideoUrl.trim().length > 0
       ? progressPhase.homeIntroVideoUrl.trim()
@@ -134,6 +129,12 @@ export default function ClientHome() {
           .
         </h1>
       </section>
+
+      {guideVideoUrl ? (
+        <section>
+          <InlineVideoPlayer url={guideVideoUrl} testId="client-home-guide-video" flush />
+        </section>
+      ) : null}
 
       {introVideoUrl ? (
         <section>
@@ -209,69 +210,6 @@ export default function ClientHome() {
         </section>
       ) : null}
 
-      <section>
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardContent className="p-5 md:p-6 space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500">
-                <CalendarDays className="h-3.5 w-3.5 text-slate-600" />
-                Week {currentTrainingWeek}
-              </div>
-              <Link href="/app/client/my-phase" className="text-xs font-medium text-slate-600 hover:text-slate-900">
-                Open plan
-              </Link>
-            </div>
-
-            {weekSchedulePreview.sortedEntries.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                No sessions scheduled this week.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {weekSchedulePreview.sortedEntries.map((item) => {
-                  const dayNumber = resolvePlanDayNumber(item.entry.day);
-                  return (
-                  <Link
-                    key={item.instanceKey}
-                    href={resolveClientSessionEntryDestination({
-                      phase: progressPhase as any,
-                      sessionId: item.session.id,
-                      week: item.entry.week,
-                      day: item.entry.day,
-                      slot: item.entry.slot,
-                    }).href}
-                    className="block"
-                  >
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 hover:bg-slate-50">
-                      <div className="min-w-0">
-                        <p
-                          className={cn(
-                            "text-sm font-medium truncate",
-                            item.isCompleted ? "text-slate-500 line-through" : "text-slate-900",
-                          )}
-                        >
-                          {item.session.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {dayNumber !== null ? `Day ${dayNumber}` : item.entry.day}
-                        </p>
-                      </div>
-                      {item.isCompleted ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-brand-700)]">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Done
-                        </span>
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-slate-400" />
-                      )}
-                    </div>
-                  </Link>
-                )})}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
     </div>
   );
 }

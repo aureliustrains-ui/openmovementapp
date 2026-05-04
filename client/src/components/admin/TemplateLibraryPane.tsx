@@ -461,31 +461,33 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
 
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardContent className="space-y-4 p-4 md:p-5">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                <Search className="h-4 w-4 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="h-auto border-none p-0 shadow-none focus-visible:ring-0"
-                />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:max-w-xl xl:max-w-2xl">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="h-auto border-none p-0 shadow-none focus-visible:ring-0"
+                  />
+                </div>
+                <label className="inline-flex items-center gap-2 pl-1 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                    checked={searchAll}
+                    onChange={(event) => setSearchAll(event.target.checked)}
+                  />
+                  Search all
+                </label>
               </div>
-              <label className="inline-flex items-center gap-2 pl-1 text-xs text-slate-600">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 rounded border-slate-300"
-                  checked={searchAll}
-                  onChange={(event) => setSearchAll(event.target.checked)}
-                />
-                Search all
-              </label>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button type="button" variant="outline" onClick={createFolderAtCurrentLevel}>
                 <FolderPlus className="mr-2 h-4 w-4" />
-                New folder
+                New folder here
               </Button>
               <Button onClick={() => onCreateTemplate(selectedFolderId)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -495,44 +497,46 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
           </div>
 
           <div className="space-y-3 border-b border-slate-200 pb-3">
-            <div className="flex flex-wrap items-center gap-1 text-sm text-slate-600">
-              {selectedFolderPath.map((segment, index) => {
-                const isLast = index === selectedFolderPath.length - 1;
-                return (
-                  <div key={`${segment.id ?? "root"}-${index}`} className="flex items-center gap-1">
-                    {isLast ? (
-                      <span className="font-semibold text-slate-900">{segment.name}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="rounded px-1 py-0.5 hover:bg-slate-100"
-                        onClick={() => onSelectFolder(segment.id)}
-                      >
-                        {segment.name}
-                      </button>
-                    )}
-                    {!isLast ? <ChevronRight className="h-3.5 w-3.5 text-slate-400" /> : null}
-                  </div>
-                );
-              })}
-            </div>
-
-            {selectedFolder ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={renameSelectedFolder}>
-                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Rename
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="text-red-600 hover:text-red-700"
-                  onClick={() => onDeleteFolder(selectedFolder.id)}
-                >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
-                </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1 text-sm text-slate-600">
+                {selectedFolderPath.map((segment, index) => {
+                  const isLast = index === selectedFolderPath.length - 1;
+                  return (
+                    <div key={`${segment.id ?? "root"}-${index}`} className="flex items-center gap-1">
+                      {isLast ? (
+                        <span className="font-semibold text-slate-900">{segment.name}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded px-1 py-0.5 hover:bg-slate-100"
+                          onClick={() => onSelectFolder(segment.id)}
+                        >
+                          {segment.name}
+                        </button>
+                      )}
+                      {!isLast ? <ChevronRight className="h-3.5 w-3.5 text-slate-400" /> : null}
+                    </div>
+                  );
+                })}
               </div>
-            ) : null}
+
+              {selectedFolder ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={renameSelectedFolder}>
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Rename
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => onDeleteFolder(selectedFolder.id)}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {isLoading ? (
@@ -541,6 +545,11 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
             </div>
           ) : (
             <div className="space-y-4">
+              {!canReorderTemplates ? (
+                <p className="text-xs text-slate-500">
+                  Reordering is available when search is off and you are viewing a single folder location.
+                </p>
+              ) : null}
               {visibleChildFolders.length > 0 ? (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleChildFolders.map((folder) => (

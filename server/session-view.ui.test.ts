@@ -59,11 +59,15 @@ test("session view renders embedded video visibly in exercise card", () => {
   );
 });
 
-test("session view includes desktop section rail and mobile vertical section list", () => {
+test("session view keeps desktop section rail while removing mobile section jump chrome", () => {
   const source = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(source.includes('data-testid="rail-session-sections-desktop"'));
-  assert.ok(source.includes('data-testid="list-session-sections-mobile"'));
+  assert.equal(
+    source.includes('data-testid="list-session-sections-mobile"'),
+    false,
+    "Session view should not render the removed mobile section jump list",
+  );
   assert.ok(
     source.includes("lg:max-w-6xl"),
     "Desktop session container should allow wider content area while keeping mobile unchanged",
@@ -74,7 +78,11 @@ test("session view includes desktop section rail and mobile vertical section lis
   );
   assert.ok(source.includes("selectedSectionId"));
   assert.ok(source.includes("button-section-rail-"));
-  assert.ok(source.includes("button-section-list-"));
+  assert.equal(
+    source.includes("button-section-list-"),
+    false,
+    "Session view should not keep legacy mobile section list buttons",
+  );
   assert.equal(
     source.includes("button-section-pill-"),
     false,

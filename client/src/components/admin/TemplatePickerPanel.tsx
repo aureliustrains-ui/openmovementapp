@@ -158,6 +158,9 @@ export function TemplatePickerPanel<T>({
     if (!selectedFolderId) return [{ id: null, name: rootNodeLabel }];
     return buildFolderPath(foldersById, selectedFolderId, rootNodeLabel);
   }, [foldersById, rootNodeLabel, selectedFolderId]);
+  const currentLocationLabel =
+    selectedFolderPath[selectedFolderPath.length - 1]?.name || rootNodeLabel;
+  const searchScopeLabel = `Searching current location: ${currentLocationLabel}`;
 
   const renderFolderTree = (folder: TemplateFolder, depth: number) => {
     const children = childrenByParent.get(folder.id) || [];
@@ -263,6 +266,7 @@ export function TemplatePickerPanel<T>({
             className="border-none px-0 shadow-none focus-visible:ring-0"
           />
         </div>
+        <p className="text-xs text-slate-500">{searchScopeLabel}</p>
 
         <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
           {selectedFolderPath.map((segment, index) => {

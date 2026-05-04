@@ -325,13 +325,13 @@ export default function ClientSessionView() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-24 animate-in fade-in lg:max-w-6xl">
+    <div className="mx-auto max-w-3xl pb-24 animate-in fade-in lg:max-w-6xl">
       {isCheckinReadOnly && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="banner-impersonation-read-only">
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="banner-impersonation-read-only">
           Client check-ins are read-only unless you are logged in as this client account.
         </div>
       )}
-      <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md py-4 -mx-6 px-6 md:-mx-8 md:px-8 flex items-center gap-4">
+      <div className="sticky top-0 z-20 -mx-6 flex items-center gap-4 bg-slate-50/90 px-6 py-3 backdrop-blur-md md:-mx-8 md:px-8">
         <Link href="/app/client/my-phase">
           <Button variant="ghost" size="icon" className="rounded-full bg-white border border-slate-200 shadow-sm" data-testid="button-back-phase">
             <ArrowLeft className="h-5 w-5" />
@@ -339,18 +339,14 @@ export default function ClientSessionView() {
         </Link>
         <div className="space-y-1">
           <h1 className="font-display font-bold text-lg text-slate-900 leading-tight" data-testid="text-session-name">{session.name}</h1>
-          <p className="text-xs text-slate-500">
-            {phase?.name}
-            {day ? ` \u2022 Week ${week} \u2022 ${day} ${slot}` : ""}
-            {sessionDurationMinutes ? ` \u2022 ${sessionDurationMinutes} min` : ""}
-          </p>
+          {sessionDurationMinutes ? <p className="text-xs text-slate-500">{sessionDurationMinutes} min</p> : null}
           {sessionDescription ? (
-            <p className="mt-1 text-sm leading-relaxed text-slate-700" data-testid="text-session-description">
+            <p className="text-sm leading-relaxed text-slate-700" data-testid="text-session-description">
               {sessionDescription}
             </p>
           ) : null}
           {sessionVideoUrl ? (
-            <div className="mt-3 max-w-lg" data-testid="session-header-video-wrap">
+            <div className="mt-2.5 max-w-lg" data-testid="session-header-video-wrap">
               <InlineVideoPlayer
                 url={sessionVideoUrl}
                 sourceType="link"
@@ -361,22 +357,9 @@ export default function ClientSessionView() {
           ) : null}
         </div>
       </div>
-      <div className="border-b border-slate-200" />
+      <div className="mt-2 border-b border-slate-200" />
 
-      <div className="space-y-1.5 lg:hidden" data-testid="list-session-sections-mobile">
-        {sessionSections.map((section: any) => (
-          <button
-            key={section.id}
-            onClick={() => jumpToSection(section.id)}
-            className="w-full rounded-lg border border-slate-200/70 bg-slate-50/50 px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100/70"
-            data-testid={`button-section-list-${section.id}`}
-          >
-            {section.name}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-5 pt-4 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
           <div className="sticky top-24 rounded-xl border border-slate-200/70 bg-slate-50/40 p-2.5" data-testid="rail-session-sections-desktop">
             <p className="px-2 text-[9px] font-medium uppercase tracking-wider text-slate-400">Session flow</p>
