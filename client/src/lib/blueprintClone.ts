@@ -45,13 +45,38 @@ type CloneResult = {
   sessionIdMap: Record<string, string>;
 };
 
+type ExerciseLike = Partial<BlueprintExercise> & {
+  name?: string;
+  demo_url?: unknown;
+  demoVideoUrl?: unknown;
+  demo_video_url?: unknown;
+  videoUrl?: unknown;
+  video_url?: unknown;
+};
+
 function nextId() {
   return crypto.randomUUID();
 }
 
-export function toBlueprintExercise(
-  templateExercise: Partial<BlueprintExercise> & { name?: string },
-): BlueprintExercise {
+function firstStringField(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return "";
+}
+
+function getExerciseDemoUrl(templateExercise: ExerciseLike): string {
+  return firstStringField(
+    templateExercise.demoUrl,
+    templateExercise.demo_url,
+    templateExercise.demoVideoUrl,
+    templateExercise.demo_video_url,
+    templateExercise.videoUrl,
+    templateExercise.video_url,
+  );
+}
+
+export function toBlueprintExercise(templateExercise: ExerciseLike): BlueprintExercise {
   return {
     id: templateExercise.id || nextId(),
     name: templateExercise.name || "New Exercise",
@@ -62,15 +87,13 @@ export function toBlueprintExercise(
     notes: templateExercise.notes || "",
     goal: templateExercise.goal || "",
     additionalInstructions: templateExercise.additionalInstructions || "",
-    demoUrl: templateExercise.demoUrl || "",
+    demoUrl: getExerciseDemoUrl(templateExercise),
     enableStructuredLogging: Boolean(templateExercise.enableStructuredLogging),
     requiresMovementCheck: Boolean(templateExercise.requiresMovementCheck),
   };
 }
 
-export function cloneExerciseFromTemplate(
-  templateExercise: Partial<BlueprintExercise> & { name?: string },
-): BlueprintExercise {
+export function cloneExerciseFromTemplate(templateExercise: ExerciseLike): BlueprintExercise {
   return { ...toBlueprintExercise(templateExercise), id: nextId() };
 }
 
@@ -89,7 +112,7 @@ export function cloneSection(section: BlueprintSection): BlueprintSection {
 export function cloneSectionFromTemplate(
   section: Partial<BlueprintSection> & {
     name?: string;
-    exercises?: Array<Partial<BlueprintExercise>>;
+    exercises?: ExerciseLike[];
   },
 ): BlueprintSection {
   return {
@@ -112,7 +135,7 @@ export function cloneSessionFromTemplate(
     name?: string;
     description?: string;
     durationMinutes?: number | null;
-    sections?: Array<Partial<BlueprintSection> & { exercises?: Array<Partial<BlueprintExercise>> }>;
+    sections?: Array<Partial<BlueprintSection> & { exercises?: ExerciseLike[] }>;
   },
 ): BlueprintSession {
   const parsedDuration =
