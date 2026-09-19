@@ -657,7 +657,7 @@ export default function AdminPhaseBuilder() {
   };
 
   const addSessionFromTemplate = (template: any) => {
-    const cloned = cloneSessionFromTemplate(template);
+    const cloned = cloneSessionFromTemplate(template, templates as any[]);
     setLocalSessions((prev) => [
       ...prev,
       {
@@ -1783,7 +1783,9 @@ export default function AdminPhaseBuilder() {
             const letter = letters[session.sections.length] || String(session.sections.length + 1);
             return makeSection(`${letter}.`);
           }}
-          onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
+          onCloneSectionTemplate={(templateSection) =>
+            cloneSectionFromTemplate(templateSection, templates as any[])
+          }
           onCloneExerciseTemplate={(templateExercise) =>
             cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))
           }

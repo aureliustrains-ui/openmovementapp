@@ -743,7 +743,7 @@ export default function AdminTemplatesPage() {
 
   const duplicateSession = async (item: any) => {
     try {
-      const cloned = cloneSessionFromTemplate(item);
+      const cloned = cloneSessionFromTemplate(item, exerciseTemplates as any[]);
       const created = await createSessionTemplate.mutateAsync({
         name: `${item.name} (Copy)`,
         folderId: item.folderId ?? null,
@@ -800,7 +800,7 @@ export default function AdminTemplatesPage() {
 
   const duplicateSection = async (item: any) => {
     try {
-      const cloned = cloneSectionFromTemplate(item);
+      const cloned = cloneSectionFromTemplate(item, exerciseTemplates as any[]);
       const created = await createSectionTemplate.mutateAsync({
         name: `${item.name} (Copy)`,
         folderId: item.folderId ?? null,

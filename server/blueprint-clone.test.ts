@@ -47,3 +47,33 @@ test("section template cloning keeps nested exercise demo videos", () => {
   assert.equal(section.exercises[0]?.demoUrl, "https://video.example/nested");
   assert.notEqual(section.exercises[0]?.id, "nested_ex_1");
 });
+
+test("section template cloning hydrates missing nested demo videos from exercise library", () => {
+  const section = cloneSectionFromTemplate(
+    {
+      id: "section_template_2",
+      name: "B. Strength",
+      exercises: [
+        {
+          id: "nested_ex_without_video",
+          name: "Bent Arm Pull",
+          sets: "5",
+          reps: "2",
+        },
+      ],
+    },
+    [
+      {
+        id: "library_ex_1",
+        name: "Bent Arm Pull",
+        sets: "3",
+        reps: "8",
+        demoUrl: "https://video.example/library",
+      },
+    ],
+  );
+
+  assert.equal(section.exercises[0]?.demoUrl, "https://video.example/library");
+  assert.equal(section.exercises[0]?.sets, "5");
+  assert.equal(section.exercises[0]?.reps, "2");
+});

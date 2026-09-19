@@ -47,11 +47,17 @@ type CloneResult = {
 
 type ExerciseLike = Partial<BlueprintExercise> & {
   name?: string;
+  exerciseTemplateId?: unknown;
+  templateId?: unknown;
   demo_url?: unknown;
   demoVideoUrl?: unknown;
   demo_video_url?: unknown;
   videoUrl?: unknown;
   video_url?: unknown;
+};
+
+type ExerciseLibraryItem = ExerciseLike & {
+  id?: string;
 };
 
 function nextId() {
@@ -76,7 +82,37 @@ function getExerciseDemoUrl(templateExercise: ExerciseLike): string {
   );
 }
 
-export function toBlueprintExercise(templateExercise: ExerciseLike): BlueprintExercise {
+function normalizeName(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function findLibraryExercise(
+  templateExercise: ExerciseLike,
+  libraryExercises: ExerciseLibraryItem[],
+): ExerciseLibraryItem | null {
+  const possibleIds = [templateExercise.exerciseTemplateId, templateExercise.templateId];
+  for (const possibleId of possibleIds) {
+    if (typeof possibleId !== "string" || !possibleId.trim()) continue;
+    const match = libraryExercises.find((candidate) => candidate.id === possibleId);
+    if (match) return match;
+  }
+
+  const exerciseName = normalizeName(templateExercise.name);
+  if (!exerciseName) return null;
+
+  const exactNameMatches = libraryExercises.filter(
+    (candidate) => normalizeName(candidate.name) === exerciseName,
+  );
+  return exactNameMatches.find((candidate) => getExerciseDemoUrl(candidate)) || exactNameMatches[0] || null;
+}
+
+export function toBlueprintExercise(
+  templateExercise: ExerciseLike,
+  libraryExercises: ExerciseLibraryItem[] = [],
+): BlueprintExercise {
+  const libraryMatch = findLibraryExercise(templateExercise, libraryExercises);
+  const demoUrl = getExerciseDemoUrl(templateExercise) || getExerciseDemoUrl(libraryMatch || {});
+
   return {
     id: templateExercise.id || nextId(),
     name: templateExercise.name || "New Exercise",
@@ -87,14 +123,17 @@ export function toBlueprintExercise(templateExercise: ExerciseLike): BlueprintEx
     notes: templateExercise.notes || "",
     goal: templateExercise.goal || "",
     additionalInstructions: templateExercise.additionalInstructions || "",
-    demoUrl: getExerciseDemoUrl(templateExercise),
+    demoUrl,
     enableStructuredLogging: Boolean(templateExercise.enableStructuredLogging),
     requiresMovementCheck: Boolean(templateExercise.requiresMovementCheck),
   };
 }
 
-export function cloneExerciseFromTemplate(templateExercise: ExerciseLike): BlueprintExercise {
-  return { ...toBlueprintExercise(templateExercise), id: nextId() };
+export function cloneExerciseFromTemplate(
+  templateExercise: ExerciseLike,
+  libraryExercises: ExerciseLibraryItem[] = [],
+): BlueprintExercise {
+  return { ...toBlueprintExercise(templateExercise, libraryExercises), id: nextId() };
 }
 
 export function cloneExercise(exercise: BlueprintExercise): BlueprintExercise {
@@ -114,11 +153,14 @@ export function cloneSectionFromTemplate(
     name?: string;
     exercises?: ExerciseLike[];
   },
+  libraryExercises: ExerciseLibraryItem[] = [],
 ): BlueprintSection {
   return {
     id: nextId(),
     name: section.name || "New Section",
-    exercises: (section.exercises || []).map((exercise) => cloneExerciseFromTemplate(exercise)),
+    exercises: (section.exercises || []).map((exercise) =>
+      cloneExerciseFromTemplate(exercise, libraryExercises),
+    ),
   };
 }
 
@@ -137,6 +179,7 @@ export function cloneSessionFromTemplate(
     durationMinutes?: number | null;
     sections?: Array<Partial<BlueprintSection> & { exercises?: ExerciseLike[] }>;
   },
+  libraryExercises: ExerciseLibraryItem[] = [],
 ): BlueprintSession {
   const parsedDuration =
     typeof session.durationMinutes === "number" &&
@@ -149,7 +192,9 @@ export function cloneSessionFromTemplate(
     name: session.name || "New Session",
     description: session.description || "",
     durationMinutes: parsedDuration,
-    sections: (session.sections || []).map((section) => cloneSectionFromTemplate(section)),
+    sections: (session.sections || []).map((section) =>
+      cloneSectionFromTemplate(section, libraryExercises),
+    ),
   };
 }
 

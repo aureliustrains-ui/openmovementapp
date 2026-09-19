@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { sectionTemplatesQuery, useCreateSectionTemplate, useDeleteSectionTemplate } from "@/lib/api";
+import {
+  exerciseTemplatesQuery,
+  sectionTemplatesQuery,
+  useCreateSectionTemplate,
+  useDeleteSectionTemplate,
+} from "@/lib/api";
 import { cloneSectionFromTemplate } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +25,7 @@ function makeDefaultSectionTemplate() {
 export default function SectionTemplatesList() {
   const { toast } = useToast();
   const { data: templates = [] } = useQuery(sectionTemplatesQuery);
+  const { data: exerciseTemplates = [] } = useQuery(exerciseTemplatesQuery);
   const createTemplate = useCreateSectionTemplate();
   const deleteTemplate = useDeleteSectionTemplate();
 
@@ -41,7 +47,7 @@ export default function SectionTemplatesList() {
 
   const duplicate = async (item: any) => {
     try {
-      const cloned = cloneSectionFromTemplate(item);
+      const cloned = cloneSectionFromTemplate(item, exerciseTemplates as any[]);
       const created = await createTemplate.mutateAsync({
         name: `${item.name} (Copy)`,
         description: item.description || null,

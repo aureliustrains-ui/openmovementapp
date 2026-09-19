@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { sessionTemplatesQuery, useCreateSessionTemplate, useDeleteSessionTemplate } from "@/lib/api";
+import {
+  exerciseTemplatesQuery,
+  sessionTemplatesQuery,
+  useCreateSessionTemplate,
+  useDeleteSessionTemplate,
+} from "@/lib/api";
 import { cloneSessionFromTemplate } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +25,7 @@ function makeDefaultSessionTemplate() {
 export default function SessionTemplatesList() {
   const { toast } = useToast();
   const { data: templates = [] } = useQuery(sessionTemplatesQuery);
+  const { data: exerciseTemplates = [] } = useQuery(exerciseTemplatesQuery);
   const createTemplate = useCreateSessionTemplate();
   const deleteTemplate = useDeleteSessionTemplate();
 
@@ -41,7 +47,7 @@ export default function SessionTemplatesList() {
 
   const duplicate = async (item: any) => {
     try {
-      const cloned = cloneSessionFromTemplate(item);
+      const cloned = cloneSessionFromTemplate(item, exerciseTemplates as any[]);
       const created = await createTemplate.mutateAsync({
         name: `${item.name} (Copy)`,
         description: item.description || null,

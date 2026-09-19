@@ -235,7 +235,7 @@ export default function TemplateBuilder() {
   const addSession = () =>
     setSessions((prev) => [...prev, makeSession(`Session ${prev.length + 1}`)]);
   const addSessionFromTemplate = (templateSession: any) =>
-    setSessions((prev) => [...prev, cloneSessionFromTemplate(templateSession)]);
+    setSessions((prev) => [...prev, cloneSessionFromTemplate(templateSession, exerciseTemplates as any[])]);
   const duplicateSession = (sessionIdx: number) => {
     setSessions((prev) => {
       const source = prev[sessionIdx];
@@ -457,7 +457,9 @@ export default function TemplateBuilder() {
             moveSessionToIndex(sessionIdx, targetSessionIdx)
           }
           onCreateSection={() => makeSection(`Section ${session.sections.length + 1}`)}
-          onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
+          onCloneSectionTemplate={(templateSection) =>
+            cloneSectionFromTemplate(templateSection, exerciseTemplates as any[])
+          }
           onCloneExerciseTemplate={(templateExercise) =>
             cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))
           }

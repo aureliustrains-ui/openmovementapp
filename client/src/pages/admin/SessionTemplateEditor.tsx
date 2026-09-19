@@ -159,7 +159,9 @@ export default function SessionTemplateEditor() {
         onRemoveSession={() => {}}
         onDuplicateSession={undefined}
         onCreateSection={() => makeSection(`Section ${model.sections.length + 1}`)}
-        onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
+        onCloneSectionTemplate={(templateSection) =>
+          cloneSectionFromTemplate(templateSection, exerciseTemplates as any[])
+        }
         onCloneExerciseTemplate={(templateExercise) =>
           cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))
         }
