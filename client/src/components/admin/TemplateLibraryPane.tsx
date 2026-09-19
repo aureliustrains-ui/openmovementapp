@@ -66,6 +66,7 @@ type TemplateLibraryPaneProps<TItem extends TemplateListItem> = {
   getTemplateSearchText?: (item: TItem) => string;
   renderTemplatePreview?: (item: TItem) => ReactNode;
   renderTemplateDetails?: (item: TItem) => ReactNode;
+  renderTemplateTitle?: (item: TItem) => ReactNode;
   getTemplateOpenHref: (item: TItem) => string;
   layout?: "cards" | "rows";
 };
@@ -134,6 +135,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   getTemplateSearchText,
   renderTemplatePreview,
   renderTemplateDetails,
+  renderTemplateTitle,
   getTemplateOpenHref,
   layout = "cards",
 }: TemplateLibraryPaneProps<TItem>) {
@@ -620,7 +622,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                 <div
                   className={
                     layout === "rows"
-                      ? "space-y-2"
+                      ? "grid grid-cols-1 items-start gap-2 md:grid-cols-2 xl:grid-cols-3"
                       : "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
                   }
                 >
@@ -639,14 +641,19 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                           <div
                             className={
                               rowMode
-                                ? "grid gap-3 p-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center"
+                                ? cn(
+                                    "grid items-start gap-1.5 p-2",
+                                    renderTemplateDetails
+                                      ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+                                      : "grid-cols-[minmax(0,1fr)_auto]",
+                                  )
                                 : "space-y-3"
                             }
                           >
                             {rowMode && renderTemplateDetails ? (
                               <button
                                 type="button"
-                                className="h-8 w-8 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                className="h-7 w-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                                 onClick={() => toggleTemplateExpanded(item.id)}
                                 title={isExpanded ? "Collapse template" : "Open template"}
                               >
@@ -659,16 +666,37 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                             ) : null}
 
                             <div className="min-w-0">
-                              <h3 className="truncate font-semibold text-slate-900">{item.name}</h3>
-                              <p className="mt-1 text-sm text-slate-500">
+                              <h3
+                                className={cn(
+                                  "truncate font-semibold text-slate-900",
+                                  rowMode ? "text-sm" : undefined,
+                                )}
+                              >
+                                {renderTemplateTitle ? renderTemplateTitle(item) : item.name}
+                              </h3>
+                              <p
+                                className={
+                                  rowMode
+                                    ? "mt-0.5 text-xs text-slate-500"
+                                    : "mt-1 text-sm text-slate-500"
+                                }
+                              >
                                 {getTemplateSummary(item)}
                               </p>
                               {renderTemplatePreview ? (
-                                <div className="mt-2">{renderTemplatePreview(item)}</div>
+                                <div className={rowMode ? "mt-1" : "mt-2"}>
+                                  {renderTemplatePreview(item)}
+                                </div>
                               ) : null}
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div
+                              className={
+                                rowMode
+                                  ? "flex shrink-0 items-center justify-end gap-0.5"
+                                  : "flex flex-wrap items-center gap-2"
+                              }
+                            >
                               {!rowMode || !renderTemplateDetails ? (
                                 <Link href={getTemplateOpenHref(item)}>
                                   <Button size="sm" variant="outline">
@@ -679,7 +707,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-slate-400 hover:text-indigo-600"
+                                className="h-7 w-7 text-slate-400 hover:text-indigo-600"
                                 onClick={() => onDuplicateTemplate(item)}
                                 title="Duplicate"
                               >
@@ -688,7 +716,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-slate-400 hover:text-red-600"
+                                className="h-7 w-7 text-slate-400 hover:text-red-600"
                                 onClick={() => onDeleteTemplate(item)}
                                 title="Delete"
                               >
@@ -722,7 +750,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                           </div>
 
                           {rowMode && renderTemplateDetails && isExpanded ? (
-                            <div className="border-t border-slate-100 bg-slate-50/60 p-3">
+                            <div className="border-t border-slate-100 bg-slate-50/60 p-2">
                               {renderTemplateDetails(item)}
                             </div>
                           ) : null}

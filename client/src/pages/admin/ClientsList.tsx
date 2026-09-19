@@ -16,8 +16,6 @@ import {
   UserPlus,
   ChevronRight,
   Activity,
-  AlertCircle,
-  MessageCircle,
   ShieldAlert,
   ClipboardList,
   Loader2,
@@ -26,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { resolveUserFullName } from "@/lib/userDisplayName";
+import { getRecommendedTrainingWeek, getTrainingWeekStatuses } from "@/lib/trainingWeek";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +37,7 @@ export default function AdminClientsList() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [avatar, setAvatar] = useState("");
+  const [showInactiveClients, setShowInactiveClients] = useState(false);
   const { toast } = useToast();
   const { sessionUser } = useAuth();
   const createUser = useCreateUser();
@@ -101,31 +101,58 @@ export default function AdminClientsList() {
     return { label: 'No Active Phase', type: 'secondary', desc: 'Needs programming' };
   };
 
+  const getActivePhaseSummary = (client: any) => {
+    const clientPhases = allPhases.filter((phase: any) => phase.clientId === client.id);
+    const activePhase = clientPhases.find((phase: any) => phase.status === "Active");
+    const pendingPhase = clientPhases.find((phase: any) => phase.status === "Waiting for Movement Check");
+    const workingPhase = activePhase || pendingPhase || null;
+
+    if (!workingPhase) {
+      return {
+        title: "No active phase",
+        detail: "",
+      };
+    }
+
+    const schedule = Array.isArray(workingPhase.schedule) ? workingPhase.schedule : [];
+    const completedInstances = Array.isArray(workingPhase.completedScheduleInstances)
+      ? workingPhase.completedScheduleInstances
+      : [];
+    const weekStatuses = getTrainingWeekStatuses(
+      workingPhase.durationWeeks || 1,
+      schedule,
+      completedInstances,
+    );
+    const currentWeek = getRecommendedTrainingWeek(weekStatuses);
+
+    return {
+      title: workingPhase.name || "Untitled phase",
+      detail: `Week ${currentWeek}`,
+    };
+  };
+
   const renderAttentionIndicators = (clientId: string) => {
     const summary = notificationByClientId.get(clientId);
-    if (!summary || summary.totalAttentionCount <= 0) return null;
+    if (!summary) return null;
+    const visibleAttentionCount =
+      summary.movementAttentionCount + summary.progressAttentionCount;
+    if (visibleAttentionCount <= 0) return null;
 
     return (
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Badge className="border-none bg-rose-100 text-rose-700 hover:bg-rose-100">
-          Needs attention {summary.totalAttentionCount}
+          Attention {visibleAttentionCount}
         </Badge>
-        {summary.unreadChatCount > 0 ? (
-          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
-            <MessageCircle className="h-3 w-3" />
-            {summary.unreadChatCount}
-          </Badge>
-        ) : null}
         {summary.movementAttentionCount > 0 ? (
-          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
+          <Badge variant="outline" className="gap-1 border-rose-200 bg-white text-rose-700">
             <ShieldAlert className="h-3 w-3" />
-            {summary.movementAttentionCount}
+            Movement {summary.movementAttentionCount}
           </Badge>
         ) : null}
         {summary.progressAttentionCount > 0 ? (
-          <Badge variant="outline" className="gap-1 border-slate-300 bg-white text-slate-700">
+          <Badge variant="outline" className="gap-1 border-amber-200 bg-white text-amber-700">
             <ClipboardList className="h-3 w-3" />
-            {summary.progressAttentionCount}
+            Progress {summary.progressAttentionCount}
           </Badge>
         ) : null}
       </div>
@@ -331,36 +358,44 @@ export default function AdminClientsList() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activeClients.map((client: any) => {
-                const status = getClientStatus(client);
+                const phaseSummary = getActivePhaseSummary(client);
                 const clientDisplayName = resolveUserFullName(client);
+                const attentionIndicators = renderAttentionIndicators(client.id);
                 return (
                   <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-${client.id}`}>
                     <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
                       <CardContent className="p-0">
-                        <div className="p-6 flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <Avatar className="h-11 w-11 border border-slate-100 shadow-sm">
                               <AvatarImage src={client.avatar} />
                               <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">
                                 {(clientDisplayName || "U").charAt(0)}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors" data-testid={`text-client-name-${client.id}`}>{clientDisplayName}</h3>
-                              <p className="text-sm text-slate-500">{client.email}</p>
-                              {renderAttentionIndicators(client.id)}
+                              <div className="min-w-0">
+                                <h3 className="truncate text-base font-semibold text-slate-900 transition-colors group-hover:text-indigo-600" data-testid={`text-client-name-${client.id}`}>
+                                  {clientDisplayName}
+                                </h3>
+                                <p className="truncate text-xs text-slate-400">{client.email}</p>
+                              </div>
                             </div>
+                            <ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition-all group-hover:translate-x-1 group-hover:text-indigo-500" />
                           </div>
-                          <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-                        </div>
-                        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {status.type === "destructive" ? <AlertCircle className="h-4 w-4 text-rose-500" /> : <Activity className="h-4 w-4 text-slate-400" />}
-                            <span className="text-sm font-medium text-slate-700">{status.desc}</span>
+
+                          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                            <div className="truncate text-sm font-semibold text-slate-900">
+                              {phaseSummary.title}
+                            </div>
+                            {phaseSummary.detail ? (
+                              <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">
+                                {phaseSummary.detail}
+                              </div>
+                            ) : null}
                           </div>
-                          <Badge variant={status.type as any} className={status.type === "destructive" ? "bg-rose-100 text-rose-700 hover:bg-rose-200 border-none" : status.type === "default" ? "bg-green-100 text-green-700 hover:bg-green-200 border-none" : "bg-slate-200 text-slate-700 border-none"}>
-                            {status.label}
-                          </Badge>
+
+                          {attentionIndicators ? <div className="mt-3">{attentionIndicators}</div> : null}
                         </div>
                       </CardContent>
                     </Link>
@@ -372,53 +407,67 @@ export default function AdminClientsList() {
         </section>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-900">Inactive Clients</h2>
-            <Badge className="bg-slate-200 text-slate-700 border-none">{inactiveClients.length}</Badge>
-          </div>
-          {inactiveClients.length === 0 ? (
-            <Card className="border-slate-200 rounded-2xl bg-white">
-              <CardContent className="p-6 text-sm text-slate-500">No inactive clients.</CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {inactiveClients.map((client: any) => {
-                const status = getClientStatus(client);
-                const clientDisplayName = resolveUserFullName(client);
-                return (
-                  <Card key={client.id} className="border-slate-200 shadow-sm bg-white overflow-hidden rounded-2xl" data-testid={`card-client-inactive-${client.id}`}>
-                    <Link href={`/app/admin/clients/${client.id}`} className="block hover:bg-slate-50 transition-colors group">
-                      <CardContent className="p-0">
-                        <div className="p-6 flex items-start justify-between">
-                          <div className="flex items-center gap-4">
-                            <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
-                              <AvatarImage src={client.avatar} />
-                              <AvatarFallback className="bg-indigo-50 text-indigo-700 font-bold">
-                                {(clientDisplayName || "U").charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <h3 className="font-semibold text-slate-900 text-lg group-hover:text-indigo-600 transition-colors">{clientDisplayName}</h3>
-                              <p className="text-sm text-slate-500">{client.email}</p>
-                              {renderAttentionIndicators(client.id)}
+          <button
+            type="button"
+            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition-colors hover:bg-slate-50"
+            onClick={() => setShowInactiveClients((previous) => !previous)}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-base font-semibold text-slate-900">Inactive Clients</span>
+              <Badge className="border-none bg-slate-200 text-slate-700">{inactiveClients.length}</Badge>
+            </span>
+            {showInactiveClients ? (
+              <ChevronRight className="h-5 w-5 rotate-90 text-slate-400 transition-transform" />
+            ) : (
+              <ChevronRight className="h-5 w-5 text-slate-400 transition-transform" />
+            )}
+          </button>
+
+          {showInactiveClients ? (
+            inactiveClients.length === 0 ? (
+              <Card className="rounded-2xl border-slate-200 bg-white">
+                <CardContent className="p-6 text-sm text-slate-500">No inactive clients.</CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {inactiveClients.map((client: any) => {
+                  const status = getClientStatus(client);
+                  const clientDisplayName = resolveUserFullName(client);
+                  return (
+                    <Card key={client.id} className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm" data-testid={`card-client-inactive-${client.id}`}>
+                      <Link href={`/app/admin/clients/${client.id}`} className="block transition-colors hover:bg-slate-50 group">
+                        <CardContent className="p-0">
+                          <div className="flex items-start justify-between p-6">
+                            <div className="flex items-center gap-4">
+                              <Avatar className="h-14 w-14 border border-slate-100 shadow-sm">
+                                <AvatarImage src={client.avatar} />
+                                <AvatarFallback className="bg-indigo-50 font-bold text-indigo-700">
+                                  {(clientDisplayName || "U").charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h3 className="text-lg font-semibold text-slate-900 transition-colors group-hover:text-indigo-600">{clientDisplayName}</h3>
+                                <p className="text-sm text-slate-500">{client.email}</p>
+                                {renderAttentionIndicators(client.id)}
+                              </div>
                             </div>
+                            <ChevronRight className="h-5 w-5 text-slate-300 transition-all group-hover:translate-x-1 group-hover:text-indigo-500" />
                           </div>
-                          <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-                        </div>
-                        <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-slate-400" />
-                            <span className="text-sm font-medium text-slate-700">{status.desc}</span>
+                          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <Activity className="h-4 w-4 text-slate-400" />
+                              <span className="text-sm font-medium text-slate-700">{status.desc}</span>
+                            </div>
+                            <Badge className="border-none bg-slate-200 text-slate-700">{status.label}</Badge>
                           </div>
-                          <Badge className="bg-slate-200 text-slate-700 border-none">{status.label}</Badge>
-                        </div>
-                      </CardContent>
-                    </Link>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+                        </CardContent>
+                      </Link>
+                    </Card>
+                  );
+                })}
+              </div>
+            )
+          ) : null}
         </section>
       </div>
     </div>

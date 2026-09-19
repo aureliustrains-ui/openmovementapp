@@ -201,7 +201,6 @@ function exercisePrescription(exercise: any) {
   return [
     exercise?.sets ? `${exercise.sets} sets` : null,
     exercise?.reps ? `${exercise.reps} reps` : null,
-    exercise?.load && exercise.load !== "Auto" ? exercise.load : null,
     exercise?.tempo || null,
   ]
     .filter(Boolean)
@@ -209,20 +208,20 @@ function exercisePrescription(exercise: any) {
 }
 
 function renderSectionTemplatePreview(item: any) {
-  const exercises = ((item.exercises || []) as any[]).slice(0, 4);
+  const exercises = ((item.exercises || []) as any[]).slice(0, 2);
   if (exercises.length === 0) {
     return <div className="text-xs text-slate-400">No exercises yet</div>;
   }
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {exercises.map((exercise, index) => (
         <div
           key={exercise.id || `${exercise.name}-${index}`}
-          className="grid grid-cols-[34px_minmax(0,1fr)] rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5"
+          className="grid grid-cols-[28px_minmax(0,1fr)] rounded-md border border-slate-100 bg-slate-50 px-2 py-1"
         >
           <span className="text-xs font-semibold text-slate-500">A{index + 1}</span>
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-slate-900">
+            <div className="truncate text-xs font-medium text-slate-900">
               {exercise.name || "Untitled exercise"}
             </div>
             <div className="truncate text-xs text-slate-500">{exercisePrescription(exercise)}</div>
@@ -239,22 +238,64 @@ function renderSectionTemplatePreview(item: any) {
 }
 
 function renderExerciseTemplatePreview(item: any) {
-  const tags = String(item.targetMuscle || "").trim();
-  const hasDemoVideo = Boolean(String(item.demoUrl || "").trim());
   return (
-    <div
-      className={
-        hasDemoVideo
-          ? "flex min-h-[132px] min-w-0 items-stretch gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
-          : "flex min-w-0 items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5"
-      }
-    >
+    <div className="flex min-w-0 items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1">
       <div className="flex min-w-0 flex-1 flex-col justify-center">
         <div className="truncate text-xs text-slate-500">{exercisePrescription(item)}</div>
-        {tags ? <div className="mt-1 truncate text-xs text-slate-400">Tags: {tags}</div> : null}
       </div>
-      <DemoVideoPreview url={item.demoUrl} size="tiny" />
     </div>
+  );
+}
+
+function ExerciseTemplateInlineTitle({ item }: { item: any }) {
+  const updateExerciseTemplate = useUpdateExerciseTemplate();
+  const [name, setName] = useState(item.name || "");
+
+  useEffect(() => {
+    setName(item.name || "");
+  }, [item.id, item.name]);
+
+  const saveName = async () => {
+    const nextName = name.trim();
+    if (!nextName || nextName === item.name) {
+      setName(item.name || "");
+      return;
+    }
+    await updateExerciseTemplate.mutateAsync({
+      id: item.id,
+      name: nextName,
+      targetMuscle: item.targetMuscle || null,
+      sets: item.sets || null,
+      reps: item.reps || null,
+      load: item.load || null,
+      tempo: item.tempo || null,
+      goal: item.goal || null,
+      notes: item.notes || null,
+      additionalInstructions: item.additionalInstructions || null,
+      demoUrl: item.demoUrl || null,
+      requiresMovementCheck: Boolean(item.requiresMovementCheck),
+      enableStructuredLogging: Boolean(item.enableStructuredLogging),
+    });
+  };
+
+  return (
+    <Input
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      onBlur={() => void saveName()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+        if (event.key === "Escape") {
+          setName(item.name || "");
+          event.currentTarget.blur();
+        }
+      }}
+      className="h-6 truncate border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
+      onClick={(event) => event.stopPropagation()}
+      draggable={false}
+    />
   );
 }
 
@@ -323,17 +364,7 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Exercise
-          </Label>
-          <Input
-            value={draft.name}
-            onChange={(event) => updateDraft("name", event.target.value)}
-            className="h-8 bg-white"
-          />
-        </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-1">
           <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Tags
@@ -345,6 +376,20 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
             className="h-8 bg-white"
           />
         </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Demo video URL
+          </Label>
+          <div className="flex min-w-0 items-center gap-2">
+            <Video className="h-4 w-4 shrink-0 text-slate-400" />
+            <Input
+              value={draft.demoUrl}
+              onChange={(event) => updateDraft("demoUrl", event.target.value)}
+              placeholder="Paste video link"
+              className="h-8 bg-white"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -352,7 +397,6 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
           [
             ["sets", "Sets"],
             ["reps", "Reps"],
-            ["load", "Load"],
             ["tempo", "Tempo"],
           ] as const
         ).map(([field, label]) => (
@@ -403,16 +447,7 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <div className="flex min-w-0 items-center gap-2">
-          <Video className="h-4 w-4 shrink-0 text-slate-400" />
-          <Input
-            value={draft.demoUrl}
-            onChange={(event) => updateDraft("demoUrl", event.target.value)}
-            placeholder="Demo video URL"
-            className="h-8 bg-white"
-          />
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
             <Label className="text-xs text-slate-500">Movement check</Label>
@@ -421,24 +456,23 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
               onCheckedChange={(checked) => updateDraft("requiresMovementCheck", checked)}
             />
           </div>
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
-            <Label className="text-xs text-slate-500">Structured logging</Label>
-            <Switch
-              checked={draft.enableStructuredLogging}
-              onCheckedChange={(checked) => updateDraft("enableStructuredLogging", checked)}
-            />
-          </div>
-          <Button
-            size="sm"
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
-            disabled={updateExerciseTemplate.isPending || !draft.name.trim()}
-            onClick={save}
-          >
-            <Save className="mr-1.5 h-4 w-4" />
-            Save
-          </Button>
         </div>
+        <Button
+          size="sm"
+          className="bg-indigo-600 text-white hover:bg-indigo-700"
+          disabled={updateExerciseTemplate.isPending || !draft.name.trim()}
+          onClick={save}
+        >
+          <Save className="mr-1.5 h-4 w-4" />
+          Save
+        </Button>
       </div>
+
+      {draft.demoUrl.trim() ? (
+        <div className="rounded-md border border-slate-200 bg-white p-2">
+          <DemoVideoPreview url={draft.demoUrl.trim()} size="inline" />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1084,6 +1118,7 @@ export default function AdminTemplatesPage() {
           onReorderTemplates={(items) => void handleReorderTemplates("exercise", items)}
           getTemplateSummary={(item) => `${(item as any).targetMuscle || "No tags"}`}
           getTemplateSearchText={(item) => `${(item as any).targetMuscle || ""}`}
+          renderTemplateTitle={(item) => <ExerciseTemplateInlineTitle item={item} />}
           renderTemplatePreview={(item) => renderExerciseTemplatePreview(item)}
           renderTemplateDetails={(item) => <ExerciseTemplateInlineDetails item={item} />}
           getTemplateOpenHref={(item) => `/app/admin/templates/exercises/${item.id}?tab=exercises`}
