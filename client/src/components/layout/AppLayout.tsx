@@ -3,31 +3,27 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { resolveUserFullName } from "@/lib/userDisplayName";
+import { adminClientsNotificationSummaryQuery, myNotificationSummaryQuery } from "@/lib/api";
 import {
-  adminClientsNotificationSummaryQuery,
-  myNotificationSummaryQuery,
-} from "@/lib/api";
-import { 
-  Users, 
-  Library, 
-  Settings, 
-  Dumbbell, 
+  Users,
+  Library,
+  Settings,
+  Dumbbell,
   House,
-  MessageCircle,
   ListChecks,
   User,
   LogOut,
-  Repeat
+  Repeat,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
@@ -36,10 +32,7 @@ const getAdminNavItems = (attentionClientsCount: number) => [
   { href: "/app/admin/templates", label: "Templates", icon: Library },
 ];
 
-const getClientPrimaryNavItems = (input: {
-  unreadChatCount: number;
-  checkinsAttentionCount: number;
-}) => [
+const getClientPrimaryNavItems = (input: { checkinsAttentionCount: number }) => [
   { href: "/app/client/home", label: "Today", icon: House },
   {
     href: "/app/client/my-phase",
@@ -48,15 +41,9 @@ const getClientPrimaryNavItems = (input: {
   },
   {
     href: "/app/client/check-ins",
-    label: "Check-ins",
+    label: "Recaps",
     icon: ListChecks,
     badgeCount: input.checkinsAttentionCount,
-  },
-  {
-    href: "/app/client/chat",
-    label: "Messages",
-    icon: MessageCircle,
-    badgeCount: input.unreadChatCount,
   },
   { href: "/app/client/you", label: "You", icon: User },
 ];
@@ -79,8 +66,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const attentionClientsCount =
     sessionUser.role === "Admin"
-      ? ((adminNotificationSummary as { clients?: Array<{ hasAttention?: boolean }> } | undefined)
-          ?.clients || []
+      ? (
+          (adminNotificationSummary as { clients?: Array<{ hasAttention?: boolean }> } | undefined)
+            ?.clients || []
         ).filter((summary) => Boolean(summary?.hasAttention)).length
       : 0;
   const clientSummary = (clientNotificationSummary as
@@ -96,8 +84,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     progressActionCount: 0,
     weeklyCheckinDue: false,
   };
-  const clientUnreadChatCount =
-    sessionUser.role === "Client" ? clientSummary.unreadChatCount || 0 : 0;
   const clientCheckinsAttentionCount =
     sessionUser.role === "Client"
       ? (clientSummary.movementActionCount || 0) +
@@ -109,7 +95,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     sessionUser.role === "Admin"
       ? getAdminNavItems(attentionClientsCount)
       : getClientPrimaryNavItems({
-          unreadChatCount: clientUnreadChatCount,
           checkinsAttentionCount: clientCheckinsAttentionCount,
         });
   const isClientChatRoute =
@@ -153,25 +138,35 @@ export function AppLayout({ children }: { children: ReactNode }) {
       );
     }
     if (href === "/app/client/my-phase") {
-      return location.startsWith("/app/client/my-phase") || location.startsWith("/app/client/session");
+      return (
+        location.startsWith("/app/client/my-phase") || location.startsWith("/app/client/session")
+      );
     }
     return location.startsWith(href);
   };
 
   return (
-    <div className={`${isClientChatRoute ? "h-[100dvh] min-h-0" : "min-h-screen"} bg-white flex flex-col`}>
+    <div
+      className={`${isClientChatRoute ? "h-[100dvh] min-h-0" : "min-h-screen"} bg-white flex flex-col`}
+    >
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex items-center gap-8">
-          <Link href={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} className="flex items-center gap-2.5 shrink-0">
+          <Link
+            href={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"}
+            className="flex items-center gap-2.5 shrink-0"
+          >
             <BrandLogo textClassName="text-sm sm:text-base" />
           </Link>
 
-          <nav className={`items-center gap-1 ${sessionUser.role === "Client" ? "hidden sm:flex" : "flex"}`}>
+          <nav
+            className={`items-center gap-1 ${sessionUser.role === "Client" ? "hidden sm:flex" : "flex"}`}
+          >
             {navItems.map((item) => {
               const isActive =
                 sessionUser.role === "Client"
                   ? isClientRouteActive(item.href)
-                  : location.startsWith(item.href) && (item.href !== "/app/settings" || location === "/app/settings");
+                  : location.startsWith(item.href) &&
+                    (item.href !== "/app/settings" || location === "/app/settings");
               const isAdminNav = sessionUser.role === "Admin";
               const isClientNav = sessionUser.role === "Client";
               const spacingClassName = isAdminNav
@@ -185,13 +180,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   ? "hidden sm:inline"
                   : "";
               return (
-                <Link 
-                  key={item.href} 
+                <Link
+                  key={item.href}
                   href={item.href}
                   className={`relative flex items-center rounded-lg text-sm font-medium transition-colors ${
                     spacingClassName
                   } ${
-                    isActive 
+                    isActive
                       ? "border-b-2 border-slate-900 text-slate-900"
                       : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
                   }`}
@@ -211,35 +206,33 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <div className="flex items-center gap-3">
           {impersonating && (
-            <Button 
-              variant="destructive" 
-              size="sm" 
-              onClick={handleStopImpersonating}
-            >
+            <Button variant="destructive" size="sm" onClick={handleStopImpersonating}>
               <Repeat className="mr-2 h-4 w-4" /> Exit Impersonation
             </Button>
           )}
-          
+
           <DropdownMenu open={profileMenuOpen} onOpenChange={setProfileMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 className={`relative h-9 w-9 rounded-full border bg-white transition-colors ${
-                  profileMenuOpen
-                    ? "border-slate-400 ring-2 ring-slate-200"
-                    : "border-slate-200"
+                  profileMenuOpen ? "border-slate-400 ring-2 ring-slate-200" : "border-slate-200"
                 }`}
               >
                 <Avatar className="h-9 w-9">
                   <AvatarImage src={user.avatar || undefined} alt={user.name || undefined} />
-                  <AvatarFallback className="bg-slate-100 text-slate-900 font-semibold">{user.name?.charAt(0)}</AvatarFallback>
+                  <AvatarFallback className="bg-slate-100 text-slate-900 font-semibold">
+                    {user.name?.charAt(0)}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none text-slate-900">{menuDisplayName}</p>
+                  <p className="text-sm font-medium leading-none text-slate-900">
+                    {menuDisplayName}
+                  </p>
                   <p className="text-xs leading-none text-slate-500">{user.email}</p>
                 </div>
               </DropdownMenuLabel>
@@ -262,15 +255,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              
+
               {impersonating && (
-                <DropdownMenuItem onClick={handleStopImpersonating} className="text-slate-700 font-medium cursor-pointer">
+                <DropdownMenuItem
+                  onClick={handleStopImpersonating}
+                  className="text-slate-700 font-medium cursor-pointer"
+                >
                   <Repeat className="mr-2 h-4 w-4" />
                   <span>Exit Impersonation</span>
                 </DropdownMenuItem>
               )}
-              
-              <DropdownMenuItem onClick={handleLogout} className="text-red-600 flex items-center cursor-pointer">
+
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-red-600 flex items-center cursor-pointer"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Log out</span>
               </DropdownMenuItem>
@@ -279,15 +278,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className={`flex-1 min-h-0 bg-white ${isClientChatRoute ? "overflow-hidden" : "overflow-auto"}`}>
-        <div className={contentContainerClass}>
-          {children}
-        </div>
+      <main
+        className={`flex-1 min-h-0 bg-white ${isClientChatRoute ? "overflow-hidden" : "overflow-auto"}`}
+      >
+        <div className={contentContainerClass}>{children}</div>
       </main>
 
       {sessionUser.role === "Client" ? (
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur sm:hidden">
-          <div className="grid grid-cols-5 gap-1 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5">
+          <div
+            className="grid gap-1 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5"
+            style={{ gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))` }}
+          >
             {navItems.map((item) => {
               const isActive = isClientRouteActive(item.href);
               return (

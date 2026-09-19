@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ import type { BlueprintSection } from "@/lib/blueprintClone";
 import { SectionEditorCard } from "@/components/admin/builder/SectionEditorCard";
 import { Textarea } from "@/components/ui/textarea";
 import { TemplateEditorHeader } from "@/components/admin/TemplateEditorHeader";
+import { useAutosave } from "@/hooks/useAutosave";
 
 type SectionTemplateModel = {
   id: string;
@@ -51,23 +52,36 @@ export default function SectionTemplateEditor() {
     });
   }, [template]);
 
-  const save = async () => {
-    if (!model || !model.name.trim()) return;
-    setSaving(true);
-    try {
-      await updateTemplate.mutateAsync({
-        id: model.id,
-        name: model.name.trim(),
-        description: model.description.trim() || null,
-        exercises: model.exercises,
-      });
-      toast({ title: "Section template saved" });
-    } catch {
-      toast({ title: "Could not save section template", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const autosaveSnapshot = useMemo(() => JSON.stringify(model), [model]);
+
+  const save = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!model || !model.name.trim()) return;
+      setSaving(true);
+      try {
+        await updateTemplate.mutateAsync({
+          id: model.id,
+          name: model.name.trim(),
+          description: model.description.trim() || null,
+          exercises: model.exercises,
+        });
+        if (!options?.silent) toast({ title: "Section template saved" });
+      } catch {
+        toast({ title: "Could not save section template", variant: "destructive" });
+        throw new Error("Could not save section template");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [model, toast, updateTemplate],
+  );
+
+  const autosave = useAutosave({
+    snapshot: autosaveSnapshot,
+    enabled: Boolean(model?.id && model.name.trim()),
+    delayMs: 30_000,
+    onSave: () => save({ silent: true }),
+  });
 
   const remove = async () => {
     if (!model) return;
@@ -112,9 +126,10 @@ export default function SectionTemplateEditor() {
         title="Section Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}
-        onSave={save}
+        onSave={() => void save().then(() => autosave.markSaved())}
         saveDisabled={saving || !model.name.trim()}
         saving={saving}
+        autosaveStatus={autosave.status}
         onDelete={remove}
         onDuplicate={duplicate}
       />
@@ -123,7 +138,9 @@ export default function SectionTemplateEditor() {
         <p className="text-sm text-slate-600">Description (optional)</p>
         <Textarea
           value={model.description}
-          onChange={(e) => setModel((prev) => (prev ? { ...prev, description: e.target.value } : prev))}
+          onChange={(e) =>
+            setModel((prev) => (prev ? { ...prev, description: e.target.value } : prev))
+          }
           className="bg-white"
         />
       </div>
@@ -149,7 +166,7 @@ export default function SectionTemplateEditor() {
                   name,
                   sets: "3",
                   reps: "10",
-                  load: "Auto",
+                  load: "",
                   tempo: "3010",
                   notes: "",
                   goal: "",
@@ -167,7 +184,10 @@ export default function SectionTemplateEditor() {
             if (!prev) return prev;
             return {
               ...prev,
-              exercises: [...prev.exercises, cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))],
+              exercises: [
+                ...prev.exercises,
+                cloneExerciseFromTemplate(toBlueprintExercise(templateExercise)),
+              ],
             };
           });
         }}
@@ -186,7 +206,10 @@ export default function SectionTemplateEditor() {
             const exercises = [...prev.exercises];
             const targetIdx = direction === "up" ? exerciseIdx - 1 : exerciseIdx + 1;
             if (targetIdx < 0 || targetIdx >= exercises.length) return prev;
-            [exercises[exerciseIdx], exercises[targetIdx]] = [exercises[targetIdx], exercises[exerciseIdx]];
+            [exercises[exerciseIdx], exercises[targetIdx]] = [
+              exercises[targetIdx],
+              exercises[exerciseIdx],
+            ];
             return { ...prev, exercises };
           });
         }}

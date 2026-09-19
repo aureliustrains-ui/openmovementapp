@@ -40,11 +40,11 @@ test("client readiness uses shared checkins mappers and chart keys expected by a
 
   assert.ok(readinessSectionSource.includes("mapSessionCheckinTrendData"));
   assert.ok(readinessSectionSource.includes("mapWeeklyCheckinTrendData"));
-  assert.ok(readinessSectionSource.includes("ComposedChart data={sessionCheckinTrendData}"));
+  assert.ok(readinessSectionSource.includes("data={sessionCheckinTrendData}"));
   assert.ok(readinessSectionSource.includes('dataKey="rpeOverall"'));
   assert.ok(readinessSectionSource.includes('dataKey="sleepLastNight"'));
   assert.ok(readinessSectionSource.includes('dataKey="feltOffEventLevel"'));
-  assert.ok(readinessSectionSource.includes("ComposedChart data={weeklyCheckinTrendData}"));
+  assert.ok(readinessSectionSource.includes("data={weeklyCheckinTrendData}"));
   assert.ok(readinessSectionSource.includes('dataKey="trendWeekKey"'));
   assert.ok(readinessSectionSource.includes('dataKey="recoveryThisTrainingWeek"'));
   assert.ok(readinessSectionSource.includes('dataKey="stressOutsideTrainingThisWeek"'));
@@ -169,7 +169,7 @@ test("checkins trend mappers normalize numeric fields for chart rendering", () =
   assert.ok(checkinsSource.includes("trendWeekLabel"));
 });
 
-test("client check-ins route reuses shared readiness section while home stays action-focused", () => {
+test("client recaps route reuses shared readiness section while home stays action-focused", () => {
   const homeSource = fs.readFileSync(clientHomePath, "utf8");
   const appSource = fs.readFileSync(clientAppPath, "utf8");
   const checkinsSource = fs.readFileSync(clientCheckinsPath, "utf8");
@@ -188,7 +188,7 @@ test("client check-ins route reuses shared readiness section while home stays ac
   );
   assert.ok(
     checkinsSource.includes("<ClientReadinessSection compactForCheckins />"),
-    "Check-ins should host the compact trends-focused readiness section",
+    "Recaps should host the compact trends-focused readiness section",
   );
   assert.ok(
     readinessPageSource.includes("<ClientReadinessSection showFullDetails />"),
@@ -196,15 +196,15 @@ test("client check-ins route reuses shared readiness section while home stays ac
   );
   assert.ok(
     readinessSectionSource.includes("clientCheckinsRecentQuery(clientId)"),
-    "Full readiness should fetch recent check-ins from the shared backend path",
+    "Full readiness should fetch recent recaps from the shared backend path",
   );
   assert.ok(
-    readinessSectionSource.includes("Recent session check-ins"),
-    "Full readiness should include recent session check-ins",
+    readinessSectionSource.includes("Recent session recaps"),
+    "Full readiness should include recent session recaps",
   );
   assert.ok(
-    readinessSectionSource.includes("Recent weekly check-ins"),
-    "Full readiness should include recent weekly check-ins",
+    readinessSectionSource.includes("Recent weekly recaps"),
+    "Full readiness should include recent weekly recaps",
   );
 });
 

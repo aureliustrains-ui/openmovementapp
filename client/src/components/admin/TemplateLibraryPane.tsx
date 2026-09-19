@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowDown,
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  Copy,
   Folder,
   FolderPlus,
   Pencil,
@@ -62,7 +63,11 @@ type TemplateLibraryPaneProps<TItem extends TemplateListItem> = {
   onMoveTemplate: (templateId: string, folderId: string | null) => void;
   onReorderTemplates: (items: ReorderPayload[]) => void;
   getTemplateSummary: (item: TItem) => string;
+  getTemplateSearchText?: (item: TItem) => string;
+  renderTemplatePreview?: (item: TItem) => ReactNode;
+  renderTemplateDetails?: (item: TItem) => ReactNode;
   getTemplateOpenHref: (item: TItem) => string;
+  layout?: "cards" | "rows";
 };
 
 function sortTemplateItems<TItem extends TemplateListItem>(items: TItem[]): TItem[] {
@@ -126,7 +131,11 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   onMoveTemplate,
   onReorderTemplates,
   getTemplateSummary,
+  getTemplateSearchText,
+  renderTemplatePreview,
+  renderTemplateDetails,
   getTemplateOpenHref,
+  layout = "cards",
 }: TemplateLibraryPaneProps<TItem>) {
   const rootNodeLabel = rootLabel ?? allLabel;
   const [search, setSearch] = useState("");
@@ -135,6 +144,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   const [draggedTemplateId, setDraggedTemplateId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [expandedTemplateIds, setExpandedTemplateIds] = useState<Set<string>>(new Set());
 
   const sortedFolders = useMemo(() => sortFolders(folders), [folders]);
   const sortedItems = useMemo(() => sortTemplateItems(items), [items]);
@@ -228,19 +238,37 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
     [childrenByParent, selectedFolderId],
   );
 
-  const folderSearchBase = searchAll ? sortedFolders : baseChildFolders;
-  const templateSearchBase = searchAll ? sortedItems : baseTemplates;
   const normalizedSearch = search.trim().toLowerCase();
+  const searching = normalizedSearch.length > 0;
+  const folderSearchBase = searchAll || searching ? sortedFolders : baseChildFolders;
+  const templateSearchBase = searchAll || searching ? sortedItems : baseTemplates;
 
   const visibleChildFolders = useMemo(() => {
     if (!normalizedSearch) return folderSearchBase;
-    return folderSearchBase.filter((folder) => folder.name.toLowerCase().includes(normalizedSearch));
+    return folderSearchBase.filter((folder) =>
+      folder.name.toLowerCase().includes(normalizedSearch),
+    );
   }, [folderSearchBase, normalizedSearch]);
 
   const visibleTemplates = useMemo(() => {
     if (!normalizedSearch) return templateSearchBase;
-    return templateSearchBase.filter((item) => item.name.toLowerCase().includes(normalizedSearch));
-  }, [normalizedSearch, templateSearchBase]);
+    const scoreItem = (item: TItem) => {
+      const name = item.name.toLowerCase();
+      const summary = getTemplateSummary(item).toLowerCase();
+      const extra = (getTemplateSearchText ? getTemplateSearchText(item) : "").toLowerCase();
+      if (name === normalizedSearch) return 0;
+      if (name.startsWith(normalizedSearch)) return 1;
+      if (name.includes(normalizedSearch)) return 2;
+      if (extra.includes(normalizedSearch)) return 3;
+      if (summary.includes(normalizedSearch)) return 4;
+      return 99;
+    };
+    return templateSearchBase
+      .map((item) => ({ item, score: scoreItem(item) }))
+      .filter(({ score }) => score < 99)
+      .sort((a, b) => a.score - b.score || a.item.name.localeCompare(b.item.name))
+      .map(({ item }) => item);
+  }, [getTemplateSearchText, getTemplateSummary, normalizedSearch, templateSearchBase]);
 
   const canReorderTemplates = !searchAll && normalizedSearch.length === 0;
 
@@ -311,6 +339,15 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
     }
   };
 
+  const toggleTemplateExpanded = (templateId: string) => {
+    setExpandedTemplateIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(templateId)) next.delete(templateId);
+      else next.add(templateId);
+      return next;
+    });
+  };
+
   const renderFolderTree = (folder: TemplateFolder, depth: number) => {
     const children = childrenByParent.get(folder.id) || [];
     const isExpanded = expandedFolderIds.has(folder.id);
@@ -371,7 +408,9 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
         </div>
 
         {isExpanded && children.length > 0 ? (
-          <div className="mt-0.5 space-y-0.5">{children.map((child) => renderFolderTree(child, depth + 1))}</div>
+          <div className="mt-0.5 space-y-0.5">
+            {children.map((child) => renderFolderTree(child, depth + 1))}
+          </div>
         ) : null}
       </div>
     );
@@ -480,7 +519,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                     checked={searchAll}
                     onChange={(event) => setSearchAll(event.target.checked)}
                   />
-                  Search all
+                  All folders
                 </label>
               </div>
             </div>
@@ -502,7 +541,10 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                 {selectedFolderPath.map((segment, index) => {
                   const isLast = index === selectedFolderPath.length - 1;
                   return (
-                    <div key={`${segment.id ?? "root"}-${index}`} className="flex items-center gap-1">
+                    <div
+                      key={`${segment.id ?? "root"}-${index}`}
+                      className="flex items-center gap-1"
+                    >
                       {isLast ? (
                         <span className="font-semibold text-slate-900">{segment.name}</span>
                       ) : (
@@ -547,7 +589,8 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
             <div className="space-y-4">
               {!canReorderTemplates ? (
                 <p className="text-xs text-slate-500">
-                  Reordering is available when search is off and you are viewing a single folder location.
+                  Reordering is available when search is off and you are viewing a single folder
+                  location.
                 </p>
               ) : null}
               {visibleChildFolders.length > 0 ? (
@@ -574,62 +617,119 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
               ) : null}
 
               {visibleTemplates.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {visibleTemplates.map((item) => (
-                    <Card
-                      key={item.id}
-                      draggable
-                      onDragStart={() => setDraggedTemplateId(item.id)}
-                      onDragEnd={() => setDraggedTemplateId(null)}
-                      className="border-slate-200 shadow-sm"
-                    >
-                      <CardContent className="space-y-3 p-4">
-                        <div>
-                          <h3 className="font-semibold text-slate-900">{item.name}</h3>
-                          <p className="mt-1 text-sm text-slate-500">{getTemplateSummary(item)}</p>
-                        </div>
+                <div
+                  className={
+                    layout === "rows"
+                      ? "space-y-2"
+                      : "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+                  }
+                >
+                  {visibleTemplates.map((item) => {
+                    const isExpanded = expandedTemplateIds.has(item.id);
+                    const rowMode = layout === "rows";
+                    return (
+                      <Card
+                        key={item.id}
+                        draggable
+                        onDragStart={() => setDraggedTemplateId(item.id)}
+                        onDragEnd={() => setDraggedTemplateId(null)}
+                        className="border-slate-200 shadow-sm"
+                      >
+                        <CardContent className={rowMode ? "space-y-0 p-0" : "space-y-3 p-4"}>
+                          <div
+                            className={
+                              rowMode
+                                ? "grid gap-3 p-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center"
+                                : "space-y-3"
+                            }
+                          >
+                            {rowMode && renderTemplateDetails ? (
+                              <button
+                                type="button"
+                                className="h-8 w-8 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                onClick={() => toggleTemplateExpanded(item.id)}
+                                title={isExpanded ? "Collapse template" : "Open template"}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="mx-auto h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="mx-auto h-4 w-4" />
+                                )}
+                              </button>
+                            ) : null}
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link href={getTemplateOpenHref(item)}>
-                            <Button size="sm" variant="outline">
-                              Open
-                            </Button>
-                          </Link>
-                          <Button size="sm" variant="outline" onClick={() => onDuplicateTemplate(item)}>
-                            Duplicate
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-600"
-                            onClick={() => onDeleteTemplate(item)}
-                          >
-                            Delete
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            onClick={() => moveByOffset(item.id, -1)}
-                            disabled={!canReorderTemplates}
-                            title="Move up"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            onClick={() => moveByOffset(item.id, 1)}
-                            disabled={!canReorderTemplates}
-                            title="Move down"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                            <div className="min-w-0">
+                              <h3 className="truncate font-semibold text-slate-900">{item.name}</h3>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {getTemplateSummary(item)}
+                              </p>
+                              {renderTemplatePreview ? (
+                                <div className="mt-2">{renderTemplatePreview(item)}</div>
+                              ) : null}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {!rowMode || !renderTemplateDetails ? (
+                                <Link href={getTemplateOpenHref(item)}>
+                                  <Button size="sm" variant="outline">
+                                    Open
+                                  </Button>
+                                </Link>
+                              ) : null}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-slate-400 hover:text-indigo-600"
+                                onClick={() => onDuplicateTemplate(item)}
+                                title="Duplicate"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-slate-400 hover:text-red-600"
+                                onClick={() => onDeleteTemplate(item)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              {!rowMode ? (
+                                <>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                    onClick={() => moveByOffset(item.id, -1)}
+                                    disabled={!canReorderTemplates}
+                                    title="Move up"
+                                  >
+                                    <ArrowUp className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                    onClick={() => moveByOffset(item.id, 1)}
+                                    disabled={!canReorderTemplates}
+                                    title="Move down"
+                                  >
+                                    <ArrowDown className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {rowMode && renderTemplateDetails && isExpanded ? (
+                            <div className="border-t border-slate-100 bg-slate-50/60 p-3">
+                              {renderTemplateDetails(item)}
+                            </div>
+                          ) : null}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               ) : null}
 

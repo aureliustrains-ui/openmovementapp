@@ -9,6 +9,9 @@ const settingsPath = path.resolve(serverDir, "../client/src/pages/app/Settings.t
 const apiPath = path.resolve(serverDir, "../client/src/lib/api.ts");
 const chatDisplayNamePath = path.resolve(serverDir, "../client/src/lib/chatDisplayName.ts");
 const clientChatPath = path.resolve(serverDir, "../client/src/pages/client/Chat.tsx");
+const appLayoutPath = path.resolve(serverDir, "../client/src/components/layout/AppLayout.tsx");
+const appPath = path.resolve(serverDir, "../client/src/App.tsx");
+const clientInfoPath = path.resolve(serverDir, "../client/src/pages/client/Info.tsx");
 const adminClientProfilePath = path.resolve(
   serverDir,
   "../client/src/pages/admin/ClientProfile.tsx",
@@ -86,6 +89,21 @@ test("chat read API sends only clientId in payload", () => {
   const hookBlock = hookBlockMatch ? hookBlockMatch[0] : "";
   assert.ok(hookBlock.includes("body: JSON.stringify({ clientId: data.clientId })"));
   assert.equal(hookBlock.includes("body: JSON.stringify(data)"), false);
+});
+
+test("client-facing chat entry points stay hidden while chat internals remain available", () => {
+  const layoutSource = fs.readFileSync(appLayoutPath, "utf8");
+  const appSource = fs.readFileSync(appPath, "utf8");
+  const infoSource = fs.readFileSync(clientInfoPath, "utf8");
+
+  assert.equal(layoutSource.includes('label: "Messages"'), false);
+  assert.equal(layoutSource.includes('href: "/app/client/chat"'), false);
+  assert.equal(layoutSource.includes("MessageCircle"), false);
+  assert.ok(appSource.includes('<Route path="/app/client/chat">'));
+  assert.ok(appSource.includes('<Redirect to="/app/client/home" />'));
+  assert.equal(appSource.includes("component={ClientChat}"), false);
+  assert.equal(infoSource.includes("use Messages"), false);
+  assert.ok(infoSource.includes("contact your coach directly for support"));
 });
 
 test("client chat marks unread as read on open using session identity", () => {

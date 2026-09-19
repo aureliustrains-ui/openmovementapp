@@ -52,7 +52,8 @@ export default function ClientHome() {
   const progressPhase = activePhase || currentPhase;
 
   const phaseSchedule = ((progressPhase?.schedule as any[]) || []) as TrainingScheduleEntry[];
-  const completedInstances = ((progressPhase?.completedScheduleInstances as string[]) || []) as string[];
+  const completedInstances = ((progressPhase?.completedScheduleInstances as string[]) ||
+    []) as string[];
   const phaseSessions = progressPhase
     ? allSessions.filter((session: any) => session.phaseId === progressPhase.id)
     : [];
@@ -63,7 +64,8 @@ export default function ClientHome() {
         phaseSchedule,
         completedInstances,
         progressPhase.id,
-        (weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>) || [],
+        (weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>) ||
+          [],
       )
     : null;
   const currentTrainingWeek = weekLifecycle?.currentWeek || 1;
@@ -85,18 +87,26 @@ export default function ClientHome() {
     : null;
 
   const guideVideoUrl =
-    typeof progressPhase?.homeGuideVideoUrl === "string" && progressPhase.homeGuideVideoUrl.trim().length > 0
+    typeof progressPhase?.homeGuideVideoUrl === "string" &&
+    progressPhase.homeGuideVideoUrl.trim().length > 0
       ? progressPhase.homeGuideVideoUrl.trim()
       : null;
   const introVideoUrl =
-    typeof progressPhase?.homeIntroVideoUrl === "string" && progressPhase.homeIntroVideoUrl.trim().length > 0
+    typeof progressPhase?.homeIntroVideoUrl === "string" &&
+    progressPhase.homeIntroVideoUrl.trim().length > 0
       ? progressPhase.homeIntroVideoUrl.trim()
       : null;
-  const latestProgressReport = [...(activePhaseProgressReports as Array<{ id: string; phaseId: string; status: string; createdAt: string }>)].sort(
-    (a, b) => b.createdAt.localeCompare(a.createdAt),
-  )[0];
+  const latestProgressReport = [
+    ...(activePhaseProgressReports as Array<{
+      id: string;
+      phaseId: string;
+      status: string;
+      createdAt: string;
+    }>),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const progressNeedsAction =
-    latestProgressReport?.status === "requested" || latestProgressReport?.status === "resubmission_requested";
+    latestProgressReport?.status === "requested" ||
+    latestProgressReport?.status === "resubmission_requested";
   const weeklyCheckinDue = Boolean(
     (notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue,
   );
@@ -147,7 +157,9 @@ export default function ClientHome() {
           <CardContent className="p-5 md:p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500">Next movement session</p>
+                <p className="text-xs uppercase tracking-wider text-slate-500">
+                  Next movement session
+                </p>
                 <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
                   {weekSchedulePreview.nextScheduleItem?.session.name || "No session scheduled"}
                 </h2>
@@ -161,7 +173,11 @@ export default function ClientHome() {
                 </Link>
               ) : (
                 <Link href={currentPhase ? "/app/client/my-phase" : "/app/client/home"}>
-                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-home-open-phase-fallback">
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    data-testid="button-home-open-phase-fallback"
+                  >
                     Open plan
                   </Button>
                 </Link>
@@ -178,7 +194,11 @@ export default function ClientHome() {
               title="Progress update"
               description="A progress update is requested for your active plan."
               ctaLabel="Open update"
-              ctaHref={latestProgressReport ? `/app/client/progress-reports/${latestProgressReport.id}` : "/app/client/my-phase"}
+              ctaHref={
+                latestProgressReport
+                  ? `/app/client/progress-reports/${latestProgressReport.id}`
+                  : "/app/client/my-phase"
+              }
               ctaVariant="secondaryDark"
               testId="card-home-progress-update"
             />
@@ -199,9 +219,9 @@ export default function ClientHome() {
           ) : null}
           {weeklyCheckinDue ? (
             <ActionRequiredCard
-              title="Weekly check-in"
+              title="Weekly recap"
               description="Your current training week is ready to close."
-              ctaLabel="Complete weekly check-in"
+              ctaLabel="Complete weekly recap"
               ctaHref="/app/client/my-phase?weeklyCheckin=1"
               ctaVariant="secondaryDark"
               testId="card-home-weekly-checkin"
@@ -209,7 +229,6 @@ export default function ClientHome() {
           ) : null}
         </section>
       ) : null}
-
     </div>
   );
 }

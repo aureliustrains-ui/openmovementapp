@@ -49,13 +49,15 @@ function nextId() {
   return crypto.randomUUID();
 }
 
-export function toBlueprintExercise(templateExercise: Partial<BlueprintExercise> & { name?: string }): BlueprintExercise {
+export function toBlueprintExercise(
+  templateExercise: Partial<BlueprintExercise> & { name?: string },
+): BlueprintExercise {
   return {
     id: templateExercise.id || nextId(),
     name: templateExercise.name || "New Exercise",
     sets: templateExercise.sets || "3",
     reps: templateExercise.reps || "10",
-    load: templateExercise.load || "Auto",
+    load: templateExercise.load === "Auto" ? "" : templateExercise.load || "",
     tempo: templateExercise.tempo || "3010",
     notes: templateExercise.notes || "",
     goal: templateExercise.goal || "",
@@ -85,7 +87,10 @@ export function cloneSection(section: BlueprintSection): BlueprintSection {
 }
 
 export function cloneSectionFromTemplate(
-  section: Partial<BlueprintSection> & { name?: string; exercises?: Array<Partial<BlueprintExercise>> },
+  section: Partial<BlueprintSection> & {
+    name?: string;
+    exercises?: Array<Partial<BlueprintExercise>>;
+  },
 ): BlueprintSection {
   return {
     id: nextId(),

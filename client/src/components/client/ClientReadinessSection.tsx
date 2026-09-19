@@ -1,9 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  clientCheckinsRecentQuery,
-  clientCheckinsTrendsQuery,
-} from "@/lib/api";
+import { clientCheckinsRecentQuery, clientCheckinsTrendsQuery } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   type CheckinsRange,
@@ -15,7 +12,13 @@ import {
 import { buildReadinessSummaryCards } from "@/lib/readinessSummary";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChevronDown, Loader2, TrendingUp } from "lucide-react";
 import {
   ComposedChart,
@@ -55,7 +58,9 @@ function formatScore(value: unknown, scale: 5 | 10): string {
 }
 
 function averageScore(values: Array<number | null | undefined>): number | null {
-  const filtered = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const filtered = values.filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value),
+  );
   if (filtered.length === 0) return null;
   return filtered.reduce((sum, value) => sum + value, 0) / filtered.length;
 }
@@ -120,10 +125,10 @@ export default function ClientReadinessSection({
   const checkinsRecent = recentQuery.data as any;
 
   const sessionCheckinTrendData = mapSessionCheckinTrendData(
-    (((checkinsTrends as any)?.sessions || []) as any[]),
+    ((checkinsTrends as any)?.sessions || []) as any[],
   );
   const weeklyCheckinTrendData = mapWeeklyCheckinTrendData(
-    (((checkinsTrends as any)?.weeks || []) as any[]),
+    ((checkinsTrends as any)?.weeks || []) as any[],
   );
   const weeklyTrendLabelByKey = useMemo(() => {
     const labels = new Map<string, string>();
@@ -152,13 +157,17 @@ export default function ClientReadinessSection({
   const hasSessionTrendData = hasAnySessionTrendData;
   const hasWeeklyTrendData = hasAnyWeeklyTrendData;
 
-  const hasFeltOffEventsInView = sessionCheckinTrendData.some((entry: any) => Boolean(entry?.feltOff));
+  const hasFeltOffEventsInView = sessionCheckinTrendData.some((entry: any) =>
+    Boolean(entry?.feltOff),
+  );
   const hasInjuryImpactDataInView = weeklyCheckinTrendData.some(
     (entry: any) => typeof entry?.injuryImpact === "number",
   );
 
   const showFeltOffToggle = showFullDetails || hasFeltOffEventsInView;
-  const feltOffEventCount = sessionCheckinTrendData.filter((entry: any) => Boolean(entry?.feltOff)).length;
+  const feltOffEventCount = sessionCheckinTrendData.filter((entry: any) =>
+    Boolean(entry?.feltOff),
+  ).length;
 
   const summaryCards = useMemo(
     () =>
@@ -215,8 +224,10 @@ export default function ClientReadinessSection({
       averageScore(priorSessions.map((entry) => entry?.rpeOverall)),
       0.6,
     );
-    if (effortDirection === "up") lines.push("Effort was slightly higher than your recent average.");
-    if (effortDirection === "down") lines.push("Effort was slightly lower than your recent average.");
+    if (effortDirection === "up")
+      lines.push("Effort was slightly higher than your recent average.");
+    if (effortDirection === "down")
+      lines.push("Effort was slightly lower than your recent average.");
     if (effortDirection === "flat") lines.push("Effort has been steady recently.");
 
     const sleepDirection = compareDirection(
@@ -230,11 +241,11 @@ export default function ClientReadinessSection({
 
     if (feltOffEventCount > 0) {
       lines.push(
-        `${feltOffEventCount} recent session check-in${feltOffEventCount === 1 ? "" : "s"} included a felt-off event.`,
+        `${feltOffEventCount} recent session recap${feltOffEventCount === 1 ? "" : "s"} included a felt-off event.`,
       );
     }
     if (lines.length === 0) {
-      lines.push("Not enough recent check-ins yet to generate a trend summary.");
+      lines.push("Not enough recent recaps yet to generate a trend summary.");
     }
     return lines.slice(0, 4);
   }, [weeklyCheckinTrendData, sessionCheckinTrendData, feltOffEventCount]);
@@ -281,13 +292,29 @@ export default function ClientReadinessSection({
                 </button>
                 {showTrendOrientation ? (
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    These check-ins show the data you entered about your sessions and your weeks. They are there to help us notice patterns, reflect on how training is going, and give a rough orientation over time. They can show us whether recovery, stress, effort, sleep, or other factors are moving in a certain direction, but they should not be treated as something absolute. In a world with so much data, it is easy to rely too much on numbers and forget the most important thing: learning to sense our own body well. The real goal is to become better at noticing how we feel, how recovered we are, how much effort something really takes, and when small changes begin to happen. The better we get at sensing this ourselves, the less we need from the outside to tell us what is going on. These check-ins should support that process, not replace it.
+                    These recaps show the data you entered about your sessions and your weeks. They
+                    are there to help us notice patterns, reflect on how training is going, and give
+                    a rough orientation over time. They can show us whether recovery, stress,
+                    effort, sleep, or other factors are moving in a certain direction, but they
+                    should not be treated as something absolute. In a world with so much data, it is
+                    easy to rely too much on numbers and forget the most important thing: learning
+                    to sense our own body well. The real goal is to become better at noticing how we
+                    feel, how recovered we are, how much effort something really takes, and when
+                    small changes begin to happen. The better we get at sensing this ourselves, the
+                    less we need from the outside to tell us what is going on. These recaps should
+                    support that process, not replace it.
                   </p>
                 ) : null}
               </div>
               <div className="flex justify-start sm:justify-end">
-                <Select value={checkinsRange} onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}>
-                  <SelectTrigger className="w-[160px] bg-white border-slate-200" data-testid="select-client-home-checkins-range">
+                <Select
+                  value={checkinsRange}
+                  onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}
+                >
+                  <SelectTrigger
+                    className="w-[160px] bg-white border-slate-200"
+                    data-testid="select-client-home-checkins-range"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -306,8 +333,14 @@ export default function ClientReadinessSection({
                 <TrendingUp className="h-4 w-4 text-slate-600" />
                 <CardTitle>{showFullDetails ? "Trend Explorer" : "Readiness"}</CardTitle>
               </div>
-              <Select value={checkinsRange} onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}>
-                <SelectTrigger className="w-[160px] bg-white border-slate-200" data-testid="select-client-home-checkins-range">
+              <Select
+                value={checkinsRange}
+                onValueChange={(value) => setCheckinsRange(value as CheckinsRange)}
+              >
+                <SelectTrigger
+                  className="w-[160px] bg-white border-slate-200"
+                  data-testid="select-client-home-checkins-range"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -328,18 +361,24 @@ export default function ClientReadinessSection({
             </div>
           ) : trendsQuery.isError ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-600">Readiness data could not be loaded right now.</p>
+              <p className="text-sm text-slate-600">
+                Readiness data could not be loaded right now.
+              </p>
             </div>
           ) : !hasAnyTrendData ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
-              <p className="text-sm text-slate-600">No check-ins yet. Your trends will appear after your first entries.</p>
+              <p className="text-sm text-slate-600">
+                No recaps yet. Your trends will appear after your first entries.
+              </p>
             </div>
           ) : (
             <>
               {compactForCheckins ? (
                 <div className="space-y-4">
                   <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Summary</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Summary
+                    </p>
                     <div className="mt-1.5 space-y-1">
                       {trendSummaryLines.map((line) => (
                         <p key={line} className="text-sm text-slate-700">
@@ -355,7 +394,10 @@ export default function ClientReadinessSection({
                       <div className="space-y-3">
                         <div className={CHART_FRAME_CLASS}>
                           <ResponsiveContainer>
-                            <ComposedChart data={weeklyCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                            <ComposedChart
+                              data={weeklyCheckinTrendData}
+                              margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
                               <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} width={28} />
@@ -365,15 +407,35 @@ export default function ClientReadinessSection({
                                   const point = payload[0]?.payload as any;
                                   return (
                                     <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                      <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
-                                      <div className="text-slate-700 mt-1">Recovery: {point?.recoveryThisTrainingWeek}</div>
-                                      <div className="text-slate-700">Stress: {point?.stressOutsideTrainingThisWeek}</div>
+                                      <div className="font-semibold text-slate-900">
+                                        Week of {point?.weekStartDate}
+                                      </div>
+                                      <div className="text-slate-700 mt-1">
+                                        Recovery: {point?.recoveryThisTrainingWeek}
+                                      </div>
+                                      <div className="text-slate-700">
+                                        Stress: {point?.stressOutsideTrainingThisWeek}
+                                      </div>
                                     </div>
                                   );
                                 }}
                               />
-                              <Line type="monotone" dataKey="recoveryThisTrainingWeek" name="Recovery this training week" stroke={CHART_COLORS.recovery} strokeWidth={2} dot={{ r: 3 }} />
-                              <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHART_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
+                              <Line
+                                type="monotone"
+                                dataKey="recoveryThisTrainingWeek"
+                                name="Recovery this training week"
+                                stroke={CHART_COLORS.recovery}
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="stressOutsideTrainingThisWeek"
+                                name="Stress outside training this week"
+                                stroke={CHART_COLORS.stress}
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                              />
                             </ComposedChart>
                           </ResponsiveContainer>
                         </div>
@@ -384,12 +446,17 @@ export default function ClientReadinessSection({
                             </h4>
                             <div className={CHART_FRAME_CLASS}>
                               <ResponsiveContainer>
-                                <ComposedChart data={weeklyCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                <ComposedChart
+                                  data={weeklyCheckinTrendData}
+                                  margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                                >
                                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                   <XAxis
                                     dataKey="trendWeekKey"
                                     tick={{ fontSize: 11 }}
-                                    tickFormatter={(value: string) => weeklyTrendLabelByKey.get(String(value)) ?? String(value)}
+                                    tickFormatter={(value: string) =>
+                                      weeklyTrendLabelByKey.get(String(value)) ?? String(value)
+                                    }
                                   />
                                   <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} width={28} />
                                   <Tooltip
@@ -399,10 +466,15 @@ export default function ClientReadinessSection({
                                       return (
                                         <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
                                           <div className="font-semibold text-slate-900">
-                                            {point?.trendWeekLabel || point?.weekStartDate || "Week"}
+                                            {point?.trendWeekLabel ||
+                                              point?.weekStartDate ||
+                                              "Week"}
                                           </div>
                                           <div className="text-slate-700 mt-1">
-                                            Injury impact: {typeof point?.injuryImpact === "number" ? point.injuryImpact : "—"}
+                                            Injury impact:{" "}
+                                            {typeof point?.injuryImpact === "number"
+                                              ? point.injuryImpact
+                                              : "—"}
                                           </div>
                                         </div>
                                       );
@@ -425,7 +497,7 @@ export default function ClientReadinessSection({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        No weekly check-ins yet.
+                        No weekly recaps yet.
                       </div>
                     )}
                   </div>
@@ -436,7 +508,10 @@ export default function ClientReadinessSection({
                       <div className="space-y-2">
                         <div className={CHART_FRAME_CLASS}>
                           <ResponsiveContainer>
-                            <ComposedChart data={sessionCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                            <ComposedChart
+                              data={sessionCheckinTrendData}
+                              margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis
                                 dataKey="trendWeekKey"
@@ -452,16 +527,31 @@ export default function ClientReadinessSection({
                                   const point = payload[0]?.payload as any;
                                   return (
                                     <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                      <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
+                                      <div className="font-semibold text-slate-900">
+                                        {point?.sessionName || "Session"}
+                                      </div>
                                       <div className="text-slate-600">{point?.dateLabel}</div>
-                                      <div className="text-slate-700 mt-1">Effort: {point?.rpeOverall}</div>
-                                      <div className="text-slate-700">Sleep: {point?.sleepLastNight ?? "-"}/10</div>
-                                      {point?.feltOff ? <div className="text-amber-700">Felt off: Yes</div> : null}
+                                      <div className="text-slate-700 mt-1">
+                                        Effort: {point?.rpeOverall}
+                                      </div>
+                                      <div className="text-slate-700">
+                                        Sleep: {point?.sleepLastNight ?? "-"}/10
+                                      </div>
+                                      {point?.feltOff ? (
+                                        <div className="text-amber-700">Felt off: Yes</div>
+                                      ) : null}
                                     </div>
                                   );
                                 }}
                               />
-                              <Line type="monotone" dataKey="rpeOverall" name="Effort" stroke={CHART_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
+                              <Line
+                                type="monotone"
+                                dataKey="rpeOverall"
+                                name="Effort"
+                                stroke={CHART_COLORS.sessionRpe}
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                              />
                               <Line
                                 type="monotone"
                                 dataKey="sleepLastNight"
@@ -477,8 +567,18 @@ export default function ClientReadinessSection({
                                   dataKey="feltOffEventLevel"
                                   name="Felt off events"
                                   stroke="transparent"
-                                  dot={{ r: 5, fill: CHART_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
-                                  activeDot={{ r: 6, fill: CHART_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
+                                  dot={{
+                                    r: 5,
+                                    fill: CHART_COLORS.feltOff,
+                                    stroke: "#ffffff",
+                                    strokeWidth: 1.5,
+                                  }}
+                                  activeDot={{
+                                    r: 6,
+                                    fill: CHART_COLORS.feltOff,
+                                    stroke: "#ffffff",
+                                    strokeWidth: 1.5,
+                                  }}
                                   connectNulls={false}
                                 />
                               ) : null}
@@ -493,7 +593,7 @@ export default function ClientReadinessSection({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        No session check-ins yet.
+                        No session recaps yet.
                       </div>
                     )}
                   </div>
@@ -501,7 +601,7 @@ export default function ClientReadinessSection({
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-slate-700">Session check-ins</h3>
+                    <h3 className="text-sm font-semibold text-slate-700">Session recaps</h3>
                     {hasSessionTrendData ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
@@ -510,7 +610,10 @@ export default function ClientReadinessSection({
                             className={metricToggleClassName(sessionMetrics.rpeOverall)}
                             onClick={() => toggleSessionMetric("rpeOverall")}
                           >
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sessionRpe }} />
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: CHART_COLORS.sessionRpe }}
+                            />
                             Effort
                           </button>
                           <button
@@ -518,7 +621,10 @@ export default function ClientReadinessSection({
                             className={metricToggleClassName(sessionMetrics.sleepLastNight)}
                             onClick={() => toggleSessionMetric("sleepLastNight")}
                           >
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.sleepLastNight }} />
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: CHART_COLORS.sleepLastNight }}
+                            />
                             Sleep
                           </button>
                           {showFeltOffToggle ? (
@@ -527,14 +633,20 @@ export default function ClientReadinessSection({
                               className={metricToggleClassName(sessionMetrics.feltOffEvents)}
                               onClick={() => toggleSessionMetric("feltOffEvents")}
                             >
-                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.feltOff }} />
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: CHART_COLORS.feltOff }}
+                              />
                               Felt off
                             </button>
                           ) : null}
                         </div>
                         <div className={CHART_FRAME_CLASS}>
                           <ResponsiveContainer>
-                            <ComposedChart data={sessionCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                            <ComposedChart
+                              data={sessionCheckinTrendData}
+                              margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis
                                 dataKey="trendWeekKey"
@@ -550,11 +662,19 @@ export default function ClientReadinessSection({
                                   const point = payload[0]?.payload as any;
                                   return (
                                     <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                      <div className="font-semibold text-slate-900">{point?.sessionName || "Session"}</div>
+                                      <div className="font-semibold text-slate-900">
+                                        {point?.sessionName || "Session"}
+                                      </div>
                                       <div className="text-slate-600">{point?.dateLabel}</div>
-                                      <div className="text-slate-700 mt-1">Effort: {point?.rpeOverall}</div>
-                                      <div className="text-slate-700">Sleep: {point?.sleepLastNight ?? "-"}/10</div>
-                                      {point?.feltOff ? <div className="text-amber-700">Felt off: Yes</div> : null}
+                                      <div className="text-slate-700 mt-1">
+                                        Effort: {point?.rpeOverall}
+                                      </div>
+                                      <div className="text-slate-700">
+                                        Sleep: {point?.sleepLastNight ?? "-"}/10
+                                      </div>
+                                      {point?.feltOff ? (
+                                        <div className="text-amber-700">Felt off: Yes</div>
+                                      ) : null}
                                       {point?.feltOff && point?.whatFeltOff ? (
                                         <div className="text-slate-700 mt-1 whitespace-pre-wrap">
                                           What felt off: {point.whatFeltOff}
@@ -565,7 +685,14 @@ export default function ClientReadinessSection({
                                 }}
                               />
                               {sessionMetrics.rpeOverall ? (
-                                <Line type="monotone" dataKey="rpeOverall" name="Effort" stroke={CHART_COLORS.sessionRpe} strokeWidth={2} dot={{ r: 3 }} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="rpeOverall"
+                                  name="Effort"
+                                  stroke={CHART_COLORS.sessionRpe}
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                />
                               ) : null}
                               {sessionMetrics.sleepLastNight ? (
                                 <Line
@@ -584,8 +711,18 @@ export default function ClientReadinessSection({
                                   dataKey="feltOffEventLevel"
                                   name="Felt off events"
                                   stroke="transparent"
-                                  dot={{ r: 5, fill: CHART_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
-                                  activeDot={{ r: 6, fill: CHART_COLORS.feltOff, stroke: "#ffffff", strokeWidth: 1.5 }}
+                                  dot={{
+                                    r: 5,
+                                    fill: CHART_COLORS.feltOff,
+                                    stroke: "#ffffff",
+                                    strokeWidth: 1.5,
+                                  }}
+                                  activeDot={{
+                                    r: 6,
+                                    fill: CHART_COLORS.feltOff,
+                                    stroke: "#ffffff",
+                                    strokeWidth: 1.5,
+                                  }}
                                   connectNulls={false}
                                 />
                               ) : null}
@@ -595,36 +732,49 @@ export default function ClientReadinessSection({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        No session check-ins yet.
+                        No session recaps yet.
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-slate-700">Weekly check-ins</h3>
+                    <h3 className="text-sm font-semibold text-slate-700">Weekly recaps</h3>
                     {hasWeeklyTrendData ? (
                       <div className="space-y-3">
                         <div className="flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1">
                           <button
                             type="button"
-                            className={metricToggleClassName(weeklyMetrics.recoveryThisTrainingWeek)}
+                            className={metricToggleClassName(
+                              weeklyMetrics.recoveryThisTrainingWeek,
+                            )}
                             onClick={() => toggleWeeklyMetric("recoveryThisTrainingWeek")}
                           >
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.recovery }} />
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: CHART_COLORS.recovery }}
+                            />
                             Recovery
                           </button>
                           <button
                             type="button"
-                            className={metricToggleClassName(weeklyMetrics.stressOutsideTrainingThisWeek)}
+                            className={metricToggleClassName(
+                              weeklyMetrics.stressOutsideTrainingThisWeek,
+                            )}
                             onClick={() => toggleWeeklyMetric("stressOutsideTrainingThisWeek")}
                           >
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS.stress }} />
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: CHART_COLORS.stress }}
+                            />
                             Stress
                           </button>
                         </div>
                         <div className={CHART_FRAME_CLASS}>
                           <ResponsiveContainer>
-                            <ComposedChart data={weeklyCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                            <ComposedChart
+                              data={weeklyCheckinTrendData}
+                              margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="dateLabel" tick={{ fontSize: 11 }} />
                               <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} width={28} />
@@ -634,18 +784,38 @@ export default function ClientReadinessSection({
                                   const point = payload[0]?.payload as any;
                                   return (
                                     <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                                      <div className="font-semibold text-slate-900">Week of {point?.weekStartDate}</div>
-                                      <div className="text-slate-700 mt-1">Recovery: {point?.recoveryThisTrainingWeek}</div>
-                                      <div className="text-slate-700">Stress: {point?.stressOutsideTrainingThisWeek}</div>
+                                      <div className="font-semibold text-slate-900">
+                                        Week of {point?.weekStartDate}
+                                      </div>
+                                      <div className="text-slate-700 mt-1">
+                                        Recovery: {point?.recoveryThisTrainingWeek}
+                                      </div>
+                                      <div className="text-slate-700">
+                                        Stress: {point?.stressOutsideTrainingThisWeek}
+                                      </div>
                                     </div>
                                   );
                                 }}
                               />
                               {weeklyMetrics.recoveryThisTrainingWeek ? (
-                                <Line type="monotone" dataKey="recoveryThisTrainingWeek" name="Recovery this training week" stroke={CHART_COLORS.recovery} strokeWidth={2} dot={{ r: 3 }} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="recoveryThisTrainingWeek"
+                                  name="Recovery this training week"
+                                  stroke={CHART_COLORS.recovery}
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                />
                               ) : null}
                               {weeklyMetrics.stressOutsideTrainingThisWeek ? (
-                                <Line type="monotone" dataKey="stressOutsideTrainingThisWeek" name="Stress outside training this week" stroke={CHART_COLORS.stress} strokeWidth={2} dot={{ r: 3 }} />
+                                <Line
+                                  type="monotone"
+                                  dataKey="stressOutsideTrainingThisWeek"
+                                  name="Stress outside training this week"
+                                  stroke={CHART_COLORS.stress}
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                />
                               ) : null}
                             </ComposedChart>
                           </ResponsiveContainer>
@@ -653,56 +823,64 @@ export default function ClientReadinessSection({
                       </div>
                     ) : (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        No weekly check-ins yet.
+                        No weekly recaps yet.
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-            {showFullDetails && hasInjuryImpactDataInView ? (
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-700">Weekly injury impact</h3>
-                <div className={CHART_FRAME_CLASS}>
-                  <ResponsiveContainer>
-                    <ComposedChart data={weeklyCheckinTrendData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis
-                        dataKey="trendWeekKey"
-                        tick={{ fontSize: 11 }}
-                        tickFormatter={(value: string) => weeklyTrendLabelByKey.get(String(value)) ?? String(value)}
-                      />
-                      <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} width={28} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload || payload.length === 0) return null;
-                          const point = payload[0]?.payload as any;
-                          return (
-                            <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
-                              <div className="font-semibold text-slate-900">
-                                {point?.trendWeekLabel || point?.weekStartDate || "Week"}
+              {showFullDetails && hasInjuryImpactDataInView ? (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-700">Weekly injury impact</h3>
+                  <div className={CHART_FRAME_CLASS}>
+                    <ResponsiveContainer>
+                      <ComposedChart
+                        data={weeklyCheckinTrendData}
+                        margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="trendWeekKey"
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(value: string) =>
+                            weeklyTrendLabelByKey.get(String(value)) ?? String(value)
+                          }
+                        />
+                        <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} width={28} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const point = payload[0]?.payload as any;
+                            return (
+                              <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+                                <div className="font-semibold text-slate-900">
+                                  {point?.trendWeekLabel || point?.weekStartDate || "Week"}
+                                </div>
+                                <div className="text-slate-700 mt-1">
+                                  Injury impact:{" "}
+                                  {typeof point?.injuryImpact === "number"
+                                    ? point.injuryImpact
+                                    : "—"}
+                                </div>
                               </div>
-                              <div className="text-slate-700 mt-1">
-                                Injury impact: {typeof point?.injuryImpact === "number" ? point.injuryImpact : "—"}
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="injuryImpact"
-                        name="Weekly injury impact"
-                        stroke={CHART_COLORS.painInjury}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        connectNulls={false}
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                            );
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="injuryImpact"
+                          name="Weekly injury impact"
+                          stroke={CHART_COLORS.painInjury}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          connectNulls={false}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
             </>
           )}
         </CardContent>
@@ -711,52 +889,66 @@ export default function ClientReadinessSection({
       {showFullDetails ? (
         <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50">
-            <CardTitle>Recent Check-ins</CardTitle>
+            <CardTitle>Recent Recaps</CardTitle>
           </CardHeader>
           <CardContent className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">Recent session check-ins</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Recent session recaps</h3>
               {((checkinsRecent as any)?.sessions || []).length === 0 ? (
-                <p className="text-sm text-slate-500">No session check-ins yet.</p>
+                <p className="text-sm text-slate-500">No session recaps yet.</p>
               ) : (
                 (checkinsRecent as any).sessions.map((entry: any) => (
                   <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
                     <div className="text-sm font-semibold text-slate-900">{entry.sessionName}</div>
-                    <div className="text-xs text-slate-500">{new Date(entry.submittedAt).toLocaleString()}</div>
+                    <div className="text-xs text-slate-500">
+                      {new Date(entry.submittedAt).toLocaleString()}
+                    </div>
                     <div className="text-xs text-slate-700 mt-1">
                       Session effort {entry.sessionRpe ?? entry.rpeOverall}
                       {entry.feltOff ? " · felt off" : ""}
                     </div>
-                    <div className="text-xs text-slate-700">Sleep last night {entry.sleepLastNight ?? "-"}</div>
+                    <div className="text-xs text-slate-700">
+                      Sleep last night {entry.sleepLastNight ?? "-"}
+                    </div>
                     {entry.whatFeltOff ? (
-                      <div className="text-xs text-slate-700 mt-1">What felt off: {entry.whatFeltOff}</div>
+                      <div className="text-xs text-slate-700 mt-1">
+                        What felt off: {entry.whatFeltOff}
+                      </div>
                     ) : null}
                     {entry.optionalNote ? (
-                      <div className="text-xs text-slate-700 mt-1">Optional note: {entry.optionalNote}</div>
+                      <div className="text-xs text-slate-700 mt-1">
+                        Optional note: {entry.optionalNote}
+                      </div>
                     ) : null}
                   </div>
                 ))
               )}
             </div>
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">Recent weekly check-ins</h3>
+              <h3 className="text-sm font-semibold text-slate-700">Recent weekly recaps</h3>
               {((checkinsRecent as any)?.weeks || []).length === 0 ? (
-                <p className="text-sm text-slate-500">No weekly check-ins yet.</p>
+                <p className="text-sm text-slate-500">No weekly recaps yet.</p>
               ) : (
                 (checkinsRecent as any).weeks.map((entry: any) => (
                   <div key={entry.id} className="rounded-xl border border-slate-200 p-3">
-                    <div className="text-sm font-semibold text-slate-900">Week of {entry.weekStartDate}</div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      Week of {entry.weekStartDate}
+                    </div>
                     <div className="text-xs text-slate-700 mt-1">
-                      Recovery {entry.recoveryThisTrainingWeek} · Stress {entry.stressOutsideTrainingThisWeek}
+                      Recovery {entry.recoveryThisTrainingWeek} · Stress{" "}
+                      {entry.stressOutsideTrainingThisWeek}
                     </div>
                     <div className="text-xs text-slate-700">
                       Pain/injury affected training {entry.injuryAffectedTraining ? "Yes" : "No"}
                     </div>
                     <div className="text-xs text-slate-700">
-                      Injury impact {entry.injuryAffectedTraining ? (entry.injuryImpact ?? "—") : "—"}
+                      Injury impact{" "}
+                      {entry.injuryAffectedTraining ? (entry.injuryImpact ?? "—") : "—"}
                     </div>
                     {entry.optionalNote ? (
-                      <div className="text-xs text-slate-700 mt-1">Optional note: {entry.optionalNote}</div>
+                      <div className="text-xs text-slate-700 mt-1">
+                        Optional note: {entry.optionalNote}
+                      </div>
                     ) : null}
                   </div>
                 ))

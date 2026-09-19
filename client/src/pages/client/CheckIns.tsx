@@ -16,7 +16,12 @@ import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-type ProgressStatus = "requested" | "submitted" | "approved" | "resubmission_requested" | "reviewed";
+type ProgressStatus =
+  | "requested"
+  | "submitted"
+  | "approved"
+  | "resubmission_requested"
+  | "reviewed";
 type ActivePhaseProgressReport = {
   id: string;
   phaseId: string;
@@ -116,20 +121,31 @@ export default function ClientCheckIns() {
     computedMovementActions;
   const isMovementCheckBlocking = currentPhase?.status === "Waiting for Movement Check";
   const weeklyDue =
-    Boolean((notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue) ||
-    Boolean((weeklyCurrentOrDue as { due?: boolean } | undefined)?.due);
+    Boolean(
+      (notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue,
+    ) || Boolean((weeklyCurrentOrDue as { due?: boolean } | undefined)?.due);
   const progressNeedsAction =
     latestProgressReport?.status === "requested" ||
     latestProgressReport?.status === "resubmission_requested";
 
-  const dueCount = Number(weeklyDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
+  const dueCount =
+    Number(weeklyDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
 
-  const recentWeekly = [...(weeklyCheckins as Array<{ id: string; submittedAt?: string; phaseWeekNumber?: number | null }>)].sort(
-    (a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")),
-  );
-  const recentSession = [...(sessionCheckins as Array<{ id: string; submittedAt?: string; rpeOverall?: number; sleepLastNight?: number | null }>)].sort(
-    (a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")),
-  );
+  const recentWeekly = [
+    ...(weeklyCheckins as Array<{
+      id: string;
+      submittedAt?: string;
+      phaseWeekNumber?: number | null;
+    }>),
+  ].sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")));
+  const recentSession = [
+    ...(sessionCheckins as Array<{
+      id: string;
+      submittedAt?: string;
+      rpeOverall?: number;
+      sleepLastNight?: number | null;
+    }>),
+  ].sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")));
 
   const movementSummary = {
     approved: movementChecks.filter((check) => check.status === "Approved").length,
@@ -146,7 +162,7 @@ export default function ClientCheckIns() {
       id: `weekly-${entry.id}`,
       type: "Weekly" as const,
       submittedAt: entry.submittedAt || null,
-      detail: `Week ${entry.phaseWeekNumber ?? "—"} check-in submitted.`,
+      detail: `Week ${entry.phaseWeekNumber ?? "—"} recap submitted.`,
     })),
     ...recentSession.slice(0, 4).map((entry) => ({
       id: `session-${entry.id}`,
@@ -194,11 +210,10 @@ export default function ClientCheckIns() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 animate-in fade-in">
-
       {isReadOnly ? (
         <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-xl">
           <CardContent className="p-4 text-sm text-amber-800">
-            Check-in submissions are read-only unless you are logged in as this client account.
+            Recap submissions are read-only unless you are logged in as this client account.
           </CardContent>
         </Card>
       ) : null}
@@ -232,9 +247,9 @@ export default function ClientCheckIns() {
 
             {weeklyDue ? (
               <ActionRequiredCard
-                title="Weekly check-in"
+                title="Weekly recap"
                 description="Your current training week is ready to close."
-                ctaLabel="Complete weekly check-in"
+                ctaLabel="Complete weekly recap"
                 ctaHref="/app/client/my-phase?weeklyCheckin=1"
                 ctaDisabled={isReadOnly}
                 ctaVariant="secondaryDark"
@@ -246,7 +261,11 @@ export default function ClientCheckIns() {
                 title="Progress update"
                 description="A progress update is requested for your active plan."
                 ctaLabel="Open update"
-                ctaHref={latestProgressReport ? `/app/client/progress-reports/${latestProgressReport.id}` : "/app/client/my-phase"}
+                ctaHref={
+                  latestProgressReport
+                    ? `/app/client/progress-reports/${latestProgressReport.id}`
+                    : "/app/client/my-phase"
+                }
                 ctaDisabled={isReadOnly}
                 ctaVariant="secondaryDark"
               />
@@ -330,13 +349,16 @@ export default function ClientCheckIns() {
         {recentActivity.length === 0 ? (
           <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
             <CardContent className="p-4">
-              <p className="text-sm text-slate-600">No recent check-in activity yet.</p>
+              <p className="text-sm text-slate-600">No recent recap activity yet.</p>
             </CardContent>
           </Card>
         ) : (
           <>
             <div className="md:hidden">
-              <details className="rounded-xl border border-slate-200 bg-white p-3" data-testid="details-checkins-recent-activity-mobile">
+              <details
+                className="rounded-xl border border-slate-200 bg-white p-3"
+                data-testid="details-checkins-recent-activity-mobile"
+              >
                 <summary className="cursor-pointer text-sm font-medium text-slate-700">
                   Show recent activity
                 </summary>

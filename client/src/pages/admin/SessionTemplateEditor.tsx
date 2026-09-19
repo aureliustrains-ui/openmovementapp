@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -11,13 +11,16 @@ import {
   useUpdateSessionTemplate,
 } from "@/lib/api";
 import {
+  cloneExercise,
   cloneExerciseFromTemplate,
+  cloneSection,
   cloneSectionFromTemplate,
   toBlueprintExercise,
 } from "@/lib/blueprintClone";
 import type { BlueprintSection } from "@/lib/blueprintClone";
 import { SessionEditorCard } from "@/components/admin/builder/SessionEditorCard";
 import { TemplateEditorHeader } from "@/components/admin/TemplateEditorHeader";
+import { useAutosave } from "@/hooks/useAutosave";
 
 type SessionTemplateModel = {
   id: string;
@@ -67,24 +70,37 @@ export default function SessionTemplateEditor() {
     });
   }, [template]);
 
-  const save = async () => {
-    if (!model || !model.name.trim()) return;
-    setSaving(true);
-    try {
-      await updateTemplate.mutateAsync({
-        id: model.id,
-        name: model.name.trim(),
-        description: model.description.trim() || null,
-        durationMinutes: model.durationMinutes,
-        sections: model.sections,
-      });
-      toast({ title: "Session template saved" });
-    } catch {
-      toast({ title: "Could not save session template", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const autosaveSnapshot = useMemo(() => JSON.stringify(model), [model]);
+
+  const save = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!model || !model.name.trim()) return;
+      setSaving(true);
+      try {
+        await updateTemplate.mutateAsync({
+          id: model.id,
+          name: model.name.trim(),
+          description: model.description.trim() || null,
+          durationMinutes: model.durationMinutes,
+          sections: model.sections,
+        });
+        if (!options?.silent) toast({ title: "Session template saved" });
+      } catch {
+        toast({ title: "Could not save session template", variant: "destructive" });
+        throw new Error("Could not save session template");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [model, toast, updateTemplate],
+  );
+
+  const autosave = useAutosave({
+    snapshot: autosaveSnapshot,
+    enabled: Boolean(model?.id && model.name.trim()),
+    delayMs: 30_000,
+    onSave: () => save({ silent: true }),
+  });
 
   const remove = async () => {
     if (!model) return;
@@ -114,9 +130,7 @@ export default function SessionTemplateEditor() {
   };
 
   if (!model) {
-    return (
-      <div className="w-full py-12 text-slate-500">Loading session template...</div>
-    );
+    return <div className="w-full py-12 text-slate-500">Loading session template...</div>;
   }
 
   return (
@@ -126,9 +140,10 @@ export default function SessionTemplateEditor() {
         title="Session Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}
-        onSave={save}
+        onSave={() => void save().then(() => autosave.markSaved())}
         saveDisabled={saving || !model.name.trim()}
         saving={saving}
+        autosaveStatus={autosave.status}
         onDelete={remove}
         onDuplicate={duplicate}
       />
@@ -142,9 +157,14 @@ export default function SessionTemplateEditor() {
         exerciseTemplates={exerciseTemplates as any[]}
         onSessionChange={(updater) => setModel((prev) => (prev ? updater(prev as any) : prev))}
         onRemoveSession={() => {}}
+        onDuplicateSession={undefined}
         onCreateSection={() => makeSection(`Section ${model.sections.length + 1}`)}
         onCloneSectionTemplate={(templateSection) => cloneSectionFromTemplate(templateSection)}
-        onCloneExerciseTemplate={(templateExercise) => cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))}
+        onCloneExerciseTemplate={(templateExercise) =>
+          cloneExerciseFromTemplate(toBlueprintExercise(templateExercise))
+        }
+        onCloneExercise={(exercise) => cloneExercise(exercise)}
+        onCloneSection={(sourceSection) => cloneSection(sourceSection)}
       />
     </div>
   );

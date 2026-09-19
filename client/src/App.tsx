@@ -30,7 +30,6 @@ import ExerciseTemplateEditor from "@/pages/admin/ExerciseTemplateEditor";
 import ClientHome from "@/pages/client/Home";
 import ClientMyPhase from "@/pages/client/MyPhase";
 import ClientSessionView from "@/pages/client/SessionView";
-import ClientChat from "@/pages/client/Chat";
 import ClientInfo from "@/pages/client/Info";
 import ClientProgressReport from "@/pages/client/ProgressReport";
 import ClientCheckIns from "@/pages/client/CheckIns";
@@ -38,16 +37,19 @@ import ClientYou from "@/pages/client/You";
 
 function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
   const { sessionUser, impersonating } = useAuth();
-  
+
   if (!sessionUser) {
     return <Redirect to="/login" />;
   }
-  
-  const canAccessAsImpersonatedClient = allowedRole === "Client" && impersonating && sessionUser.role === "Admin";
+
+  const canAccessAsImpersonatedClient =
+    allowedRole === "Client" && impersonating && sessionUser.role === "Admin";
   if (allowedRole && sessionUser.role !== allowedRole && !canAccessAsImpersonatedClient) {
-    return <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />;
+    return (
+      <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
+    );
   }
-  
+
   return <Component {...rest} />;
 }
 
@@ -74,7 +76,7 @@ function Router() {
     <Switch>
       <Route path="/">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Redirect to="/login" />
         )}
@@ -82,7 +84,7 @@ function Router() {
 
       <Route path="/login">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Login />
         )}
@@ -90,17 +92,17 @@ function Router() {
 
       <Route path="/signup">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === 'Admin' ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <SignUp />
         )}
       </Route>
-      
+
       {/* App Shell routing */}
       <Route path="/app/*">
         {() => {
           if (!sessionUser) return <Redirect to="/login" />;
-          
+
           return (
             <AppLayout>
               <Switch>
@@ -129,7 +131,7 @@ function Router() {
                 <Route path="/app/admin/templates">
                   {() => <ProtectedRoute component={AdminTemplates} allowedRole="Admin" />}
                 </Route>
-                
+
                 {/* Client Routes */}
                 <Route path="/app/client/home">
                   {() => <ProtectedRoute component={ClientHome} allowedRole="Client" />}
@@ -146,11 +148,11 @@ function Router() {
                 <Route path="/app/client/progress-reports/:id">
                   {() => <ProtectedRoute component={ClientProgressReport} allowedRole="Client" />}
                 </Route>
-                <Route path="/app/client/chat">
-                  {() => <ProtectedRoute component={ClientChat} allowedRole="Client" />}
-                </Route>
+                <Route path="/app/client/chat">{() => <Redirect to="/app/client/home" />}</Route>
                 <Route path="/app/client/readiness">
-                  {() => <ProtectedRoute component={ClientReadinessRedirect} allowedRole="Client" />}
+                  {() => (
+                    <ProtectedRoute component={ClientReadinessRedirect} allowedRole="Client" />
+                  )}
                 </Route>
                 <Route path="/app/client/you">
                   {() => <ProtectedRoute component={ClientYou} allowedRole="Client" />}
@@ -158,7 +160,7 @@ function Router() {
                 <Route path="/app/client/info">
                   {() => <ProtectedRoute component={ClientInfo} allowedRole="Client" />}
                 </Route>
-                
+
                 {/* Shared Routes */}
                 <Route path="/app/settings" component={Settings} />
                 <Route component={NotFound} />

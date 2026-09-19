@@ -15,17 +15,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, CheckCircle2, Loader2, ExternalLink, ChevronDown, ChevronUp, Video } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Video,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { normalizeVideoSource } from "@/lib/video";
 import { requiresMovementCheckBeforeSession } from "@/lib/sessionEntry";
 
 type SetLog = { weight: string; reps: string };
+
+function sectionLetterForIndex(index: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if (index < alphabet.length) return alphabet[index];
+  return `S${index + 1}`;
+}
+
+function formatExercisePrescription(exercise: any): string {
+  return [
+    exercise.sets ? `${exercise.sets} sets` : null,
+    exercise.reps ? `${exercise.reps} reps` : null,
+    exercise.tempo ? `${exercise.tempo}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export default function ClientSessionView() {
   const [, params] = useRoute("/app/client/session/:sessionId");
@@ -52,12 +84,13 @@ export default function ClientSessionView() {
   const redirectedForMovementCheckRef = useRef(false);
 
   const { data: workoutLogs = [] } = useQuery({
-    ...workoutLogsQuery(viewedUser?.id || ''),
+    ...workoutLogsQuery(viewedUser?.id || ""),
     enabled: !!viewedUser?.id && !!phase,
   });
 
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
   const [setLogs, setSetLogs] = useState<Record<string, SetLog[]>>({});
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Record<string, boolean>>({});
   const [expandedNotesAndLogs, setExpandedNotesAndLogs] = useState<Record<string, boolean>>({});
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
@@ -150,10 +183,18 @@ export default function ClientSessionView() {
 
   const getExerciseHistory = (exerciseId: string) => {
     const pastLogs = (workoutLogs as any[]).filter(
-      (log: any) => log.exerciseId === exerciseId && log.phaseId === phase?.id
+      (log: any) => log.exerciseId === exerciseId && log.phaseId === phase?.id,
     );
 
-    const pastCompletions: { week: number; day: string; slot: string; notes?: string; sets?: any[]; instanceId: string }[] = [];
+    const pastCompletions: {
+      week: number;
+      day: string;
+      slot: string;
+      date?: string;
+      notes?: string;
+      sets?: any[];
+      instanceId: string;
+    }[] = [];
 
     for (const entry of schedule) {
       if (entry.sessionId !== session.id) continue;
@@ -170,13 +211,17 @@ export default function ClientSessionView() {
         week: entryWeek,
         day: entryDay,
         slot: entrySlot,
+        date: matchingLog?.date || undefined,
         notes: matchingLog?.clientNotes || undefined,
-        sets: matchingLog?.sets as any[] || undefined,
+        sets: (matchingLog?.sets as any[]) || undefined,
         instanceId: key,
       });
     }
 
-    pastCompletions.sort((a, b) => b.week - a.week || b.day.localeCompare(a.day));
+    pastCompletions.sort((a, b) => {
+      if (a.date && b.date && a.date !== b.date) return b.date.localeCompare(a.date);
+      return b.week - a.week || b.day.localeCompare(a.day);
+    });
     return pastCompletions;
   };
 
@@ -185,9 +230,16 @@ export default function ClientSessionView() {
     return Array.from({ length: setCount }, () => ({ weight: "", reps: "" }));
   };
 
-  const updateSetLog = (exerciseId: string, setIndex: number, field: 'weight' | 'reps', value: string, totalSets: number) => {
-    setSetLogs(prev => {
-      const current = prev[exerciseId] || Array.from({ length: totalSets }, () => ({ weight: "", reps: "" }));
+  const updateSetLog = (
+    exerciseId: string,
+    setIndex: number,
+    field: "weight" | "reps",
+    value: string,
+    totalSets: number,
+  ) => {
+    setSetLogs((prev) => {
+      const current =
+        prev[exerciseId] || Array.from({ length: totalSets }, () => ({ weight: "", reps: "" }));
       const updated = [...current];
       updated[setIndex] = { ...updated[setIndex], [field]: value };
       return { ...prev, [exerciseId]: updated };
@@ -209,7 +261,7 @@ export default function ClientSessionView() {
 
     try {
       const allExercises: { id: string; sets: string }[] = [];
-      for (const sec of (session.sections as any[])) {
+      for (const sec of session.sections as any[]) {
         for (const ex of sec.exercises) {
           allExercises.push({ id: ex.id, sets: ex.sets });
         }
@@ -218,7 +270,7 @@ export default function ClientSessionView() {
       for (const ex of allExercises) {
         const notes = exerciseNotes[ex.id] || "";
         const setsData = setLogs[ex.id] || [];
-        const hasData = notes.trim() || setsData.some(s => s.weight || s.reps);
+        const hasData = notes.trim() || setsData.some((s) => s.weight || s.reps);
 
         if (hasData) {
           await createWorkoutLog.mutateAsync({
@@ -226,11 +278,13 @@ export default function ClientSessionView() {
             phaseId: phase.id,
             instanceId: instanceKey,
             exerciseId: ex.id,
-            date: new Date().toISOString().split('T')[0],
-            sets: setsData.filter(s => s.weight || s.reps).map(s => ({
-              weight: s.weight || "",
-              reps: s.reps || "",
-            })),
+            date: new Date().toISOString().split("T")[0],
+            sets: setsData
+              .filter((s) => s.weight || s.reps)
+              .map((s) => ({
+                weight: s.weight || "",
+                reps: s.reps || "",
+              })),
             clientNotes: notes || null,
           });
         }
@@ -268,7 +322,7 @@ export default function ClientSessionView() {
       toast({
         title: "Read-only client context",
         description:
-          "Session reviews can be submitted only in a real client session for this client.",
+          "Session recaps can be submitted only in a real client session for this client.",
         variant: "destructive",
       });
       return;
@@ -287,22 +341,26 @@ export default function ClientSessionView() {
       const created = await createSessionCheckin.mutateAsync(payload);
       const checkins = await queryClient.fetchQuery(sessionCheckinsMeQuery);
       const confirmed = Array.isArray(checkins)
-        ? checkins.some((entry: any) => entry.id === created?.id || (entry.sessionId === session.id && entry.rpeOverall === afterSessionRpe))
+        ? checkins.some(
+            (entry: any) =>
+              entry.id === created?.id ||
+              (entry.sessionId === session.id && entry.rpeOverall === afterSessionRpe),
+          )
         : false;
       if (!confirmed) {
-        throw new Error("Session review write could not be verified");
+        throw new Error("Session recap write could not be verified");
       }
 
       toast({
-        title: "Session review saved",
-        description: "Your after-session review was saved successfully.",
+        title: "Session recap saved",
+        description: "Your after-session recap was saved successfully.",
       });
       setAfterSessionOpen(false);
       setLocation("/app/client/my-phase");
     } catch (error: any) {
-      const message = error?.message || "Could not save session review";
+      const message = error?.message || "Could not save session recap";
       toast({
-        title: "Could not save session review",
+        title: "Could not save session recap",
         description: message,
         variant: "destructive",
       });
@@ -320,28 +378,56 @@ export default function ClientSessionView() {
     }
   };
 
-  const formatOccurrenceLabel = (h: { week: number; day: string; slot: string }) => {
-    return `Week ${h.week} • ${h.day} • ${h.slot}`;
+  const formatOccurrenceLabel = (h: { week: number; day: string; slot: string; date?: string }) => {
+    if (h.date) {
+      const parsed = new Date(`${h.date}T00:00:00`);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        });
+      }
+    }
+    return `${h.day} · Week ${h.week}`;
   };
 
   return (
     <div className="mx-auto max-w-3xl pb-24 animate-in fade-in lg:max-w-6xl">
       {isCheckinReadOnly && (
-        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="banner-impersonation-read-only">
-          Client check-ins are read-only unless you are logged in as this client account.
+        <div
+          className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          data-testid="banner-impersonation-read-only"
+        >
+          Session recaps are read-only unless you are logged in as this client account.
         </div>
       )}
       <div className="sticky top-0 z-20 -mx-6 flex items-center gap-4 bg-slate-50/90 px-6 py-3 backdrop-blur-md md:-mx-8 md:px-8">
         <Link href="/app/client/my-phase">
-          <Button variant="ghost" size="icon" className="rounded-full bg-white border border-slate-200 shadow-sm" data-testid="button-back-phase">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-white border border-slate-200 shadow-sm"
+            data-testid="button-back-phase"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
         <div className="space-y-1">
-          <h1 className="font-display font-bold text-lg text-slate-900 leading-tight" data-testid="text-session-name">{session.name}</h1>
-          {sessionDurationMinutes ? <p className="text-xs text-slate-500">{sessionDurationMinutes} min</p> : null}
+          <h1
+            className="font-display font-bold text-lg text-slate-900 leading-tight"
+            data-testid="text-session-name"
+          >
+            {session.name}
+          </h1>
+          {sessionDurationMinutes ? (
+            <p className="text-xs text-slate-500">{sessionDurationMinutes} min</p>
+          ) : null}
           {sessionDescription ? (
-            <p className="text-sm leading-relaxed text-slate-700" data-testid="text-session-description">
+            <p
+              className="text-sm leading-relaxed text-slate-700"
+              data-testid="text-session-description"
+            >
               {sessionDescription}
             </p>
           ) : null}
@@ -361,8 +447,13 @@ export default function ClientSessionView() {
 
       <div className="grid grid-cols-1 gap-5 pt-4 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
-          <div className="sticky top-24 rounded-xl border border-slate-200/70 bg-slate-50/40 p-2.5" data-testid="rail-session-sections-desktop">
-            <p className="px-2 text-[9px] font-medium uppercase tracking-wider text-slate-400">Session flow</p>
+          <div
+            className="sticky top-24 rounded-xl border border-slate-200/70 bg-slate-50/40 p-2.5"
+            data-testid="rail-session-sections-desktop"
+          >
+            <p className="px-2 text-[9px] font-medium uppercase tracking-wider text-slate-400">
+              Session flow
+            </p>
             <div className="mt-2 space-y-1.5">
               {sessionSections.map((section: any, index: number) => {
                 const isCurrent = section.id === selectedSectionId;
@@ -388,166 +479,259 @@ export default function ClientSessionView() {
           </div>
         </aside>
 
-        <div className="space-y-6">
-          {sessionSections.map((section: any) => (
+        <div className="space-y-5">
+          {sessionSections.map((section: any, sectionIdx: number) => (
             <div
               key={section.id}
               id={`section-${section.id}`}
-              className="space-y-3 scroll-mt-28"
+              className="space-y-2 scroll-mt-28"
               data-testid={`section-anchor-${section.id}`}
             >
-              <h2 className="pl-1 text-lg font-semibold tracking-tight text-slate-900 md:text-xl">{section.name}</h2>
+              <div className="flex items-baseline justify-between gap-3 pl-1">
+                <h2 className="text-base font-semibold tracking-tight text-slate-900 md:text-lg">
+                  {section.name}
+                </h2>
+              </div>
 
-              {section.exercises.map((ex: any) => {
+              {section.exercises.map((ex: any, exerciseIdx: number) => {
                 const history = getExerciseHistory(ex.id);
                 const hasHistory = history.length > 0;
                 const totalSets = Number(ex.sets) || 3;
                 const currentSetLog = getSetLog(ex.id, totalSets);
-                const inlineVideo = ex.demoUrl && isValidUrl(ex.demoUrl) ? normalizeVideoSource(ex.demoUrl) : null;
+                const inlineVideo =
+                  ex.demoUrl && isValidUrl(ex.demoUrl) ? normalizeVideoSource(ex.demoUrl) : null;
                 const isNotesOpen = !!expandedNotesAndLogs[ex.id];
+                const exerciseDisplayName = `${sectionLetterForIndex(sectionIdx)}${exerciseIdx + 1} ${ex.name || "Exercise"}`;
+                const exercisePrescription = formatExercisePrescription(ex);
+                const isExerciseOpen = !!expandedExerciseIds[ex.id];
 
                 return (
-                  <Card key={ex.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" data-testid={`card-exercise-${ex.id}`}>
-                    <div className="space-y-0 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="text-base font-semibold leading-tight text-slate-900 md:text-lg">{ex.name}</h3>
-                        </div>
-                      </div>
-
-                      {inlineVideo ? (
-                        <div className="pt-3" data-testid={`inline-video-${ex.id}`}>
-                          {inlineVideo.embedUrl ? (
-                            <div className="aspect-video overflow-hidden rounded-md bg-black border border-slate-200">
-                              <iframe
-                                src={inlineVideo.embedUrl}
-                                className="h-full w-full border-0"
-                                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-                                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                                allowFullScreen
-                                referrerPolicy="strict-origin-when-cross-origin"
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between gap-3 border border-slate-200 rounded-md p-3">
-                              <div className="flex items-center gap-2 text-sm text-slate-700">
-                                <Video className="h-4 w-4 text-slate-500" />
-                                Video link available
+                  <Card
+                    key={ex.id}
+                    className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                    data-testid={`card-exercise-${ex.id}`}
+                  >
+                    <Collapsible
+                      open={isExerciseOpen}
+                      onOpenChange={(open) =>
+                        setExpandedExerciseIds((prev) => ({ ...prev, [ex.id]: open }))
+                      }
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50"
+                          data-testid={`button-exercise-details-${ex.id}`}
+                        >
+                          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                            <span className="flex h-6 min-w-8 items-center justify-center rounded bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-600">
+                              {sectionLetterForIndex(sectionIdx)}
+                              {exerciseIdx + 1}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-slate-900">
+                                {ex.name || "Exercise"}
                               </div>
-                              <a href={inlineVideo.href} target="_blank" rel="noopener noreferrer">
-                                <Button variant="outline" size="sm">
-                                  <ExternalLink className="h-4 w-4 mr-1.5" />
-                                  Open link
-                                </Button>
-                              </a>
+                              {exercisePrescription ? (
+                                <div className="truncate text-xs text-slate-500">
+                                  {exercisePrescription}
+                                </div>
+                              ) : null}
                             </div>
-                          )}
-                        </div>
-                      ) : null}
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-400">
+                            {isExerciseOpen ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </div>
+                        </button>
+                      </CollapsibleTrigger>
 
-                      <div className="pb-1 pt-2.5">
-                        <ExerciseStandardDetails
-                          exercise={ex}
-                          showName={false}
-                          showDemoLink={false}
-                          integrated
-                        />
-                      </div>
+                      <CollapsibleContent>
+                        <div className="space-y-0 border-t border-slate-100 bg-slate-50/50 px-3 pb-3 pt-3">
+                          <h3 className="sr-only">{exerciseDisplayName}</h3>
 
-                      <div className="mt-2 border-t border-slate-200/80" />
-
-                      <Collapsible
-                        open={isNotesOpen}
-                        onOpenChange={(open) => setExpandedNotesAndLogs((prev) => ({ ...prev, [ex.id]: open }))}
-                      >
-                        <CollapsibleTrigger asChild>
-                          <button
-                            className="flex w-full items-center py-2.5 text-left text-sm font-semibold text-slate-700 hover:text-slate-900"
-                            data-testid={`button-personal-notes-logs-${ex.id}`}
-                          >
-                            <span className="flex-1">Session notes</span>
-                            {isNotesOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                          </button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="pb-1 space-y-3">
-                          <Textarea
-                            placeholder="Reps, weight, effort, or quick notes"
-                            value={exerciseNotes[ex.id] || ""}
-                            onChange={(e) => setExerciseNotes(prev => ({ ...prev, [ex.id]: e.target.value }))}
-                            className="min-h-[80px] bg-white border-slate-200 text-sm resize-none rounded-md"
-                            data-testid={`textarea-notes-${ex.id}`}
-                          />
-
-                          {ex.enableStructuredLogging && (
-                            <div className="space-y-2 pt-2 border-t border-slate-200/70">
-                              <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
-                                <div className="col-span-2 text-center">Set</div>
-                                <div className="col-span-5 text-center">Weight (lbs)</div>
-                                <div className="col-span-5 text-center">Reps</div>
-                              </div>
-
-                              {Array.from({ length: totalSets }).map((_, i) => (
-                                <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                                  <div className="col-span-2 text-center font-medium text-slate-500 text-sm">{i + 1}</div>
-                                  <div className="col-span-5">
-                                    <Input
-                                      type="number"
-                                      placeholder="--"
-                                      className="h-10 text-center bg-white border-slate-200 rounded-md"
-                                      value={currentSetLog[i]?.weight || ""}
-                                      onChange={(e) => updateSetLog(ex.id, i, "weight", e.target.value, totalSets)}
-                                      data-testid={`input-weight-${ex.id}-${i}`}
-                                    />
+                          {inlineVideo ? (
+                            <div className="pb-3" data-testid={`inline-video-${ex.id}`}>
+                              {inlineVideo.embedUrl ? (
+                                <div className="aspect-video overflow-hidden rounded-md border border-slate-200 bg-black">
+                                  <iframe
+                                    src={inlineVideo.embedUrl}
+                                    className="h-full w-full border-0"
+                                    sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+                                    allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                                    allowFullScreen
+                                    referrerPolicy="strict-origin-when-cross-origin"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3">
+                                  <div className="flex items-center gap-2 text-sm text-slate-700">
+                                    <Video className="h-4 w-4 text-slate-500" />
+                                    Video link available
                                   </div>
-                                  <div className="col-span-5">
-                                    <Input
-                                      type="number"
-                                      placeholder={String(ex.reps).split("-")[0] || "0"}
-                                      className="h-10 text-center bg-white border-slate-200 rounded-md"
-                                      value={currentSetLog[i]?.reps || ""}
-                                      onChange={(e) => updateSetLog(ex.id, i, "reps", e.target.value, totalSets)}
-                                      data-testid={`input-reps-${ex.id}-${i}`}
-                                    />
+                                  <a
+                                    href={inlineVideo.href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <Button variant="outline" size="sm">
+                                      <ExternalLink className="mr-1.5 h-4 w-4" />
+                                      Open link
+                                    </Button>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          <div className="pb-1">
+                            <ExerciseStandardDetails
+                              exercise={ex}
+                              showName={false}
+                              showDemoLink={false}
+                              integrated
+                            />
+                          </div>
+
+                          <div className="mt-3 border-t border-slate-200/80" />
+
+                          <Collapsible
+                            open={isNotesOpen}
+                            onOpenChange={(open) =>
+                              setExpandedNotesAndLogs((prev) => ({ ...prev, [ex.id]: open }))
+                            }
+                          >
+                            <CollapsibleTrigger asChild>
+                              <button
+                                className="flex w-full items-center py-2.5 text-left text-sm font-semibold text-slate-700 hover:text-slate-900"
+                                data-testid={`button-personal-notes-logs-${ex.id}`}
+                              >
+                                <span className="flex-1">Session notes</span>
+                                {isNotesOpen ? (
+                                  <ChevronUp className="h-4 w-4 text-slate-400" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                                )}
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="pb-1 space-y-3">
+                              <Textarea
+                                placeholder="Reps, weight, effort, or quick notes"
+                                value={exerciseNotes[ex.id] || ""}
+                                onChange={(e) =>
+                                  setExerciseNotes((prev) => ({ ...prev, [ex.id]: e.target.value }))
+                                }
+                                className="min-h-[80px] bg-white border-slate-200 text-sm resize-none rounded-md"
+                                data-testid={`textarea-notes-${ex.id}`}
+                              />
+
+                              {ex.enableStructuredLogging && (
+                                <div className="space-y-2 pt-2 border-t border-slate-200/70">
+                                  <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
+                                    <div className="col-span-2 text-center">Set</div>
+                                    <div className="col-span-5 text-center">Weight (lbs)</div>
+                                    <div className="col-span-5 text-center">Reps</div>
+                                  </div>
+
+                                  {Array.from({ length: totalSets }).map((_, i) => (
+                                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                                      <div className="col-span-2 text-center font-medium text-slate-500 text-sm">
+                                        {i + 1}
+                                      </div>
+                                      <div className="col-span-5">
+                                        <Input
+                                          type="number"
+                                          placeholder="--"
+                                          className="h-10 text-center bg-white border-slate-200 rounded-md"
+                                          value={currentSetLog[i]?.weight || ""}
+                                          onChange={(e) =>
+                                            updateSetLog(
+                                              ex.id,
+                                              i,
+                                              "weight",
+                                              e.target.value,
+                                              totalSets,
+                                            )
+                                          }
+                                          data-testid={`input-weight-${ex.id}-${i}`}
+                                        />
+                                      </div>
+                                      <div className="col-span-5">
+                                        <Input
+                                          type="number"
+                                          placeholder={String(ex.reps).split("-")[0] || "0"}
+                                          className="h-10 text-center bg-white border-slate-200 rounded-md"
+                                          value={currentSetLog[i]?.reps || ""}
+                                          onChange={(e) =>
+                                            updateSetLog(
+                                              ex.id,
+                                              i,
+                                              "reps",
+                                              e.target.value,
+                                              totalSets,
+                                            )
+                                          }
+                                          data-testid={`input-reps-${ex.id}-${i}`}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {hasHistory && (
+                                <div
+                                  className="space-y-2 pt-2 border-t border-slate-200/70"
+                                  data-testid={`past-notes-logs-${ex.id}`}
+                                >
+                                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                                    Past session notes ({history.length})
+                                  </p>
+                                  <div className="divide-y divide-slate-200/70">
+                                    {history.map((h, hi) => (
+                                      <div key={hi} className="py-3">
+                                        <div className="mb-1.5">
+                                          <span className="text-xs font-semibold text-slate-700">
+                                            {formatOccurrenceLabel(h)}
+                                          </span>
+                                        </div>
+                                        {h.sets && (h.sets as any[]).length > 0 && (
+                                          <div className="flex gap-2 mt-1 flex-wrap">
+                                            {(h.sets as any[]).map((s: any, si: number) => (
+                                              <span
+                                                key={si}
+                                                className="text-[11px] border border-slate-200 rounded-sm px-2 py-0.5 text-slate-600 font-medium"
+                                              >
+                                                Set {si + 1}: {s.weight || "--"}lbs ×{" "}
+                                                {s.reps || "--"}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {h.notes && (
+                                          <p className="text-xs text-slate-600 leading-relaxed mt-1">
+                                            "{h.notes}"
+                                          </p>
+                                        )}
+                                        {!h.notes &&
+                                          (!h.sets || (h.sets as any[]).length === 0) && (
+                                            <p className="text-[11px] text-slate-400 italic mt-0.5">
+                                              Completed, no details logged
+                                            </p>
+                                          )}
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {hasHistory && (
-                            <div className="space-y-2 pt-2 border-t border-slate-200/70" data-testid={`past-notes-logs-${ex.id}`}>
-                              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
-                                Past session notes ({history.length})
-                              </p>
-                              <div className="divide-y divide-slate-200/70">
-                                {history.map((h, hi) => (
-                                  <div key={hi} className="py-3">
-                                    <div className="mb-1.5">
-                                      <span className="text-xs font-semibold text-slate-700">{formatOccurrenceLabel(h)}</span>
-                                    </div>
-                                    {h.sets && (h.sets as any[]).length > 0 && (
-                                      <div className="flex gap-2 mt-1 flex-wrap">
-                                        {(h.sets as any[]).map((s: any, si: number) => (
-                                          <span key={si} className="text-[11px] border border-slate-200 rounded-sm px-2 py-0.5 text-slate-600 font-medium">
-                                            Set {si + 1}: {s.weight || "--"}lbs × {s.reps || "--"}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {h.notes && (
-                                      <p className="text-xs text-slate-600 leading-relaxed mt-1">"{h.notes}"</p>
-                                    )}
-                                    {!h.notes && (!h.sets || (h.sets as any[]).length === 0) && (
-                                      <p className="text-[11px] text-slate-400 italic mt-0.5">Completed, no details logged</p>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </div>
+                              )}
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </Card>
                 );
               })}
@@ -564,11 +748,15 @@ export default function ClientSessionView() {
           data-testid="button-finish-session"
         >
           {finishing ? (
-            <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Saving...</>
+            <>
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Saving...
+            </>
           ) : isSessionComplete ? (
-            <><CheckCircle2 className="h-5 w-5 mr-2" /> Session Completed</>
+            <>
+              <CheckCircle2 className="h-5 w-5 mr-2" /> Session Completed
+            </>
           ) : (
-            "Finish Session"
+            "Finish session"
           )}
         </Button>
       </div>
@@ -585,7 +773,7 @@ export default function ClientSessionView() {
       >
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Session review</DialogTitle>
+            <DialogTitle>Session recap</DialogTitle>
             <DialogDescription>This takes about 10–20 seconds.</DialogDescription>
           </DialogHeader>
           <div className="space-y-5">
@@ -683,9 +871,12 @@ export default function ClientSessionView() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleSubmitAfterSessionCheckin} disabled={savingAfterSession || isCheckinReadOnly}>
+            <Button
+              onClick={handleSubmitAfterSessionCheckin}
+              disabled={savingAfterSession || isCheckinReadOnly}
+            >
               {savingAfterSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Save review
+              Save recap
             </Button>
           </DialogFooter>
         </DialogContent>

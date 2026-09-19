@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Library, Shapes, Spline } from "lucide-react";
+import { Save, Layers, Library, Shapes, Spline, Video } from "lucide-react";
 import {
   exerciseTemplatesQuery,
   phaseTemplatesQuery,
@@ -20,6 +20,7 @@ import {
   useDeleteTemplateFolder,
   useMoveTemplateToFolder,
   useReorderTemplates,
+  useUpdateExerciseTemplate,
   useUpdateTemplateFolder,
   type TemplateFolderType,
 } from "@/lib/api";
@@ -28,8 +29,36 @@ import {
   cloneSectionFromTemplate,
   cloneSessionFromTemplate,
 } from "@/lib/blueprintClone";
+import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { TemplateLibraryPane } from "@/components/admin/TemplateLibraryPane";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+
+function DemoVideoPreview({
+  url,
+  size = "tiny",
+}: {
+  url?: string | null;
+  size?: "tiny" | "inline";
+}) {
+  if (!url) return null;
+
+  return (
+    <div
+      className={
+        size === "tiny"
+          ? "w-72 max-w-[44vw] shrink-0 self-stretch overflow-hidden rounded-md [&_.aspect-video]:h-full [&_.aspect-video]:rounded-md"
+          : "w-60 max-w-full shrink-0 overflow-hidden rounded-md [&_.aspect-video]:rounded-md"
+      }
+    >
+      <InlineVideoPlayer url={url} sourceType="link" openLinkLabel="Open demo" flush />
+    </div>
+  );
+}
 
 function makeDefaultPhaseTemplatePayload() {
   return {
@@ -74,7 +103,7 @@ function makeDefaultExerciseTemplate() {
     demoUrl: null,
     sets: "3",
     reps: "10",
-    load: "Auto",
+    load: "",
     tempo: "3010",
     notes: null,
     goal: null,
@@ -84,9 +113,9 @@ function makeDefaultExerciseTemplate() {
   };
 }
 
-function toTemplateItem<T extends { id: string; name: string; folderId?: string | null; sortOrder?: number }>(
-  entries: T[],
-) {
+function toTemplateItem<
+  T extends { id: string; name: string; folderId?: string | null; sortOrder?: number },
+>(entries: T[]) {
   return entries.map((entry) => ({
     ...entry,
     folderId: entry.folderId ?? null,
@@ -109,7 +138,9 @@ const DEFAULT_FOLDERS_BY_TAB: FolderStateByTab = {
 };
 
 function isTemplateTab(value: string | null): value is TemplateTab {
-  return value === "phases" || value === "sessions" || value === "sections" || value === "exercises";
+  return (
+    value === "phases" || value === "sessions" || value === "sections" || value === "exercises"
+  );
 }
 
 function buildTemplatesUrl(tab: TemplateTab, folderId: string | null) {
@@ -144,11 +175,7 @@ function resolveInitialTemplateState(): { tab: TemplateTab; folders: FolderState
   const queryTab = params.get("tab");
   const queryFolder = params.get("folder");
   const storedTab = window.localStorage.getItem(TEMPLATE_TAB_STORAGE_KEY);
-  const tab = isTemplateTab(queryTab)
-    ? queryTab
-    : isTemplateTab(storedTab)
-      ? storedTab
-      : "phases";
+  const tab = isTemplateTab(queryTab) ? queryTab : isTemplateTab(storedTab) ? storedTab : "phases";
 
   const folders = readStoredFolderState();
   if (queryFolder && queryFolder.trim().length > 0) {
@@ -168,6 +195,252 @@ function getNextSortOrder(
     next = Math.max(next, item.sortOrder ?? 0);
   }
   return next + 1;
+}
+
+function exercisePrescription(exercise: any) {
+  return [
+    exercise?.sets ? `${exercise.sets} sets` : null,
+    exercise?.reps ? `${exercise.reps} reps` : null,
+    exercise?.load && exercise.load !== "Auto" ? exercise.load : null,
+    exercise?.tempo || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function renderSectionTemplatePreview(item: any) {
+  const exercises = ((item.exercises || []) as any[]).slice(0, 4);
+  if (exercises.length === 0) {
+    return <div className="text-xs text-slate-400">No exercises yet</div>;
+  }
+  return (
+    <div className="space-y-1">
+      {exercises.map((exercise, index) => (
+        <div
+          key={exercise.id || `${exercise.name}-${index}`}
+          className="grid grid-cols-[34px_minmax(0,1fr)] rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5"
+        >
+          <span className="text-xs font-semibold text-slate-500">A{index + 1}</span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-slate-900">
+              {exercise.name || "Untitled exercise"}
+            </div>
+            <div className="truncate text-xs text-slate-500">{exercisePrescription(exercise)}</div>
+          </div>
+        </div>
+      ))}
+      {(item.exercises || []).length > exercises.length ? (
+        <div className="text-xs text-slate-400">
+          +{(item.exercises || []).length - exercises.length} more
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderExerciseTemplatePreview(item: any) {
+  const tags = String(item.targetMuscle || "").trim();
+  const hasDemoVideo = Boolean(String(item.demoUrl || "").trim());
+  return (
+    <div
+      className={
+        hasDemoVideo
+          ? "flex min-h-[132px] min-w-0 items-stretch gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+          : "flex min-w-0 items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5"
+      }
+    >
+      <div className="flex min-w-0 flex-1 flex-col justify-center">
+        <div className="truncate text-xs text-slate-500">{exercisePrescription(item)}</div>
+        {tags ? <div className="mt-1 truncate text-xs text-slate-400">Tags: {tags}</div> : null}
+      </div>
+      <DemoVideoPreview url={item.demoUrl} size="tiny" />
+    </div>
+  );
+}
+
+function ExerciseTemplateInlineDetails({ item }: { item: any }) {
+  const { toast } = useToast();
+  const updateExerciseTemplate = useUpdateExerciseTemplate();
+  const [draft, setDraft] = useState({
+    name: item.name || "",
+    targetMuscle: item.targetMuscle || "",
+    sets: item.sets || "",
+    reps: item.reps || "",
+    load: item.load || "",
+    tempo: item.tempo || "",
+    goal: item.goal || "",
+    notes: item.notes || "",
+    additionalInstructions: item.additionalInstructions || "",
+    demoUrl: item.demoUrl || "",
+    requiresMovementCheck: Boolean(item.requiresMovementCheck),
+    enableStructuredLogging: Boolean(item.enableStructuredLogging),
+  });
+
+  useEffect(() => {
+    setDraft({
+      name: item.name || "",
+      targetMuscle: item.targetMuscle || "",
+      sets: item.sets || "",
+      reps: item.reps || "",
+      load: item.load || "",
+      tempo: item.tempo || "",
+      goal: item.goal || "",
+      notes: item.notes || "",
+      additionalInstructions: item.additionalInstructions || "",
+      demoUrl: item.demoUrl || "",
+      requiresMovementCheck: Boolean(item.requiresMovementCheck),
+      enableStructuredLogging: Boolean(item.enableStructuredLogging),
+    });
+  }, [item]);
+
+  const updateDraft = (field: keyof typeof draft, value: string | boolean) => {
+    setDraft((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const save = async () => {
+    if (!draft.name.trim()) return;
+    try {
+      await updateExerciseTemplate.mutateAsync({
+        id: item.id,
+        name: draft.name.trim(),
+        targetMuscle: draft.targetMuscle.trim() || null,
+        sets: draft.sets.trim() || null,
+        reps: draft.reps.trim() || null,
+        load: draft.load.trim() || null,
+        tempo: draft.tempo.trim() || null,
+        goal: draft.goal.trim() || null,
+        notes: draft.notes.trim() || null,
+        additionalInstructions: draft.additionalInstructions.trim() || null,
+        demoUrl: draft.demoUrl.trim() || null,
+        requiresMovementCheck: draft.requiresMovementCheck,
+        enableStructuredLogging: draft.enableStructuredLogging,
+      });
+      toast({ title: "Exercise template saved" });
+    } catch {
+      toast({ title: "Could not save exercise template", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="space-y-1">
+          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Exercise
+          </Label>
+          <Input
+            value={draft.name}
+            onChange={(event) => updateDraft("name", event.target.value)}
+            className="h-8 bg-white"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Tags
+          </Label>
+          <Input
+            value={draft.targetMuscle}
+            onChange={(event) => updateDraft("targetMuscle", event.target.value)}
+            placeholder="one-arm chin-up, bent arm, vertical pull..."
+            className="h-8 bg-white"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {(
+          [
+            ["sets", "Sets"],
+            ["reps", "Reps"],
+            ["load", "Load"],
+            ["tempo", "Tempo"],
+          ] as const
+        ).map(([field, label]) => (
+          <div key={field} className="space-y-1">
+            <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              {label}
+            </Label>
+            <Input
+              value={draft[field]}
+              onChange={(event) => updateDraft(field, event.target.value)}
+              className="h-8 bg-white"
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="space-y-1">
+          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Goal
+          </Label>
+          <Input
+            value={draft.goal}
+            onChange={(event) => updateDraft("goal", event.target.value)}
+            className="h-8 bg-white"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Notes
+          </Label>
+          <Input
+            value={draft.notes}
+            onChange={(event) => updateDraft("notes", event.target.value)}
+            className="h-8 bg-white"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Instructions
+        </Label>
+        <Textarea
+          value={draft.additionalInstructions}
+          onChange={(event) => updateDraft("additionalInstructions", event.target.value)}
+          className="min-h-[56px] resize-none bg-white"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="flex min-w-0 items-center gap-2">
+          <Video className="h-4 w-4 shrink-0 text-slate-400" />
+          <Input
+            value={draft.demoUrl}
+            onChange={(event) => updateDraft("demoUrl", event.target.value)}
+            placeholder="Demo video URL"
+            className="h-8 bg-white"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+            <Label className="text-xs text-slate-500">Movement check</Label>
+            <Switch
+              checked={draft.requiresMovementCheck}
+              onCheckedChange={(checked) => updateDraft("requiresMovementCheck", checked)}
+            />
+          </div>
+          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+            <Label className="text-xs text-slate-500">Structured logging</Label>
+            <Switch
+              checked={draft.enableStructuredLogging}
+              onCheckedChange={(checked) => updateDraft("enableStructuredLogging", checked)}
+            />
+          </div>
+          <Button
+            size="sm"
+            className="bg-indigo-600 text-white hover:bg-indigo-700"
+            disabled={updateExerciseTemplate.isPending || !draft.name.trim()}
+            onClick={save}
+          >
+            <Save className="mr-1.5 h-4 w-4" />
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminTemplatesPage() {
@@ -250,10 +523,7 @@ export default function AdminTemplatesPage() {
     });
   };
 
-  const setActiveTabWithPersistence = (
-    tab: TemplateTab,
-    options?: { resetFolder?: boolean },
-  ) => {
+  const setActiveTabWithPersistence = (tab: TemplateTab, options?: { resetFolder?: boolean }) => {
     const nextFolderId = options?.resetFolder ? null : (selectedFolderByTab[tab] ?? null);
     if (options?.resetFolder) {
       setSelectedFolderByTab((previous) => ({ ...previous, [tab]: null }));
@@ -279,11 +549,7 @@ export default function AdminTemplatesPage() {
     }
   };
 
-  const handleRenameFolder = async (
-    type: TemplateFolderType,
-    folderId: string,
-    name: string,
-  ) => {
+  const handleRenameFolder = async (type: TemplateFolderType, folderId: string, name: string) => {
     try {
       await updateTemplateFolder.mutateAsync({ id: folderId, type, name });
       toast({ title: "Folder renamed" });
@@ -632,7 +898,12 @@ export default function AdminTemplatesPage() {
         count: exerciseTemplates.length,
       },
     ],
-    [exerciseTemplates.length, phaseTemplates.length, sectionTemplates.length, sessionTemplates.length],
+    [
+      exerciseTemplates.length,
+      phaseTemplates.length,
+      sectionTemplates.length,
+      sessionTemplates.length,
+    ],
   );
 
   return (
@@ -678,7 +949,9 @@ export default function AdminTemplatesPage() {
           onRenameFolder={(folderId, name) => void handleRenameFolder("phase", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("phase", folderId)}
           onMoveFolder={(folderId, parentId) => void handleMoveFolder("phase", folderId, parentId)}
-          onMoveTemplate={(templateId, folderId) => void handleMoveTemplate("phase", templateId, folderId)}
+          onMoveTemplate={(templateId, folderId) =>
+            void handleMoveTemplate("phase", templateId, folderId)
+          }
           onReorderTemplates={(items) => void handleReorderTemplates("phase", items)}
           getTemplateSummary={(item) =>
             `${(item as any).sessions?.length || 0} session(s), ${(item as any).durationWeeks || 4} week(s)`
@@ -715,8 +988,12 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("session", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("session", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("session", folderId)}
-          onMoveFolder={(folderId, parentId) => void handleMoveFolder("session", folderId, parentId)}
-          onMoveTemplate={(templateId, folderId) => void handleMoveTemplate("session", templateId, folderId)}
+          onMoveFolder={(folderId, parentId) =>
+            void handleMoveFolder("session", folderId, parentId)
+          }
+          onMoveTemplate={(templateId, folderId) =>
+            void handleMoveTemplate("session", templateId, folderId)
+          }
           onReorderTemplates={(items) => void handleReorderTemplates("session", items)}
           getTemplateSummary={(item) => `${((item as any).sections || []).length} section(s)`}
           getTemplateOpenHref={(item) => `/app/admin/templates/sessions/${item.id}?tab=sessions`}
@@ -751,11 +1028,22 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("section", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("section", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("section", folderId)}
-          onMoveFolder={(folderId, parentId) => void handleMoveFolder("section", folderId, parentId)}
-          onMoveTemplate={(templateId, folderId) => void handleMoveTemplate("section", templateId, folderId)}
+          onMoveFolder={(folderId, parentId) =>
+            void handleMoveFolder("section", folderId, parentId)
+          }
+          onMoveTemplate={(templateId, folderId) =>
+            void handleMoveTemplate("section", templateId, folderId)
+          }
           onReorderTemplates={(items) => void handleReorderTemplates("section", items)}
           getTemplateSummary={(item) => `${((item as any).exercises || []).length} exercise(s)`}
+          getTemplateSearchText={(item) =>
+            ((item as any).exercises || [])
+              .map((exercise: any) => `${exercise.name || ""} ${exercise.targetMuscle || ""}`)
+              .join(" ")
+          }
+          renderTemplatePreview={(item) => renderSectionTemplatePreview(item)}
           getTemplateOpenHref={(item) => `/app/admin/templates/sections/${item.id}?tab=sections`}
+          layout="rows"
         />
       ) : null}
 
@@ -787,11 +1075,19 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("exercise", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("exercise", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("exercise", folderId)}
-          onMoveFolder={(folderId, parentId) => void handleMoveFolder("exercise", folderId, parentId)}
-          onMoveTemplate={(templateId, folderId) => void handleMoveTemplate("exercise", templateId, folderId)}
+          onMoveFolder={(folderId, parentId) =>
+            void handleMoveFolder("exercise", folderId, parentId)
+          }
+          onMoveTemplate={(templateId, folderId) =>
+            void handleMoveTemplate("exercise", templateId, folderId)
+          }
           onReorderTemplates={(items) => void handleReorderTemplates("exercise", items)}
-          getTemplateSummary={(item) => `${(item as any).targetMuscle || "No target muscle"}`}
+          getTemplateSummary={(item) => `${(item as any).targetMuscle || "No tags"}`}
+          getTemplateSearchText={(item) => `${(item as any).targetMuscle || ""}`}
+          renderTemplatePreview={(item) => renderExerciseTemplatePreview(item)}
+          renderTemplateDetails={(item) => <ExerciseTemplateInlineDetails item={item} />}
           getTemplateOpenHref={(item) => `/app/admin/templates/exercises/${item.id}?tab=exercises`}
+          layout="rows"
         />
       ) : null}
     </div>

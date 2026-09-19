@@ -22,9 +22,23 @@ test("session view removes fake per-exercise check UI", () => {
   );
 });
 
-test("session view keeps coach details always visible and session notes collapsible", () => {
+test("session view renders compact exercise rows with collapsible details", () => {
   const source = fs.readFileSync(sessionViewPath, "utf8");
 
+  assert.ok(source.includes("expandedExerciseIds"));
+  assert.ok(source.includes("button-exercise-details-"));
+  assert.ok(source.includes("formatExercisePrescription"));
+  assert.ok(source.includes("sectionLetterForIndex(sectionIdx)"));
+  assert.equal(
+    source.includes('exercise{section.exercises.length === 1 ? "" : "s"}'),
+    false,
+    "Section headers should stay clean without exercise counts",
+  );
+  assert.equal(
+    source.includes('{inlineVideo ? <Video className="h-4 w-4" /> : null}'),
+    false,
+    "Collapsed exercise rows should not show a separate video icon",
+  );
   assert.ok(source.includes("button-personal-notes-logs-"));
   assert.ok(source.includes("<ExerciseStandardDetails"));
   assert.ok(source.includes("integrated"));
@@ -47,11 +61,21 @@ test("session view keeps coach details always visible and session notes collapsi
   );
 });
 
-test("session view renders embedded video visibly in exercise card", () => {
+test("session view labels past exercise notes with saved log dates when available", () => {
+  const source = fs.readFileSync(sessionViewPath, "utf8");
+
+  assert.ok(source.includes("date: matchingLog?.date || undefined"));
+  assert.ok(source.includes('weekday: "long"'));
+  assert.ok(source.includes('month: "long"'));
+  assert.ok(source.includes("return `${h.day} · Week ${h.week}`"));
+});
+
+test("session view renders embedded video inside opened exercise details", () => {
   const source = fs.readFileSync(sessionViewPath, "utf8");
 
   assert.ok(source.includes("data-testid={`inline-video-${ex.id}`}"));
   assert.ok(source.includes("<iframe"));
+  assert.ok(source.includes("<CollapsibleContent>"));
   assert.equal(
     source.includes("button-view-video-"),
     false,

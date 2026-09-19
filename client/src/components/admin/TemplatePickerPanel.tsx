@@ -14,6 +14,7 @@ type TemplatePickerPanelProps<T> = {
   getTemplateId: (item: T) => string;
   getTemplateName: (item: T) => string;
   getTemplateMeta?: (item: T) => string;
+  getTemplateSearchText?: (item: T) => string;
   getTemplateFolderId?: (item: T) => string | null | undefined;
   selectedTemplateId?: string | null;
   onSelectTemplate: (item: T) => void;
@@ -63,6 +64,7 @@ export function TemplatePickerPanel<T>({
   getTemplateId,
   getTemplateName,
   getTemplateMeta,
+  getTemplateSearchText,
   getTemplateFolderId,
   selectedTemplateId = null,
   onSelectTemplate,
@@ -142,7 +144,7 @@ export function TemplatePickerPanel<T>({
     () =>
       templates.filter((item) => {
         const folderId = getTemplateFolderId ? getTemplateFolderId(item) : null;
-        if (!selectedFolderId) return folderId === null || folderId === undefined;
+        if (!selectedFolderId) return true;
         return folderId === selectedFolderId;
       }),
     [getTemplateFolderId, selectedFolderId, templates],
@@ -151,8 +153,33 @@ export function TemplatePickerPanel<T>({
   const normalizedSearch = search.trim().toLowerCase();
   const visibleItems = useMemo(() => {
     if (!normalizedSearch) return baseItems;
-    return baseItems.filter((item) => getTemplateName(item).toLowerCase().includes(normalizedSearch));
-  }, [baseItems, getTemplateName, normalizedSearch]);
+    const scoreItem = (item: T) => {
+      const name = getTemplateName(item).toLowerCase();
+      const meta = (getTemplateMeta ? getTemplateMeta(item) : "").toLowerCase();
+      const extra = (getTemplateSearchText ? getTemplateSearchText(item) : "").toLowerCase();
+      if (name === normalizedSearch) return 0;
+      if (name.startsWith(normalizedSearch)) return 1;
+      if (name.includes(normalizedSearch)) return 2;
+      if (extra.includes(normalizedSearch)) return 3;
+      if (meta.includes(normalizedSearch)) return 4;
+      return 99;
+    };
+    return templates
+      .map((item) => ({ item, score: scoreItem(item) }))
+      .filter(({ score }) => score < 99)
+      .sort(
+        (a, b) =>
+          a.score - b.score || getTemplateName(a.item).localeCompare(getTemplateName(b.item)),
+      )
+      .map(({ item }) => item);
+  }, [
+    baseItems,
+    getTemplateMeta,
+    getTemplateName,
+    getTemplateSearchText,
+    normalizedSearch,
+    templates,
+  ]);
 
   const selectedFolderPath = useMemo(() => {
     if (!selectedFolderId) return [{ id: null, name: rootNodeLabel }];
@@ -160,7 +187,16 @@ export function TemplatePickerPanel<T>({
   }, [foldersById, rootNodeLabel, selectedFolderId]);
   const currentLocationLabel =
     selectedFolderPath[selectedFolderPath.length - 1]?.name || rootNodeLabel;
-  const searchScopeLabel = `Searching current location: ${currentLocationLabel}`;
+  const searchScopeLabel = normalizedSearch
+    ? "Searching all folders"
+    : `Current location: ${currentLocationLabel}`;
+
+  const getFolderLabelForItem = (item: T) => {
+    const folderId = getTemplateFolderId ? getTemplateFolderId(item) : null;
+    if (!folderId) return rootNodeLabel;
+    const path = buildFolderPath(foldersById, folderId, rootNodeLabel);
+    return path.map((segment) => segment.name).join(" / ");
+  };
 
   const renderFolderTree = (folder: TemplateFolder, depth: number) => {
     const children = childrenByParent.get(folder.id) || [];
@@ -212,7 +248,9 @@ export function TemplatePickerPanel<T>({
         </button>
 
         {isExpanded && children.length > 0 ? (
-          <div className="space-y-0.5">{children.map((child) => renderFolderTree(child, depth + 1))}</div>
+          <div className="space-y-0.5">
+            {children.map((child) => renderFolderTree(child, depth + 1))}
+          </div>
         ) : null}
       </div>
     );
@@ -221,8 +259,8 @@ export function TemplatePickerPanel<T>({
   const rootFolders = childrenByParent.get(folderParentKey(null)) || [];
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 p-2">
+    <div className="grid h-full min-h-0 grid-cols-1 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="min-h-0 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 p-2">
         <button
           type="button"
           className={cn(
@@ -235,7 +273,12 @@ export function TemplatePickerPanel<T>({
           }}
         >
           <span className="flex items-center gap-2">
-            <span className={cn("inline-flex h-4 w-4 items-center justify-center", selectedFolderId === null ? "text-slate-200" : "text-slate-500")}>
+            <span
+              className={cn(
+                "inline-flex h-4 w-4 items-center justify-center",
+                selectedFolderId === null ? "text-slate-200" : "text-slate-500",
+              )}
+            >
               {rootFolders.length > 0 ? (
                 rootExpanded ? (
                   <ChevronDown className="h-3.5 w-3.5" />
@@ -252,21 +295,31 @@ export function TemplatePickerPanel<T>({
         </button>
 
         {rootExpanded && rootFolders.length > 0 ? (
-          <div className="space-y-0.5">{rootFolders.map((folder) => renderFolderTree(folder, 1))}</div>
+          <div className="space-y-0.5">
+            {rootFolders.map((folder) => renderFolderTree(folder, 1))}
+          </div>
         ) : null}
       </div>
 
-      <div className="min-w-0 space-y-3">
-        <div className="flex items-center gap-2 rounded-md border bg-white px-3">
-          <Search className="h-4 w-4 shrink-0 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={searchPlaceholder}
-            className="border-none px-0 shadow-none focus-visible:ring-0"
-          />
+      <div className="flex min-h-0 min-w-0 flex-col space-y-3">
+        <div className="sticky top-0 z-10 bg-white pb-2">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              className="h-10 border-none px-0 shadow-none focus-visible:ring-0"
+              autoFocus
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+            <span>{searchScopeLabel}</span>
+            <span>
+              {visibleItems.length} result{visibleItems.length === 1 ? "" : "s"}
+            </span>
+          </div>
         </div>
-        <p className="text-xs text-slate-500">{searchScopeLabel}</p>
 
         <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
           {selectedFolderPath.map((segment, index) => {
@@ -290,7 +343,7 @@ export function TemplatePickerPanel<T>({
           })}
         </div>
 
-        <div className="max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
           {visibleItems.map((item) => {
             const templateId = getTemplateId(item);
             const isSelected = selectedTemplateId === templateId;
@@ -298,22 +351,30 @@ export function TemplatePickerPanel<T>({
               <button
                 key={templateId}
                 className={cn(
-                  "w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                  "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
                   isSelected
                     ? "border-slate-900 bg-slate-50"
                     : "border-slate-200 hover:border-slate-400 hover:bg-slate-50",
                 )}
                 onClick={() => onSelectTemplate(item)}
               >
-                <div className="font-medium text-slate-900">{getTemplateName(item)}</div>
-                {getTemplateMeta ? (
-                  <div className="mt-0.5 text-xs text-slate-500">{getTemplateMeta(item)}</div>
-                ) : null}
+                <div className="min-w-0">
+                  <div className="truncate font-medium text-slate-900">{getTemplateName(item)}</div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                    {getTemplateMeta ? <span>{getTemplateMeta(item)}</span> : null}
+                    {normalizedSearch ? (
+                      <span className="truncate text-slate-400">{getFolderLabelForItem(item)}</span>
+                    ) : null}
+                  </div>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500">
+                  Insert
+                </span>
               </button>
             );
           })}
           {visibleItems.length === 0 ? (
-            <div className="py-6 text-center text-sm text-slate-500">No templates found in this view.</div>
+            <div className="py-6 text-center text-sm text-slate-500">No templates found.</div>
           ) : null}
         </div>
       </div>

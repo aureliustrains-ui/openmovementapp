@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { exerciseTemplatesQuery, useCreateExerciseTemplate, useDeleteExerciseTemplate } from "@/lib/api";
+import {
+  exerciseTemplatesQuery,
+  useCreateExerciseTemplate,
+  useDeleteExerciseTemplate,
+} from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +19,7 @@ function makeDefaultExerciseTemplate() {
     demoUrl: null,
     sets: "3",
     reps: "10",
-    load: "Auto",
+    load: "",
     tempo: "3010",
     notes: null,
     goal: null,
@@ -84,19 +88,30 @@ export default function ExerciseTemplatesList() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link href="/app/admin/templates">
-            <Button variant="outline" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Exercise Templates</h1>
-            <p className="text-slate-500 text-sm">Full-page editor with all PhaseBuilder exercise fields.</p>
+            <p className="text-slate-500 text-sm">
+              Full-page editor with all PhaseBuilder exercise fields.
+            </p>
           </div>
         </div>
-        <Button onClick={create}><Plus className="h-4 w-4 mr-2" /> New Exercise Template</Button>
+        <Button onClick={create}>
+          <Plus className="h-4 w-4 mr-2" /> New Exercise Template
+        </Button>
       </div>
 
       <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 max-w-md">
         <Search className="h-4 w-4 text-slate-400 ml-2" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search exercise templates..." className="border-none shadow-none focus-visible:ring-0" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search exercise templates..."
+          className="border-none shadow-none focus-visible:ring-0"
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -105,16 +120,25 @@ export default function ExerciseTemplatesList() {
             <CardContent className="p-4 space-y-3">
               <div>
                 <h3 className="font-semibold text-slate-900">{item.name}</h3>
-                <p className="text-sm text-slate-500 mt-1">{item.targetMuscle || "No target effect"}</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {item.targetMuscle || "No target effect"}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Link href={`/app/admin/templates/exercises/${item.id}`}>
-                  <Button size="sm" variant="outline">Open</Button>
+                  <Button size="sm" variant="outline">
+                    Open
+                  </Button>
                 </Link>
                 <Button size="sm" variant="outline" onClick={() => duplicate(item)}>
                   <Copy className="h-4 w-4 mr-2" /> Duplicate
                 </Button>
-                <Button size="sm" variant="outline" className="text-red-600" onClick={() => remove(item.id)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600"
+                  onClick={() => remove(item.id)}
+                >
                   <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </Button>
               </div>

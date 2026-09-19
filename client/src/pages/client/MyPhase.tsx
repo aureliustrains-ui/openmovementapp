@@ -14,18 +14,34 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ChevronRight, Calendar as CalIcon, UploadCloud, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronRight,
+  Calendar as CalIcon,
+  UploadCloud,
+  Loader2,
+} from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  getTrainingWeekLifecycle,
-  type TrainingScheduleEntry,
-} from "@/lib/trainingWeek";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { isScheduleEntryCompleted } from "@/lib/clientSchedule";
 import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
@@ -73,7 +89,7 @@ export default function ClientMyPhase() {
   const createWeeklyCheckin = useCreateWeeklyCheckin();
   const createClientVideoUploadTarget = useCreateClientVideoUploadTarget();
   const { toast } = useToast();
-  
+
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [uploadPhaseId, setUploadPhaseId] = useState<string | null>(null);
@@ -103,8 +119,10 @@ export default function ClientMyPhase() {
 
   if (!viewedUser) return null;
 
-  const visiblePhases = allPhases.filter((p: any) =>
-    p.clientId === viewedUser.id && (p.status === 'Active' || p.status === 'Waiting for Movement Check')
+  const visiblePhases = allPhases.filter(
+    (p: any) =>
+      p.clientId === viewedUser.id &&
+      (p.status === "Active" || p.status === "Waiting for Movement Check"),
   );
   const visiblePhaseSignature = visiblePhases
     .map((phase: any) => `${phase.id}:${phase.status}:${phase.startDate || ""}`)
@@ -121,7 +139,8 @@ export default function ClientMyPhase() {
   }, [visiblePhaseSignature, selectedPhaseId]);
 
   const currentPhase =
-    visiblePhases.find((p: any) => p.id === selectedPhaseId) || pickDefaultVisiblePhase(visiblePhases);
+    visiblePhases.find((p: any) => p.id === selectedPhaseId) ||
+    pickDefaultVisiblePhase(visiblePhases);
   const phaseScheduleSignature = currentPhase ? JSON.stringify(currentPhase.schedule || []) : "";
   const completedInstancesSignature = currentPhase
     ? JSON.stringify(currentPhase.completedScheduleInstances || [])
@@ -134,7 +153,8 @@ export default function ClientMyPhase() {
   useEffect(() => {
     if (!currentPhase) return;
     const schedule = ((currentPhase.schedule as any[]) || []) as TrainingScheduleEntry[];
-    const completedInstances = ((currentPhase.completedScheduleInstances as string[]) || []) as string[];
+    const completedInstances = ((currentPhase.completedScheduleInstances as string[]) ||
+      []) as string[];
     const lifecycle = getTrainingWeekLifecycle(
       currentPhase.durationWeeks || 1,
       schedule,
@@ -169,16 +189,19 @@ export default function ClientMyPhase() {
       setSelectedWeek(recommendedWeek);
     }
     previousRecommendedWeekRef.current = recommendedWeek;
-
   }, [
     currentPhase?.id,
     currentPhase?.durationWeeks,
     phaseScheduleSignature,
     completedInstancesSignature,
     JSON.stringify(
-      (weeklyCheckins as Array<{ id?: string; phaseId?: string | null; phaseWeekNumber?: number | null }>).map(
-        (entry) => `${entry.id || ""}:${entry.phaseId || ""}:${entry.phaseWeekNumber ?? ""}`,
-      ),
+      (
+        weeklyCheckins as Array<{
+          id?: string;
+          phaseId?: string | null;
+          phaseWeekNumber?: number | null;
+        }>
+      ).map((entry) => `${entry.id || ""}:${entry.phaseId || ""}:${entry.phaseWeekNumber ?? ""}`),
     ),
     weeklyCheckinStatus?.phaseId,
     weeklyCheckinStatus?.phaseWeekNumber,
@@ -240,7 +263,7 @@ export default function ClientMyPhase() {
         return;
       }
     }
-    
+
     setIsSubmitting(true);
     try {
       let uploadPayload: {
@@ -279,9 +302,9 @@ export default function ClientMyPhase() {
 
       const updatedChecks = (phase.movementChecks as any[]).map((mc: any) => {
         if (mc.exerciseId !== selectedExerciseId) return mc;
-        return { 
-          ...mc, 
-          status: 'Pending', 
+        return {
+          ...mc,
+          status: "Pending",
           videoUrl: uploadPayload.videoUrl,
           videoSource: uploadPayload.source,
           videoObjectKey: uploadPayload.objectKey,
@@ -319,7 +342,7 @@ export default function ClientMyPhase() {
       toast({
         title: "Read-only client context",
         description:
-          "Weekly check-ins can be submitted only in a real client session for this client.",
+          "Weekly recaps can be submitted only in a real client session for this client.",
         variant: "destructive",
       });
       return;
@@ -345,13 +368,13 @@ export default function ClientMyPhase() {
         phaseWeekNumber: weeklyCheckinWeek,
       });
       toast({
-        title: "Weekly check-in submitted",
+        title: "Weekly recap submitted",
         description: "Thanks, your coach can now review your weekly trends.",
       });
       setWeeklyCheckinOpen(false);
     } catch (error: any) {
       toast({
-        title: "Could not submit weekly check-in",
+        title: "Could not submit weekly recap",
         description: error?.message || "Please try again.",
         variant: "destructive",
       });
@@ -374,15 +397,20 @@ export default function ClientMyPhase() {
         <div className="h-20 w-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
           <CalIcon className="h-10 w-10 text-slate-300" />
         </div>
-        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">No Active Plan</h2>
-        <p className="text-slate-500 mt-2 max-w-md">You don't have an active training plan right now. Your coach is likely building your next block.</p>
+        <h2 className="text-2xl font-display font-bold text-slate-900" data-testid="text-no-phase">
+          No Active Plan
+        </h2>
+        <p className="text-slate-500 mt-2 max-w-md">
+          You don't have an active training plan right now. Your coach is likely building your next
+          block.
+        </p>
       </div>
     );
   }
 
   if (!currentPhase) return null;
 
-  const isMovementCheckPhase = currentPhase.status === 'Waiting for Movement Check';
+  const isMovementCheckPhase = currentPhase.status === "Waiting for Movement Check";
   const movementChecks = (currentPhase.movementChecks as any[]) || [];
   const phaseSessions = allSessions.filter((s: any) => s.phaseId === currentPhase.id) as any[];
   const movementCheckExerciseById = new Map<string, any>();
@@ -427,13 +455,11 @@ export default function ClientMyPhase() {
     Number.isFinite(weeklyCheckinStatusForPhase.phaseWeekNumber)
       ? weeklyCheckinStatusForPhase.phaseWeekNumber
       : null;
-  const dueWeekStatus =
-    weekStatuses.find((status) => status.state === "ready_for_checkin") || null;
+  const dueWeekStatus = weekStatuses.find((status) => status.state === "ready_for_checkin") || null;
   const currentTrainingWeek =
     dueWeekStatus?.week ?? weeklyCheckinStatusWeek ?? weekLifecycle.currentWeek;
   const currentWeekStatus = weekStatuses.find((status) => status.week === currentTrainingWeek);
-  const weeklyCheckinWeek =
-    dueWeekStatus?.week ?? weeklyCheckinStatusWeek ?? currentTrainingWeek;
+  const weeklyCheckinWeek = dueWeekStatus?.week ?? weeklyCheckinStatusWeek ?? currentTrainingWeek;
   const weeklyCheckinDue =
     Boolean(dueWeekStatus) ||
     Boolean(weeklyCheckinStatusForPhase?.due) ||
@@ -558,17 +584,31 @@ export default function ClientMyPhase() {
   return (
     <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
       {isCheckinReadOnly && (
-        <Card className="border-amber-200 bg-amber-50 shadow-sm rounded-xl" data-testid="card-impersonation-read-only">
+        <Card
+          className="border-amber-200 bg-amber-50 shadow-sm rounded-xl"
+          data-testid="card-impersonation-read-only"
+        >
           <CardContent className="p-4 text-sm text-amber-800">
-            Client check-ins are read-only unless you are logged in as this client account.
+            Client recaps are read-only unless you are logged in as this client account.
           </CardContent>
         </Card>
       )}
       {visiblePhases.length > 1 && (
         <div className="flex items-center gap-3">
-          <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">Plans</Label>
-          <Select value={selectedPhaseId || ''} onValueChange={(val) => { setSelectedPhaseId(val); setSelectedWeek(1); }}>
-            <SelectTrigger className="w-full max-w-xs bg-white border-slate-200 shadow-sm" data-testid="select-phase">
+          <Label className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">
+            Plans
+          </Label>
+          <Select
+            value={selectedPhaseId || ""}
+            onValueChange={(val) => {
+              setSelectedPhaseId(val);
+              setSelectedWeek(1);
+            }}
+          >
+            <SelectTrigger
+              className="w-full max-w-xs bg-white border-slate-200 shadow-sm"
+              data-testid="select-phase"
+            >
               <SelectValue placeholder="Select a plan" />
             </SelectTrigger>
             <SelectContent>
@@ -576,8 +616,16 @@ export default function ClientMyPhase() {
                 <SelectItem key={p.id} value={p.id}>
                   <div className="flex items-center gap-2 w-full">
                     <span>{p.name}</span>
-                    {p.status === 'Active' && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px]">Active</Badge>}
-                    {p.status === 'Waiting for Movement Check' && <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Pending</Badge>}
+                    {p.status === "Active" && (
+                      <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px]">
+                        Active
+                      </Badge>
+                    )}
+                    {p.status === "Waiting for Movement Check" && (
+                      <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">
+                        Pending
+                      </Badge>
+                    )}
                   </div>
                 </SelectItem>
               ))}
@@ -589,11 +637,16 @@ export default function ClientMyPhase() {
       {isMovementCheckPhase ? (
         <div id="movement-checks" className="animate-in fade-in slide-in-from-bottom-4">
           <div className="mb-3 mt-1">
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-900 tracking-tight" data-testid="text-movement-check-title">
+            <h1
+              className="text-2xl md:text-3xl font-display font-bold text-slate-900 tracking-tight"
+              data-testid="text-movement-check-title"
+            >
               Movement check
             </h1>
             <p className="mt-2 text-[15px] leading-6 text-slate-600">
-              To unlock your new phase, complete the movement check. Watch the reference video closely and match the movement quality, tempo, and execution. Trim the video so the whole person is visible and walking in or out of frame is not included.
+              To unlock your new phase, complete the movement check. Watch the reference video
+              closely and match the movement quality, tempo, and execution. Trim the video so the
+              whole person is visible and walking in or out of frame is not included.
             </p>
           </div>
 
@@ -618,66 +671,81 @@ export default function ClientMyPhase() {
                       const exercise = movementCheckExerciseById.get(mc.exerciseId);
                       return (
                         <>
-                    <div className="flex items-center gap-3 mb-2">
-                      <Badge variant="outline" className={
-                        mc.status === 'Approved' ? 'bg-green-50 text-green-700 border-green-200' : 
-                        mc.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                        mc.status === 'Needs Resubmission' ? 'bg-red-50 text-red-700 border-red-200' :
-                        'bg-slate-50 text-slate-700 border-slate-200'
-                      }>
-                        {mc.status || 'Not Submitted'}
-                      </Badge>
-                      {isUploadOpen &&
-                      selectedExerciseId === mc.exerciseId &&
-                      movementDraftReady &&
-                      mc.status !== "Approved" &&
-                      mc.status !== "Pending" ? (
-                        <Badge
-                          variant="outline"
-                          className="bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-400)]"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                          Ready
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <ExerciseStandardDetails exercise={{ ...exercise, name: exercise?.name || mc.name }} />
-                    {mc.approvedNote && mc.status === 'Approved' && (
-                      <div className="mt-3 bg-green-50 border border-green-100 p-4 rounded-xl">
-                        <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">Coach's Note</p>
-                        <p className="text-slate-700">"{mc.approvedNote}"</p>
-                      </div>
-                    )}
-                    {mc.resubmitFeedback && mc.status === 'Needs Resubmission' && (
-                      <div className="mt-3 bg-red-50 border border-red-100 p-4 rounded-xl">
-                        <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">Coach Feedback</p>
-                        <p className="text-slate-700 italic">"{mc.resubmitFeedback}"</p>
-                      </div>
-                    )}
-                    {mc.clientNote && mc.status === 'Pending' && (
-                      <p className="text-sm text-slate-500 mt-2 italic">Note: {mc.clientNote}</p>
-                    )}
+                          <div className="flex items-center gap-3 mb-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                mc.status === "Approved"
+                                  ? "bg-green-50 text-green-700 border-green-200"
+                                  : mc.status === "Pending"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : mc.status === "Needs Resubmission"
+                                      ? "bg-red-50 text-red-700 border-red-200"
+                                      : "bg-slate-50 text-slate-700 border-slate-200"
+                              }
+                            >
+                              {mc.status || "Not Submitted"}
+                            </Badge>
+                            {isUploadOpen &&
+                            selectedExerciseId === mc.exerciseId &&
+                            movementDraftReady &&
+                            mc.status !== "Approved" &&
+                            mc.status !== "Pending" ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-[var(--color-brand-100)] text-[var(--color-brand-700)] border-[var(--color-brand-400)]"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                Ready
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <ExerciseStandardDetails
+                            exercise={{ ...exercise, name: exercise?.name || mc.name }}
+                          />
+                          {mc.approvedNote && mc.status === "Approved" && (
+                            <div className="mt-3 bg-green-50 border border-green-100 p-4 rounded-xl">
+                              <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">
+                                Coach's Note
+                              </p>
+                              <p className="text-slate-700">"{mc.approvedNote}"</p>
+                            </div>
+                          )}
+                          {mc.resubmitFeedback && mc.status === "Needs Resubmission" && (
+                            <div className="mt-3 bg-red-50 border border-red-100 p-4 rounded-xl">
+                              <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">
+                                Coach Feedback
+                              </p>
+                              <p className="text-slate-700 italic">"{mc.resubmitFeedback}"</p>
+                            </div>
+                          )}
+                          {mc.clientNote && mc.status === "Pending" && (
+                            <p className="text-sm text-slate-500 mt-2 italic">
+                              Note: {mc.clientNote}
+                            </p>
+                          )}
                         </>
                       );
                     })()}
                   </div>
-                  
+
                   <div className="w-full md:w-auto shrink-0">
-                    {mc.status === 'Approved' ? (
+                    {mc.status === "Approved" ? (
                       <div className="flex items-center text-green-600 font-medium bg-green-50 px-4 py-2 rounded-lg border border-green-100">
                         <CheckCircle2 className="mr-2 h-5 w-5" /> Approved
                       </div>
-                    ) : mc.status === 'Pending' ? (
+                    ) : mc.status === "Pending" ? (
                       <div className="flex items-center text-amber-600 font-medium bg-amber-50 px-4 py-2 rounded-lg border border-amber-100">
                         <UploadCloud className="mr-2 h-5 w-5" /> Awaiting Review
                       </div>
                     ) : (
-                      <Button 
+                      <Button
                         className="w-full md:w-auto"
                         onClick={() => handleOpenUpload(currentPhase.id, mc.exerciseId)}
                         data-testid={`button-upload-video-${i}`}
                       >
-                        <UploadCloud className="mr-2 h-5 w-5" /> {mc.status === 'Needs Resubmission' ? 'Re-upload Video' : 'Upload Video'}
+                        <UploadCloud className="mr-2 h-5 w-5" />{" "}
+                        {mc.status === "Needs Resubmission" ? "Re-upload Video" : "Upload Video"}
                       </Button>
                     )}
                   </div>
@@ -688,8 +756,14 @@ export default function ClientMyPhase() {
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm" data-testid="card-phase-hero">
-            <h1 className="text-2xl md:text-3xl font-display font-bold tracking-tight text-slate-900 leading-tight" data-testid="text-phase-name">
+          <div
+            className="rounded-xl border border-slate-200 bg-white p-4 md:p-5 shadow-sm"
+            data-testid="card-phase-hero"
+          >
+            <h1
+              className="text-2xl md:text-3xl font-display font-bold tracking-tight text-slate-900 leading-tight"
+              data-testid="text-phase-name"
+            >
               {currentPhase.name}
             </h1>
             {currentPhase.goal ? (
@@ -710,30 +784,30 @@ export default function ClientMyPhase() {
                     const isSelected = selectedWeek === w;
                     const isCurrent = w === currentTrainingWeek;
                     return (
-                    <button
-                      key={w}
-                      onClick={() => setSelectedWeek(w)}
-                      className={`min-h-8 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
-                        isSelected
-                          ? "bg-[var(--color-brand-600)] text-white shadow-sm"
-                          : weekStatus.state === "ready_for_checkin"
-                            ? "bg-slate-200 text-slate-800 hover:bg-slate-300"
-                            : weekStatus.state === "completed"
-                              ? "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                              : isCurrent
-                                ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200"
-                      }`}
-                      data-testid={`button-week-${w}`}
-                    >
-                      W{w}
-                      {weekStatus.state === "ready_for_checkin" && (
-                        <span className="text-[10px] font-bold">!</span>
-                      )}
-                      {isCurrent && !isSelected && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand-600)]" />
-                      )}
-                    </button>
+                      <button
+                        key={w}
+                        onClick={() => setSelectedWeek(w)}
+                        className={`min-h-8 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 ${
+                          isSelected
+                            ? "bg-[var(--color-brand-600)] text-white shadow-sm"
+                            : weekStatus.state === "ready_for_checkin"
+                              ? "bg-slate-200 text-slate-800 hover:bg-slate-300"
+                              : weekStatus.state === "completed"
+                                ? "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                                : isCurrent
+                                  ? "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                                  : "text-slate-500 hover:text-slate-700 hover:bg-slate-200"
+                        }`}
+                        data-testid={`button-week-${w}`}
+                      >
+                        W{w}
+                        {weekStatus.state === "ready_for_checkin" && (
+                          <span className="text-[10px] font-bold">!</span>
+                        )}
+                        {isCurrent && !isSelected && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-brand-600)]" />
+                        )}
+                      </button>
                     );
                   })}
                 </div>
@@ -743,14 +817,15 @@ export default function ClientMyPhase() {
               {selectedWeekStatus.scheduledCount > 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs md:text-sm text-slate-600">
-                    {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions completed
+                    {selectedWeekStatus.completedCount}/{selectedWeekStatus.scheduledCount} sessions
+                    completed
                   </p>
                   {selectedWeekStatus.state !== "current" ? (
                     <p className="text-xs font-semibold text-slate-700">
                       {selectedWeekStatus.state === "completed"
                         ? "Completed"
                         : selectedWeekStatus.state === "ready_for_checkin"
-                          ? "Ready for weekly check-in"
+                          ? "Ready for weekly recap"
                           : "Future"}
                     </p>
                   ) : null}
@@ -829,7 +904,6 @@ export default function ClientMyPhase() {
                 ))}
               </div>
             )}
-
           </div>
         </>
       )}
@@ -837,10 +911,8 @@ export default function ClientMyPhase() {
       <Dialog open={weeklyCheckinOpen} onOpenChange={setWeeklyCheckinOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Weekly check-in</DialogTitle>
-            <DialogDescription>
-              Step {weeklyCheckinStep}/2
-            </DialogDescription>
+            <DialogTitle>Weekly recap</DialogTitle>
+            <DialogDescription>Step {weeklyCheckinStep}/2</DialogDescription>
           </DialogHeader>
 
           {weeklyCheckinStep === 1 ? (
@@ -863,11 +935,15 @@ export default function ClientMyPhase() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">1 Very poor · 2 Poor · 3 OK · 4 Good · 5 Excellent</p>
+                <p className="text-xs text-slate-500">
+                  1 Very poor · 2 Poor · 3 OK · 4 Good · 5 Excellent
+                </p>
               </div>
 
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">Stress outside training this week</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Stress outside training this week
+                </p>
                 <div className="grid grid-cols-5 gap-2">
                   {[1, 2, 3, 4, 5].map((value) => (
                     <button
@@ -884,13 +960,17 @@ export default function ClientMyPhase() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500">1 Very low · 2 Low · 3 Moderate · 4 High · 5 Very high</p>
+                <p className="text-xs text-slate-500">
+                  1 Very low · 2 Low · 3 Moderate · 4 High · 5 Very high
+                </p>
               </div>
             </div>
           ) : (
             <div className="space-y-5 py-2">
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-slate-900">Did pain or injury affect training this week?</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Did pain or injury affect training this week?
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -919,7 +999,9 @@ export default function ClientMyPhase() {
 
               {weeklyInjuryAffected && (
                 <div className="space-y-3">
-                  <p className="text-sm font-semibold text-slate-900">How much did it affect training?</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    How much did it affect training?
+                  </p>
                   <div className="grid grid-cols-5 gap-2">
                     {[1, 2, 3, 4, 5].map((value) => (
                       <button
@@ -937,7 +1019,8 @@ export default function ClientMyPhase() {
                     ))}
                   </div>
                   <p className="text-xs text-slate-500">
-                    1 Very low impact · 2 Low impact · 3 Moderate impact · 4 High impact · 5 Very high impact
+                    1 Very low impact · 2 Low impact · 3 Moderate impact · 4 High impact · 5 Very
+                    high impact
                   </p>
                 </div>
               )}
@@ -957,12 +1040,18 @@ export default function ClientMyPhase() {
 
           <DialogFooter>
             {weeklyCheckinStep === 2 && (
-              <Button variant="outline" onClick={() => setWeeklyCheckinStep(1)} disabled={submittingWeeklyCheckin}>
+              <Button
+                variant="outline"
+                onClick={() => setWeeklyCheckinStep(1)}
+                disabled={submittingWeeklyCheckin}
+              >
                 Back
               </Button>
             )}
             {weeklyCheckinStep === 1 ? (
-              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>Continue</Button>
+              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>
+                Continue
+              </Button>
             ) : (
               <Button
                 onClick={handleSubmitWeeklyCheckin}
@@ -973,7 +1062,7 @@ export default function ClientMyPhase() {
                 }
               >
                 {submittingWeeklyCheckin ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Submit weekly check-in
+                Submit weekly recap
               </Button>
             )}
           </DialogFooter>
@@ -1008,9 +1097,9 @@ export default function ClientMyPhase() {
             />
             <div className="grid gap-2">
               <Label htmlFor="note">Optional Note</Label>
-              <Textarea 
-                id="note" 
-                placeholder="Anything we should know?" 
+              <Textarea
+                id="note"
+                placeholder="Anything we should know?"
                 value={clientNote}
                 onChange={(e) => setClientNote(e.target.value)}
                 data-testid="input-client-note"
@@ -1018,19 +1107,23 @@ export default function ClientMyPhase() {
             </div>
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setIsUploadOpen(false)}
               disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={handleSubmitVideo}
               disabled={isSubmitting}
               data-testid="button-submit-video"
             >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <UploadCloud className="h-4 w-4 mr-2" />
+              )}
               {isSubmitting ? "Submitting..." : "Submit for Review"}
             </Button>
           </DialogFooter>

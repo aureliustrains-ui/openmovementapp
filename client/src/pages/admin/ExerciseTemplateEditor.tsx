@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { TemplateEditorHeader } from "@/components/admin/TemplateEditorHeader";
+import { useAutosave } from "@/hooks/useAutosave";
 
 type ExerciseTemplateModel = {
   id: string;
@@ -68,32 +69,45 @@ export default function ExerciseTemplateEditor() {
     });
   }, [template]);
 
-  const save = async () => {
-    if (!model || !model.name.trim()) return;
-    setSaving(true);
-    try {
-      await updateTemplate.mutateAsync({
-        id: model.id,
-        name: model.name.trim(),
-        targetMuscle: model.targetMuscle.trim() || null,
-        demoUrl: model.demoUrl.trim() || null,
-        sets: model.sets.trim() || null,
-        reps: model.reps.trim() || null,
-        load: model.load.trim() || null,
-        tempo: model.tempo.trim() || null,
-        notes: model.notes.trim() || null,
-        goal: model.goal.trim() || null,
-        additionalInstructions: model.additionalInstructions.trim() || null,
-        requiresMovementCheck: model.requiresMovementCheck,
-        enableStructuredLogging: model.enableStructuredLogging,
-      });
-      toast({ title: "Exercise template saved" });
-    } catch {
-      toast({ title: "Could not save exercise template", variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
+  const autosaveSnapshot = useMemo(() => JSON.stringify(model), [model]);
+
+  const save = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!model || !model.name.trim()) return;
+      setSaving(true);
+      try {
+        await updateTemplate.mutateAsync({
+          id: model.id,
+          name: model.name.trim(),
+          targetMuscle: model.targetMuscle.trim() || null,
+          demoUrl: model.demoUrl.trim() || null,
+          sets: model.sets.trim() || null,
+          reps: model.reps.trim() || null,
+          load: model.load.trim() || null,
+          tempo: model.tempo.trim() || null,
+          notes: model.notes.trim() || null,
+          goal: model.goal.trim() || null,
+          additionalInstructions: model.additionalInstructions.trim() || null,
+          requiresMovementCheck: model.requiresMovementCheck,
+          enableStructuredLogging: model.enableStructuredLogging,
+        });
+        if (!options?.silent) toast({ title: "Exercise template saved" });
+      } catch {
+        toast({ title: "Could not save exercise template", variant: "destructive" });
+        throw new Error("Could not save exercise template");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [model, toast, updateTemplate],
+  );
+
+  const autosave = useAutosave({
+    snapshot: autosaveSnapshot,
+    enabled: Boolean(model?.id && model.name.trim()),
+    delayMs: 30_000,
+    onSave: () => save({ silent: true }),
+  });
 
   const remove = async () => {
     if (!model) return;
@@ -141,9 +155,10 @@ export default function ExerciseTemplateEditor() {
         title="Exercise Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}
-        onSave={save}
+        onSave={() => void save().then(() => autosave.markSaved())}
         saveDisabled={saving || !model.name.trim()}
         saving={saving}
+        autosaveStatus={autosave.status}
         onDelete={remove}
         onDuplicate={duplicate}
       />
@@ -152,51 +167,101 @@ export default function ExerciseTemplateEditor() {
         <CardContent className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Target Effect</Label>
-              <Input value={model.targetMuscle} onChange={(e) => setModel((prev) => (prev ? { ...prev, targetMuscle: e.target.value } : prev))} />
+              <Label>Tags</Label>
+              <Input
+                value={model.targetMuscle}
+                placeholder="one-arm chin-up, bent arm, vertical pull..."
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, targetMuscle: e.target.value } : prev))
+                }
+              />
             </div>
             <div>
               <Label>Demo URL</Label>
-              <Input value={model.demoUrl} onChange={(e) => setModel((prev) => (prev ? { ...prev, demoUrl: e.target.value } : prev))} />
+              <Input
+                value={model.demoUrl}
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, demoUrl: e.target.value } : prev))
+                }
+              />
             </div>
             <div>
               <Label>Sets</Label>
-              <Input value={model.sets} onChange={(e) => setModel((prev) => (prev ? { ...prev, sets: e.target.value } : prev))} />
+              <Input
+                value={model.sets}
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, sets: e.target.value } : prev))
+                }
+              />
             </div>
             <div>
               <Label>Reps</Label>
-              <Input value={model.reps} onChange={(e) => setModel((prev) => (prev ? { ...prev, reps: e.target.value } : prev))} />
+              <Input
+                value={model.reps}
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, reps: e.target.value } : prev))
+                }
+              />
             </div>
             <div>
               <Label>Load</Label>
-              <Input value={model.load} onChange={(e) => setModel((prev) => (prev ? { ...prev, load: e.target.value } : prev))} />
+              <Input
+                value={model.load}
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, load: e.target.value } : prev))
+                }
+              />
             </div>
             <div>
               <Label>Tempo</Label>
-              <Input value={model.tempo} onChange={(e) => setModel((prev) => (prev ? { ...prev, tempo: e.target.value } : prev))} />
+              <Input
+                value={model.tempo}
+                onChange={(e) =>
+                  setModel((prev) => (prev ? { ...prev, tempo: e.target.value } : prev))
+                }
+              />
             </div>
           </div>
 
           <div>
             <Label>Goal</Label>
-            <Input value={model.goal} onChange={(e) => setModel((prev) => (prev ? { ...prev, goal: e.target.value } : prev))} />
+            <Input
+              value={model.goal}
+              onChange={(e) =>
+                setModel((prev) => (prev ? { ...prev, goal: e.target.value } : prev))
+              }
+            />
           </div>
 
           <div>
             <Label>Notes</Label>
-            <Input value={model.notes} onChange={(e) => setModel((prev) => (prev ? { ...prev, notes: e.target.value } : prev))} />
+            <Input
+              value={model.notes}
+              onChange={(e) =>
+                setModel((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
+              }
+            />
           </div>
 
           <div>
             <Label>Additional Instructions</Label>
-            <Textarea value={model.additionalInstructions} onChange={(e) => setModel((prev) => (prev ? { ...prev, additionalInstructions: e.target.value } : prev))} />
+            <Textarea
+              value={model.additionalInstructions}
+              onChange={(e) =>
+                setModel((prev) =>
+                  prev ? { ...prev, additionalInstructions: e.target.value } : prev,
+                )
+              }
+            />
           </div>
 
           <div className="flex items-center justify-between border rounded-md px-3 py-2">
             <Label>Requires movement check</Label>
             <Switch
               checked={model.requiresMovementCheck}
-              onCheckedChange={(checked) => setModel((prev) => (prev ? { ...prev, requiresMovementCheck: checked } : prev))}
+              onCheckedChange={(checked) =>
+                setModel((prev) => (prev ? { ...prev, requiresMovementCheck: checked } : prev))
+              }
             />
           </div>
 
@@ -204,7 +269,9 @@ export default function ExerciseTemplateEditor() {
             <Label>Enable structured logging</Label>
             <Switch
               checked={model.enableStructuredLogging}
-              onCheckedChange={(checked) => setModel((prev) => (prev ? { ...prev, enableStructuredLogging: checked } : prev))}
+              onCheckedChange={(checked) =>
+                setModel((prev) => (prev ? { ...prev, enableStructuredLogging: checked } : prev))
+              }
             />
           </div>
         </CardContent>

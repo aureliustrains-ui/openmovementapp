@@ -16,7 +16,7 @@ export default function ClientInfo() {
         "Above all: be consistent.",
         "Avoid choices that hurt consistency: training too much or too hard, training with poor quality, changing goals or methods too often, or chasing new ideas while forgetting the basics.",
         "The best plan is the one you can follow well over time.",
-        "If motivation, uncertainty, or problems come up, use Messages and ask for support.",
+        "If motivation, uncertainty, or problems come up, contact your coach directly for support.",
       ],
     },
     {
