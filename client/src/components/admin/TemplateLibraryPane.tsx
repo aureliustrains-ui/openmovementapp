@@ -53,7 +53,7 @@ type TemplateLibraryPaneProps<TItem extends TemplateListItem> = {
   isLoading?: boolean;
   onSelectCategory?: (categoryId: string) => void;
   onSelectFolder: (folderId: string | null) => void;
-  onCreateTemplate: (folderId: string | null) => void;
+  onCreateTemplate: (folderId: string | null) => void | string | Promise<void | string>;
   onDuplicateTemplate: (item: TItem) => void;
   onDeleteTemplate: (item: TItem) => void;
   onCreateFolder: (name: string, parentId: string | null) => void;
@@ -66,10 +66,76 @@ type TemplateLibraryPaneProps<TItem extends TemplateListItem> = {
   getTemplateSearchText?: (item: TItem) => string;
   renderTemplatePreview?: (item: TItem) => ReactNode;
   renderTemplateDetails?: (item: TItem) => ReactNode;
+  renderTemplateHeader?: (item: TItem, isExpanded: boolean) => ReactNode;
   renderTemplateTitle?: (item: TItem) => ReactNode;
   getTemplateOpenHref: (item: TItem) => string;
   layout?: "cards" | "rows";
 };
+
+function InlineFolderName({
+  folder,
+  onRename,
+  editing,
+  onEditStart,
+  onEditEnd,
+}: {
+  folder: TemplateFolder;
+  onRename: (folderId: string, name: string) => void;
+  editing: boolean;
+  onEditStart: () => void;
+  onEditEnd: () => void;
+}) {
+  const [name, setName] = useState(folder.name);
+
+  useEffect(() => {
+    setName(folder.name);
+  }, [folder.id, folder.name]);
+
+  const saveName = () => {
+    const nextName = name.trim();
+    if (!nextName) {
+      setName(folder.name);
+      onEditEnd();
+      return;
+    }
+    if (nextName !== folder.name) onRename(folder.id, nextName);
+    onEditEnd();
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="min-w-0 truncate rounded px-1 py-1 text-left text-sm font-medium text-slate-900"
+        onClick={onEditStart}
+        title="Rename folder"
+      >
+        {folder.name}
+      </button>
+    );
+  }
+
+  return (
+    <Input
+      autoFocus
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      onBlur={saveName}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setName(folder.name);
+          onEditEnd();
+          event.currentTarget.blur();
+        }
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      className="h-7 min-w-0 border-transparent bg-transparent px-1 py-0 text-sm font-medium text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:ring-1 focus-visible:ring-slate-200"
+      draggable={false}
+    />
+  );
+}
 
 function sortTemplateItems<TItem extends TemplateListItem>(items: TItem[]): TItem[] {
   return [...items].sort((a, b) => {
@@ -135,16 +201,17 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   getTemplateSearchText,
   renderTemplatePreview,
   renderTemplateDetails,
+  renderTemplateHeader,
   renderTemplateTitle,
   getTemplateOpenHref,
   layout = "cards",
 }: TemplateLibraryPaneProps<TItem>) {
   const rootNodeLabel = rootLabel ?? allLabel;
   const [search, setSearch] = useState("");
-  const [searchAll, setSearchAll] = useState(false);
   const [rootExpanded, setRootExpanded] = useState(true);
   const [draggedTemplateId, setDraggedTemplateId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [expandedTemplateIds, setExpandedTemplateIds] = useState<Set<string>>(new Set());
 
@@ -242,8 +309,8 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
 
   const normalizedSearch = search.trim().toLowerCase();
   const searching = normalizedSearch.length > 0;
-  const folderSearchBase = searchAll || searching ? sortedFolders : baseChildFolders;
-  const templateSearchBase = searchAll || searching ? sortedItems : baseTemplates;
+  const folderSearchBase = searching ? sortedFolders : baseChildFolders;
+  const templateSearchBase = searching ? sortedItems : baseTemplates;
 
   const visibleChildFolders = useMemo(() => {
     if (!normalizedSearch) return folderSearchBase;
@@ -272,13 +339,21 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
       .map(({ item }) => item);
   }, [getTemplateSearchText, getTemplateSummary, normalizedSearch, templateSearchBase]);
 
-  const canReorderTemplates = !searchAll && normalizedSearch.length === 0;
+  const canReorderTemplates = normalizedSearch.length === 0;
+
+  const createTemplateAtCurrentLocation = async () => {
+    const createdId = await onCreateTemplate(selectedFolderId);
+    if (typeof createdId === "string" && createdId.length > 0) {
+      setExpandedTemplateIds((previous) => {
+        const next = new Set(previous);
+        next.add(createdId);
+        return next;
+      });
+    }
+  };
 
   const createFolderAtCurrentLevel = () => {
-    const proposed = window.prompt("Folder name");
-    const normalized = proposed?.trim();
-    if (!normalized) return;
-    onCreateFolder(normalized, selectedFolderId);
+    onCreateFolder("New folder", selectedFolderId);
     setRootExpanded(true);
     if (selectedFolderId) {
       setExpandedFolderIds((previous) => {
@@ -287,14 +362,6 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
         return next;
       });
     }
-  };
-
-  const renameSelectedFolder = () => {
-    if (!selectedFolder) return;
-    const proposed = window.prompt("Rename folder", selectedFolder.name);
-    const normalized = proposed?.trim();
-    if (!normalized || normalized === selectedFolder.name) return;
-    onRenameFolder(selectedFolder.id, normalized);
   };
 
   const moveByOffset = (itemId: string, offset: -1 | 1) => {
@@ -333,11 +400,13 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
     if (draggedTemplateId) {
       onMoveTemplate(draggedTemplateId, folderId);
       setDraggedTemplateId(null);
+      setDraggedFolderId(null);
       return;
     }
     if (draggedFolderId && onMoveFolder) {
       onMoveFolder(draggedFolderId, folderId);
       setDraggedFolderId(null);
+      setDraggedTemplateId(null);
     }
   };
 
@@ -514,23 +583,14 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                     className="h-auto border-none p-0 shadow-none focus-visible:ring-0"
                   />
                 </div>
-                <label className="inline-flex items-center gap-2 pl-1 text-xs text-slate-600">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300"
-                    checked={searchAll}
-                    onChange={(event) => setSearchAll(event.target.checked)}
-                  />
-                  All folders
-                </label>
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button type="button" variant="outline" onClick={createFolderAtCurrentLevel}>
                 <FolderPlus className="mr-2 h-4 w-4" />
-                New folder here
+                New folder
               </Button>
-              <Button onClick={() => onCreateTemplate(selectedFolderId)}>
+              <Button onClick={() => void createTemplateAtCurrentLocation()}>
                 <Plus className="mr-2 h-4 w-4" />
                 {createButtonLabel}
               </Button>
@@ -564,22 +624,6 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                 })}
               </div>
 
-              {selectedFolder ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={renameSelectedFolder}>
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Rename
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => onDeleteFolder(selectedFolder.id)}
-                  >
-                    <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
-                  </Button>
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -591,29 +635,69 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
             <div className="space-y-4">
               {!canReorderTemplates ? (
                 <p className="text-xs text-slate-500">
-                  Reordering is available when search is off and you are viewing a single folder
-                  location.
+                  Reordering is available when search is off and you are viewing a single folder.
                 </p>
               ) : null}
               {visibleChildFolders.length > 0 ? (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {visibleChildFolders.map((folder) => (
-                    <button
+                    <div
                       key={folder.id}
-                      type="button"
-                      className="rounded-xl border border-slate-300 bg-slate-100/80 p-4 text-left transition-colors hover:border-slate-400 hover:bg-slate-100"
+                      className="rounded-xl border border-slate-300 bg-slate-100/80 p-3 transition-colors hover:border-slate-400 hover:bg-slate-100"
                       onClick={() => onSelectFolder(folder.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
                         event.preventDefault();
+                        event.stopPropagation();
                         handleDropToFolder(folder.id);
                       }}
                     >
-                      <div className="flex items-center gap-2 text-slate-900">
-                        <Folder className="h-4 w-4 text-slate-600" />
-                        <span className="truncate font-medium">{folder.name}</span>
+                      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600">
+                          <Folder className="h-4 w-4" />
+                        </span>
+                        {editingFolderId === folder.id ? (
+                          <InlineFolderName
+                            folder={folder}
+                            onRename={onRenameFolder}
+                            editing
+                            onEditStart={() => setEditingFolderId(folder.id)}
+                            onEditEnd={() => setEditingFolderId(null)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="min-w-0 truncate rounded px-1 py-1 text-left text-sm font-medium text-slate-900"
+                            onClick={() => onSelectFolder(folder.id)}
+                            title="Open folder"
+                          >
+                            {folder.name}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-white hover:text-slate-700"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingFolderId(folder.id);
+                          }}
+                          title="Rename folder"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-white hover:text-red-600"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteFolder(folder.id);
+                          }}
+                          title="Delete folder"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ) : null}
@@ -639,50 +723,46 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                       >
                         <CardContent className={rowMode ? "space-y-0 p-0" : "space-y-3 p-4"}>
                           <div
+                            onClick={
+                              rowMode && renderTemplateDetails
+                                ? () => toggleTemplateExpanded(item.id)
+                                : undefined
+                            }
                             className={
                               rowMode
                                 ? cn(
                                     "grid items-start gap-1.5 p-2",
                                     renderTemplateDetails
-                                      ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+                                      ? "grid-cols-[minmax(0,1fr)_auto]"
                                       : "grid-cols-[minmax(0,1fr)_auto]",
                                   )
                                 : "space-y-3"
                             }
                           >
-                            {rowMode && renderTemplateDetails ? (
-                              <button
-                                type="button"
-                                className="h-7 w-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                onClick={() => toggleTemplateExpanded(item.id)}
-                                title={isExpanded ? "Collapse template" : "Open template"}
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="mx-auto h-4 w-4" />
-                                ) : (
-                                  <ChevronRight className="mx-auto h-4 w-4" />
-                                )}
-                              </button>
-                            ) : null}
-
                             <div className="min-w-0">
-                              <h3
-                                className={cn(
-                                  "truncate font-semibold text-slate-900",
-                                  rowMode ? "text-sm" : undefined,
-                                )}
-                              >
-                                {renderTemplateTitle ? renderTemplateTitle(item) : item.name}
-                              </h3>
-                              <p
-                                className={
-                                  rowMode
-                                    ? "mt-0.5 text-xs text-slate-500"
-                                    : "mt-1 text-sm text-slate-500"
-                                }
-                              >
-                                {getTemplateSummary(item)}
-                              </p>
+                              {renderTemplateHeader ? (
+                                renderTemplateHeader(item, isExpanded)
+                              ) : (
+                                <>
+                                  <h3
+                                    className={cn(
+                                      "truncate font-semibold text-slate-900",
+                                      rowMode ? "text-sm" : undefined,
+                                    )}
+                                  >
+                                    {renderTemplateTitle ? renderTemplateTitle(item) : item.name}
+                                  </h3>
+                                  <p
+                                    className={
+                                      rowMode
+                                        ? "mt-0.5 text-xs text-slate-500"
+                                        : "mt-1 text-sm text-slate-500"
+                                    }
+                                  >
+                                    {getTemplateSummary(item)}
+                                  </p>
+                                </>
+                              )}
                               {renderTemplatePreview ? (
                                 <div className={rowMode ? "mt-1" : "mt-2"}>
                                   {renderTemplatePreview(item)}
@@ -708,7 +788,10 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7 text-slate-400 hover:text-indigo-600"
-                                onClick={() => onDuplicateTemplate(item)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onDuplicateTemplate(item);
+                                }}
                                 title="Duplicate"
                               >
                                 <Copy className="h-4 w-4" />
@@ -717,7 +800,10 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                                 size="icon"
                                 variant="ghost"
                                 className="h-7 w-7 text-slate-400 hover:text-red-600"
-                                onClick={() => onDeleteTemplate(item)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onDeleteTemplate(item);
+                                }}
                                 title="Delete"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -750,7 +836,10 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                           </div>
 
                           {rowMode && renderTemplateDetails && isExpanded ? (
-                            <div className="border-t border-slate-100 bg-slate-50/60 p-2">
+                            <div
+                              className="border-t border-slate-100 bg-slate-50/60 p-2"
+                              onClick={() => toggleTemplateExpanded(item.id)}
+                            >
                               {renderTemplateDetails(item)}
                             </div>
                           ) : null}

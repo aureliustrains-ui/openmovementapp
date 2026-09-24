@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Save, Layers, Library, Shapes, Spline, Video } from "lucide-react";
+import { Layers, Library, Shapes, Spline, Video } from "lucide-react";
 import {
   exerciseTemplatesQuery,
   phaseTemplatesQuery,
@@ -247,64 +247,110 @@ function renderExerciseTemplatePreview(item: any) {
   );
 }
 
-function ExerciseTemplateInlineTitle({ item }: { item: any }) {
+function ExerciseTemplateInlineHeader({ item, isExpanded }: { item: any; isExpanded: boolean }) {
+  const { toast } = useToast();
   const updateExerciseTemplate = useUpdateExerciseTemplate();
-  const [name, setName] = useState(item.name || "");
+  const [draft, setDraft] = useState({
+    name: item.name || "",
+    targetMuscle: item.targetMuscle || "",
+  });
+  const draftRef = useRef(draft);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
-    setName(item.name || "");
-  }, [item.id, item.name]);
+    const nextDraft = {
+      name: item.name || "",
+      targetMuscle: item.targetMuscle || "",
+    };
+    setDraft(nextDraft);
+    draftRef.current = nextDraft;
+    dirtyRef.current = false;
+  }, [item.id, item.name, item.targetMuscle]);
 
-  const saveName = async () => {
-    const nextName = name.trim();
-    if (!nextName || nextName === item.name) {
-      setName(item.name || "");
-      return;
-    }
-    await updateExerciseTemplate.mutateAsync({
-      id: item.id,
-      name: nextName,
-      targetMuscle: item.targetMuscle || null,
-      sets: item.sets || null,
-      reps: item.reps || null,
-      load: item.load || null,
-      tempo: item.tempo || null,
-      goal: item.goal || null,
-      notes: item.notes || null,
-      additionalInstructions: item.additionalInstructions || null,
-      demoUrl: item.demoUrl || null,
-      requiresMovementCheck: Boolean(item.requiresMovementCheck),
-      enableStructuredLogging: Boolean(item.enableStructuredLogging),
+  const updateDraft = (field: keyof typeof draft, value: string) => {
+    setDraft((previous) => {
+      const next = { ...previous, [field]: value };
+      draftRef.current = next;
+      dirtyRef.current = true;
+      return next;
     });
   };
 
+  const saveDraft = useCallback(async () => {
+    if (!dirtyRef.current) return;
+    const latest = draftRef.current;
+    const nextName = latest.name.trim();
+    if (!nextName) return;
+    dirtyRef.current = false;
+    try {
+      await updateExerciseTemplate.mutateAsync({
+        id: item.id,
+        name: nextName,
+        targetMuscle: latest.targetMuscle.trim() || null,
+      });
+    } catch {
+      dirtyRef.current = true;
+      toast({ title: "Could not save exercise template", variant: "destructive" });
+    }
+  }, [item.id, toast, updateExerciseTemplate]);
+
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    const timeout = window.setTimeout(() => {
+      void saveDraft();
+    }, 5_000);
+    return () => window.clearTimeout(timeout);
+  }, [draft, saveDraft]);
+
+  useEffect(() => {
+    return () => {
+      void saveDraft();
+    };
+  }, [saveDraft]);
+
+  if (!isExpanded) {
+    return (
+      <>
+        <h3 className="truncate text-sm font-semibold text-slate-900">
+          {item.name || "Untitled exercise"}
+        </h3>
+        <div className="mt-0.5 truncate text-xs text-slate-500">
+          {item.targetMuscle || "No tags"}
+        </div>
+      </>
+    );
+  }
+
   return (
-    <Input
-      value={name}
-      onChange={(event) => setName(event.target.value)}
-      onBlur={() => void saveName()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.currentTarget.blur();
-        }
-        if (event.key === "Escape") {
-          setName(item.name || "");
-          event.currentTarget.blur();
-        }
-      }}
-      className="h-6 truncate border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
-      onClick={(event) => event.stopPropagation()}
-      draggable={false}
-    />
+    <div className="space-y-1">
+      <Input
+        value={draft.name}
+        onChange={(event) => updateDraft("name", event.target.value)}
+        onBlur={() => void saveDraft()}
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        className="h-7 border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
+      />
+      <Input
+        value={draft.targetMuscle}
+        onChange={(event) => updateDraft("targetMuscle", event.target.value)}
+        onBlur={() => void saveDraft()}
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        placeholder="No tags"
+        className="h-6 border-transparent bg-transparent px-0 py-0 text-xs text-slate-500 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
+      />
+    </div>
   );
 }
 
 function ExerciseTemplateInlineDetails({ item }: { item: any }) {
   const { toast } = useToast();
   const updateExerciseTemplate = useUpdateExerciseTemplate();
+  const stopTemplateToggle = (event: React.SyntheticEvent) => {
+    event.stopPropagation();
+  };
   const [draft, setDraft] = useState({
-    name: item.name || "",
-    targetMuscle: item.targetMuscle || "",
     sets: item.sets || "",
     reps: item.reps || "",
     load: item.load || "",
@@ -316,11 +362,11 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
     requiresMovementCheck: Boolean(item.requiresMovementCheck),
     enableStructuredLogging: Boolean(item.enableStructuredLogging),
   });
+  const draftRef = useRef(draft);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
-    setDraft({
-      name: item.name || "",
-      targetMuscle: item.targetMuscle || "",
+    const nextDraft = {
       sets: item.sets || "",
       reps: item.reps || "",
       load: item.load || "",
@@ -331,51 +377,62 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
       demoUrl: item.demoUrl || "",
       requiresMovementCheck: Boolean(item.requiresMovementCheck),
       enableStructuredLogging: Boolean(item.enableStructuredLogging),
-    });
+    };
+    setDraft(nextDraft);
+    draftRef.current = nextDraft;
+    dirtyRef.current = false;
   }, [item]);
 
   const updateDraft = (field: keyof typeof draft, value: string | boolean) => {
-    setDraft((previous) => ({ ...previous, [field]: value }));
+    setDraft((previous) => {
+      const next = { ...previous, [field]: value };
+      draftRef.current = next;
+      dirtyRef.current = true;
+      return next;
+    });
   };
 
-  const save = async () => {
-    if (!draft.name.trim()) return;
+  const saveDraft = useCallback(async () => {
+    if (!dirtyRef.current) return;
+    const latest = draftRef.current;
+    dirtyRef.current = false;
     try {
       await updateExerciseTemplate.mutateAsync({
         id: item.id,
-        name: draft.name.trim(),
-        targetMuscle: draft.targetMuscle.trim() || null,
-        sets: draft.sets.trim() || null,
-        reps: draft.reps.trim() || null,
-        load: draft.load.trim() || null,
-        tempo: draft.tempo.trim() || null,
-        goal: draft.goal.trim() || null,
-        notes: draft.notes.trim() || null,
-        additionalInstructions: draft.additionalInstructions.trim() || null,
-        demoUrl: draft.demoUrl.trim() || null,
-        requiresMovementCheck: draft.requiresMovementCheck,
-        enableStructuredLogging: draft.enableStructuredLogging,
+        sets: latest.sets.trim() || null,
+        reps: latest.reps.trim() || null,
+        load: latest.load.trim() || null,
+        tempo: latest.tempo.trim() || null,
+        goal: latest.goal.trim() || null,
+        notes: latest.notes.trim() || null,
+        additionalInstructions: latest.additionalInstructions.trim() || null,
+        demoUrl: latest.demoUrl.trim() || null,
+        requiresMovementCheck: latest.requiresMovementCheck,
+        enableStructuredLogging: latest.enableStructuredLogging,
       });
-      toast({ title: "Exercise template saved" });
     } catch {
+      dirtyRef.current = true;
       toast({ title: "Could not save exercise template", variant: "destructive" });
     }
-  };
+  }, [item.id, toast, updateExerciseTemplate]);
+
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    const timeout = window.setTimeout(() => {
+      void saveDraft();
+    }, 5_000);
+    return () => window.clearTimeout(timeout);
+  }, [draft, saveDraft]);
+
+  useEffect(() => {
+    return () => {
+      void saveDraft();
+    };
+  }, [saveDraft]);
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Tags
-          </Label>
-          <Input
-            value={draft.targetMuscle}
-            onChange={(event) => updateDraft("targetMuscle", event.target.value)}
-            placeholder="one-arm chin-up, bent arm, vertical pull..."
-            className="h-8 bg-white"
-          />
-        </div>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.15fr)]">
         <div className="space-y-1">
           <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Demo video URL
@@ -385,6 +442,8 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
             <Input
               value={draft.demoUrl}
               onChange={(event) => updateDraft("demoUrl", event.target.value)}
+              onClick={stopTemplateToggle}
+              onPointerDown={stopTemplateToggle}
               placeholder="Paste video link"
               className="h-8 bg-white"
             />
@@ -407,6 +466,8 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
             <Input
               value={draft[field]}
               onChange={(event) => updateDraft(field, event.target.value)}
+              onClick={stopTemplateToggle}
+              onPointerDown={stopTemplateToggle}
               className="h-8 bg-white"
             />
           </div>
@@ -421,6 +482,8 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
           <Input
             value={draft.goal}
             onChange={(event) => updateDraft("goal", event.target.value)}
+            onClick={stopTemplateToggle}
+            onPointerDown={stopTemplateToggle}
             className="h-8 bg-white"
           />
         </div>
@@ -431,6 +494,8 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
           <Input
             value={draft.notes}
             onChange={(event) => updateDraft("notes", event.target.value)}
+            onClick={stopTemplateToggle}
+            onPointerDown={stopTemplateToggle}
             className="h-8 bg-white"
           />
         </div>
@@ -443,13 +508,19 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
         <Textarea
           value={draft.additionalInstructions}
           onChange={(event) => updateDraft("additionalInstructions", event.target.value)}
+          onClick={stopTemplateToggle}
+          onPointerDown={stopTemplateToggle}
           className="min-h-[56px] resize-none bg-white"
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+          <div
+            className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+            onClick={stopTemplateToggle}
+            onPointerDown={stopTemplateToggle}
+          >
             <Label className="text-xs text-slate-500">Movement check</Label>
             <Switch
               checked={draft.requiresMovementCheck}
@@ -457,19 +528,14 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
             />
           </div>
         </div>
-        <Button
-          size="sm"
-          className="bg-indigo-600 text-white hover:bg-indigo-700"
-          disabled={updateExerciseTemplate.isPending || !draft.name.trim()}
-          onClick={save}
-        >
-          <Save className="mr-1.5 h-4 w-4" />
-          Save
-        </Button>
       </div>
 
       {draft.demoUrl.trim() ? (
-        <div className="rounded-md border border-slate-200 bg-white p-2">
+        <div
+          className="rounded-md border border-slate-200 bg-white p-2"
+          onClick={stopTemplateToggle}
+          onPointerDown={stopTemplateToggle}
+        >
           <DemoVideoPreview url={draft.demoUrl.trim()} size="inline" />
         </div>
       ) : null}
@@ -832,14 +898,15 @@ export default function AdminTemplatesPage() {
     }
   };
 
-  const createExercise = async (folderId: string | null) => {
+  const createExercise = async (folderId: string | null): Promise<string | void> => {
     try {
       const created = await createExerciseTemplate.mutateAsync({
         ...makeDefaultExerciseTemplate(),
         folderId,
         sortOrder: getNextSortOrder(exerciseTemplates, folderId),
       });
-      setLocation(`/app/admin/templates/exercises/${created.id}?tab=exercises`);
+      toast({ title: "Exercise template added" });
+      return created.id;
     } catch (error) {
       toast({
         title: "Could not create exercise template",
@@ -1097,7 +1164,7 @@ export default function AdminTemplatesPage() {
           }}
           allLabel="All Exercises"
           searchPlaceholder="Search exercise templates..."
-          createButtonLabel="New Exercise Template"
+          createButtonLabel="New exercise"
           items={exerciseTemplates as any[]}
           folders={exerciseFolders}
           selectedFolderId={selectedFolderId}
@@ -1118,7 +1185,9 @@ export default function AdminTemplatesPage() {
           onReorderTemplates={(items) => void handleReorderTemplates("exercise", items)}
           getTemplateSummary={(item) => `${(item as any).targetMuscle || "No tags"}`}
           getTemplateSearchText={(item) => `${(item as any).targetMuscle || ""}`}
-          renderTemplateTitle={(item) => <ExerciseTemplateInlineTitle item={item} />}
+          renderTemplateHeader={(item, isExpanded) => (
+            <ExerciseTemplateInlineHeader item={item} isExpanded={isExpanded} />
+          )}
           renderTemplatePreview={(item) => renderExerciseTemplatePreview(item)}
           renderTemplateDetails={(item) => <ExerciseTemplateInlineDetails item={item} />}
           getTemplateOpenHref={(item) => `/app/admin/templates/exercises/${item.id}?tab=exercises`}

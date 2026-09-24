@@ -160,6 +160,25 @@ test("template search is global and ranked by name before tags", () => {
   assert.ok(exerciseEditorSource.includes("<Label>Tags</Label>"));
 });
 
+test("exercise templates can be created from the top action without opening the full editor", () => {
+  const librarySource = fs.readFileSync(templateLibraryPanePath, "utf8");
+  const templatesSource = fs.readFileSync(templatesPagePath, "utf8");
+
+  assert.ok(librarySource.includes("createTemplateAtCurrentLocation"));
+  assert.ok(librarySource.includes("setExpandedTemplateIds"));
+  assert.ok(librarySource.includes('onCreateFolder("New folder", selectedFolderId)'));
+  assert.ok(librarySource.includes("<InlineFolderName"));
+  assert.ok(librarySource.includes("renderTemplateHeader"));
+  assert.equal(librarySource.includes("window.prompt"), false);
+  assert.equal(librarySource.includes("All folders"), false);
+  assert.equal(librarySource.includes("cursor-pointer"), false);
+  assert.ok(templatesSource.includes('createButtonLabel="New exercise"'));
+  assert.ok(templatesSource.includes("ExerciseTemplateInlineHeader"));
+  assert.ok(templatesSource.includes("5_000"));
+  assert.ok(templatesSource.includes('toast({ title: "Exercise template added" })'));
+  assert.ok(templatesSource.includes("return created.id"));
+});
+
 test("exercise and section insertion callsites provide folder-aware selector props", () => {
   const sectionEditorSource = fs.readFileSync(sectionEditorCardPath, "utf8");
   const sessionEditorSource = fs.readFileSync(sessionEditorCardPath, "utf8");
