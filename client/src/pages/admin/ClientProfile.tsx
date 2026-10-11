@@ -2594,10 +2594,17 @@ export default function AdminClientProfile() {
                       />
                       <div className="min-w-0">
                         <div className="font-semibold text-slate-900">{exercise.name}</div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {exercise.sets || "—"} sets · {exercise.reps || "—"} reps ·{" "}
-                          {exercise.tempo || "—"} tempo
-                        </div>
+                        {[exercise.sets, exercise.reps, exercise.tempo].some(Boolean) ? (
+                          <div className="mt-1 text-xs text-slate-500">
+                            {[
+                              exercise.sets ? `${exercise.sets} sets` : null,
+                              exercise.reps ? `${exercise.reps} reps` : null,
+                              exercise.tempo ? `${exercise.tempo} tempo` : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
+                        ) : null}
                       </div>
                     </label>
                   );

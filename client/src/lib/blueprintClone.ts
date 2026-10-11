@@ -116,8 +116,8 @@ export function toBlueprintExercise(
   return {
     id: templateExercise.id || nextId(),
     name: templateExercise.name || "New Exercise",
-    sets: templateExercise.sets || "3",
-    reps: templateExercise.reps || "10",
+    sets: templateExercise.sets || "",
+    reps: templateExercise.reps || "",
     load: templateExercise.load === "Auto" ? "" : templateExercise.load || "",
     tempo: templateExercise.tempo || "3010",
     notes: templateExercise.notes || "",

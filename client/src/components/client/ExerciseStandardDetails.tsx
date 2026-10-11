@@ -33,25 +33,53 @@ export function ExerciseStandardDetails({
   const offset = sectionOffsetClassName ? `${sectionOffsetClassName} ` : "";
   const integratedLabelClass = "mb-1 text-[13px] md:text-sm font-semibold leading-5 text-[var(--color-brand-700)]";
   const integratedValueClass = "text-[15px] md:text-base font-medium leading-6 text-slate-900";
+  const prescriptionFields = [
+    { label: "Sets", value: exercise.sets },
+    { label: "Reps", value: exercise.reps },
+    { label: "Tempo", value: exercise.tempo },
+  ].filter((field) => field.value && field.value.trim().length > 0);
+  const prescriptionGridClass =
+    prescriptionFields.length === 1
+      ? "grid-cols-1"
+      : prescriptionFields.length === 2
+        ? "grid-cols-2"
+        : "grid-cols-3";
 
   return (
     <div className="space-y-3">
       {showName && <h3 className={nameClassName}>{exercise.name || "Exercise"}</h3>}
 
-      <div className={`${offset}grid grid-cols-3 gap-2`}>
-        <div className={integrated ? "py-1 text-center" : "bg-slate-50 rounded-xl p-2 text-center border border-slate-100"}>
-          <div className={integrated ? integratedLabelClass : "text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1"}>Sets</div>
-          <div className={integrated ? integratedValueClass : "text-sm font-bold text-slate-900"}>{exercise.sets || "—"}</div>
+      {prescriptionFields.length > 0 && (
+        <div className={`${offset}grid ${prescriptionGridClass} gap-2`}>
+          {prescriptionFields.map((field) => (
+            <div
+              key={field.label}
+              className={
+                integrated
+                  ? "py-1 text-center"
+                  : "rounded-xl border border-slate-100 bg-slate-50 p-2 text-center"
+              }
+            >
+              <div
+                className={
+                  integrated
+                    ? integratedLabelClass
+                    : "mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400"
+                }
+              >
+                {field.label}
+              </div>
+              <div
+                className={
+                  integrated ? integratedValueClass : "text-sm font-bold text-slate-900"
+                }
+              >
+                {field.value}
+              </div>
+            </div>
+          ))}
         </div>
-        <div className={integrated ? "py-1 text-center" : "bg-slate-50 rounded-xl p-2 text-center border border-slate-100"}>
-          <div className={integrated ? integratedLabelClass : "text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1"}>Reps</div>
-          <div className={integrated ? integratedValueClass : "text-sm font-bold text-slate-900"}>{exercise.reps || "—"}</div>
-        </div>
-        <div className={integrated ? "py-1 text-center" : "bg-slate-50 rounded-xl p-2 text-center border border-slate-100"}>
-          <div className={integrated ? integratedLabelClass : "text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1"}>Tempo</div>
-          <div className={integrated ? integratedValueClass : "text-sm font-bold text-slate-900"}>{exercise.tempo || "—"}</div>
-        </div>
-      </div>
+      )}
 
       {(exercise.goal || exercise.additionalInstructions) && (
         <div className={`${offset}grid grid-cols-1 md:grid-cols-2 gap-2 ${integrated ? "md:w-10/12 md:mx-auto md:justify-items-center" : ""}`}>

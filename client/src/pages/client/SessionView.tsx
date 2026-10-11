@@ -496,7 +496,9 @@ export default function ClientSessionView() {
               {section.exercises.map((ex: any, exerciseIdx: number) => {
                 const history = getExerciseHistory(ex.id);
                 const hasHistory = history.length > 0;
-                const totalSets = Number(ex.sets) || 3;
+                const parsedSetCount = Number.parseInt(String(ex.sets ?? ""), 10);
+                const totalSets =
+                  Number.isFinite(parsedSetCount) && parsedSetCount > 0 ? parsedSetCount : 0;
                 const currentSetLog = getSetLog(ex.id, totalSets);
                 const inlineVideo =
                   ex.demoUrl && isValidUrl(ex.demoUrl) ? normalizeVideoSource(ex.demoUrl) : null;
@@ -628,7 +630,7 @@ export default function ClientSessionView() {
                                 data-testid={`textarea-notes-${ex.id}`}
                               />
 
-                              {ex.enableStructuredLogging && (
+                              {ex.enableStructuredLogging && totalSets > 0 && (
                                 <div className="space-y-2 pt-2 border-t border-slate-200/70">
                                   <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
                                     <div className="col-span-2 text-center">Set</div>
@@ -662,7 +664,7 @@ export default function ClientSessionView() {
                                       <div className="col-span-5">
                                         <Input
                                           type="number"
-                                          placeholder={String(ex.reps).split("-")[0] || "0"}
+                                          placeholder={String(ex.reps || "").split("-")[0] || "--"}
                                           className="h-10 text-center bg-white border-slate-200 rounded-md"
                                           value={currentSetLog[i]?.reps || ""}
                                           onChange={(e) =>

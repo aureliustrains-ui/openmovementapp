@@ -151,8 +151,8 @@ function makeExercise(name = "New Exercise"): Exercise {
   return {
     id: generateId(),
     name,
-    sets: "3",
-    reps: "10",
+    sets: "",
+    reps: "",
     load: "",
     tempo: "3010",
     notes: "",
@@ -535,8 +535,8 @@ export default function AdminPhaseBuilder() {
             exercises: (sec.exercises || []).map((ex: any) => ({
               id: ex.id,
               name: ex.name || "",
-              sets: ex.sets || "3",
-              reps: ex.reps || "10",
+              sets: ex.sets || "",
+              reps: ex.reps || "",
               load: ex.load === "Auto" ? "" : ex.load || "",
               tempo: ex.tempo || "3010",
               notes: ex.notes || "",

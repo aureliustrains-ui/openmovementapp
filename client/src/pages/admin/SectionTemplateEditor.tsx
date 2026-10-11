@@ -164,8 +164,8 @@ export default function SectionTemplateEditor() {
                 {
                   id: crypto.randomUUID(),
                   name,
-                  sets: "3",
-                  reps: "10",
+                  sets: "",
+                  reps: "",
                   load: "",
                   tempo: "3010",
                   notes: "",
