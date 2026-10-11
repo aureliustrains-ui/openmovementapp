@@ -20,7 +20,7 @@ function makeDefaultExerciseTemplate() {
     sets: "",
     reps: "",
     load: "",
-    tempo: "3010",
+    tempo: "",
     notes: null,
     goal: null,
     additionalInstructions: null,

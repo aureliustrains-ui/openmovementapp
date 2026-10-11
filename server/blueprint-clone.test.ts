@@ -48,16 +48,18 @@ test("section template cloning keeps nested exercise demo videos", () => {
   assert.notEqual(section.exercises[0]?.id, "nested_ex_1");
 });
 
-test("exercise template cloning preserves blank sets and reps", () => {
+test("exercise template cloning preserves blank prescription fields", () => {
   const exercise = cloneExerciseFromTemplate({
     id: "template_ex_without_prescription",
     name: "Technique Drill",
     sets: null as any,
     reps: null as any,
+    tempo: null as any,
   });
 
   assert.equal(exercise.sets, "");
   assert.equal(exercise.reps, "");
+  assert.equal(exercise.tempo, "");
 });
 
 test("section template cloning hydrates missing nested demo videos from exercise library", () => {

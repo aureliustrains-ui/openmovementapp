@@ -167,7 +167,7 @@ export default function SectionTemplateEditor() {
                   sets: "",
                   reps: "",
                   load: "",
-                  tempo: "3010",
+                  tempo: "",
                   notes: "",
                   goal: "",
                   additionalInstructions: "",

@@ -119,7 +119,7 @@ export function toBlueprintExercise(
     sets: templateExercise.sets || "",
     reps: templateExercise.reps || "",
     load: templateExercise.load === "Auto" ? "" : templateExercise.load || "",
-    tempo: templateExercise.tempo || "3010",
+    tempo: templateExercise.tempo || "",
     notes: templateExercise.notes || "",
     goal: templateExercise.goal || "",
     additionalInstructions: templateExercise.additionalInstructions || "",

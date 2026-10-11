@@ -451,7 +451,7 @@ export function SessionEditorCard<TSession extends SessionLike>({
                               sets: "",
                               reps: "",
                               load: "",
-                              tempo: "3010",
+                              tempo: "",
                               notes: "",
                               goal: "",
                               additionalInstructions: "",
