@@ -314,7 +314,6 @@ function ExerciseTemplateInlineHeader({ item, isExpanded }: { item: any; isExpan
       await updateExerciseTemplate.mutateAsync({
         id: item.id,
         name: nextName,
-        targetMuscle: latest.targetMuscle.trim() || null,
       });
     } catch {
       dirtyRef.current = true;
@@ -342,9 +341,7 @@ function ExerciseTemplateInlineHeader({ item, isExpanded }: { item: any; isExpan
         <h3 className="truncate text-sm font-semibold text-slate-900">
           {item.name || "Untitled exercise"}
         </h3>
-        <div className="mt-0.5 truncate text-xs text-slate-500">
-          {item.targetMuscle || "No tags"}
-        </div>
+        <div className="mt-0.5 truncate text-xs text-slate-500">{exerciseTagSummary(item)}</div>
       </>
     );
   }
@@ -359,15 +356,7 @@ function ExerciseTemplateInlineHeader({ item, isExpanded }: { item: any; isExpan
         onPointerDown={(event) => event.stopPropagation()}
         className="h-7 border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
       />
-      <Input
-        value={draft.targetMuscle}
-        onChange={(event) => updateDraft("targetMuscle", event.target.value)}
-        onBlur={() => void saveDraft()}
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        placeholder="No tags"
-        className="h-6 border-transparent bg-transparent px-0 py-0 text-xs text-slate-500 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
-      />
+      <div className="truncate text-xs text-slate-500">{exerciseTagSummary(item)}</div>
     </div>
   );
 }
