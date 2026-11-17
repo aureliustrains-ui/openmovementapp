@@ -38,6 +38,17 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatReps, formatSets } from "@/lib/prescription";
+import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
+import {
+  ExerciseFacetFilterBar,
+  isFacetFilterActive,
+} from "@/components/admin/ExerciseFacetFilterBar";
+import {
+  facetLabel,
+  matchesFacetFilter,
+  readExerciseFacets,
+  type ExerciseFacetFilter,
+} from "@shared/exerciseFacets";
 
 function DemoVideoPreview({
   url,
@@ -196,6 +207,22 @@ function getNextSortOrder(
     next = Math.max(next, item.sortOrder ?? 0);
   }
   return next + 1;
+}
+
+function exerciseTagSummary(exercise: any): string {
+  const facets = readExerciseFacets(exercise?.facets);
+  const parts = [...facets.pattern, ...facets.material].map(facetLabel);
+  if (exercise?.needsVideo) parts.push("needs video");
+  return parts.length > 0 ? parts.join(" · ") : "No tags yet";
+}
+
+function exerciseTagSearchText(exercise: any): string {
+  const facets = readExerciseFacets(exercise?.facets);
+  const keywords = Array.isArray(exercise?.keywords) ? exercise.keywords.join(" ") : "";
+  return [...facets.pattern, ...facets.material, ...facets.loadType, ...facets.position]
+    .map(facetLabel)
+    .concat(keywords)
+    .join(" ");
 }
 
 function exercisePrescription(exercise: any) {
@@ -410,12 +437,14 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
         demoUrl: latest.demoUrl.trim() || null,
         requiresMovementCheck: latest.requiresMovementCheck,
         enableStructuredLogging: latest.enableStructuredLogging,
+        // A demo video was added: it no longer needs filming.
+        ...(latest.demoUrl.trim() && item.needsVideo ? { needsVideo: false } : {}),
       });
     } catch {
       dirtyRef.current = true;
       toast({ title: "Could not save exercise template", variant: "destructive" });
     }
-  }, [item.id, toast, updateExerciseTemplate]);
+  }, [item.id, item.needsVideo, toast, updateExerciseTemplate]);
 
   useEffect(() => {
     if (!dirtyRef.current) return;
@@ -480,24 +509,24 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
           <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             Goal
           </Label>
-          <Input
+          <Textarea
             value={draft.goal}
             onChange={(event) => updateDraft("goal", event.target.value)}
             onClick={stopTemplateToggle}
             onPointerDown={stopTemplateToggle}
-            className="h-8 bg-white"
+            className="min-h-[56px] resize-none bg-white"
           />
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Notes
+            Coach notes · only you
           </Label>
-          <Input
+          <Textarea
             value={draft.notes}
             onChange={(event) => updateDraft("notes", event.target.value)}
             onClick={stopTemplateToggle}
             onPointerDown={stopTemplateToggle}
-            className="h-8 bg-white"
+            className="min-h-[56px] resize-none bg-white"
           />
         </div>
       </div>
@@ -540,6 +569,8 @@ function ExerciseTemplateInlineDetails({ item }: { item: any }) {
           <DemoVideoPreview url={draft.demoUrl.trim()} size="inline" />
         </div>
       ) : null}
+
+      <ExerciseLibraryTags item={item} />
     </div>
   );
 }
@@ -552,6 +583,7 @@ export default function AdminTemplatesPage() {
   const [selectedFolderByTab, setSelectedFolderByTab] = useState<FolderStateByTab>(
     initialState.folders,
   );
+  const [exerciseFacetFilter, setExerciseFacetFilter] = useState<ExerciseFacetFilter>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1184,8 +1216,13 @@ export default function AdminTemplatesPage() {
             void handleMoveTemplate("exercise", templateId, folderId)
           }
           onReorderTemplates={(items) => void handleReorderTemplates("exercise", items)}
-          getTemplateSummary={(item) => `${(item as any).targetMuscle || "No tags"}`}
-          getTemplateSearchText={(item) => `${(item as any).targetMuscle || ""}`}
+          getTemplateSummary={(item) => exerciseTagSummary(item)}
+          getTemplateSearchText={(item) => exerciseTagSearchText(item)}
+          renderFilters={() => (
+            <ExerciseFacetFilterBar value={exerciseFacetFilter} onChange={setExerciseFacetFilter} />
+          )}
+          filtersActive={isFacetFilterActive(exerciseFacetFilter)}
+          filterItem={(item) => matchesFacetFilter(item as any, exerciseFacetFilter)}
           renderTemplateHeader={(item, isExpanded) => (
             <ExerciseTemplateInlineHeader item={item} isExpanded={isExpanded} />
           )}

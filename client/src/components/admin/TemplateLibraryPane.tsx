@@ -70,6 +70,11 @@ type TemplateLibraryPaneProps<TItem extends TemplateListItem> = {
   renderTemplateTitle?: (item: TItem) => ReactNode;
   getTemplateOpenHref: (item: TItem) => string;
   layout?: "cards" | "rows";
+  /** Optional filter bar shown under the search field (e.g. exercise facets). */
+  renderFilters?: () => ReactNode;
+  /** When filters are active, templates are searched across all folders and narrowed by this. */
+  filtersActive?: boolean;
+  filterItem?: (item: TItem) => boolean;
 };
 
 function InlineFolderName({
@@ -205,6 +210,9 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   renderTemplateTitle,
   getTemplateOpenHref,
   layout = "cards",
+  renderFilters,
+  filtersActive = false,
+  filterItem,
 }: TemplateLibraryPaneProps<TItem>) {
   const rootNodeLabel = rootLabel ?? allLabel;
   const [search, setSearch] = useState("");
@@ -309,8 +317,11 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
 
   const normalizedSearch = search.trim().toLowerCase();
   const searching = normalizedSearch.length > 0;
-  const folderSearchBase = searching ? sortedFolders : baseChildFolders;
-  const templateSearchBase = searching ? sortedItems : baseTemplates;
+  const folderSearchBase = searching ? sortedFolders : filtersActive ? [] : baseChildFolders;
+  const templateSearchBase = useMemo(() => {
+    const base = searching || filtersActive ? sortedItems : baseTemplates;
+    return filtersActive && filterItem ? base.filter((item) => filterItem(item)) : base;
+  }, [baseTemplates, filterItem, filtersActive, searching, sortedItems]);
 
   const visibleChildFolders = useMemo(() => {
     if (!normalizedSearch) return folderSearchBase;
@@ -339,7 +350,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
       .map(({ item }) => item);
   }, [getTemplateSearchText, getTemplateSummary, normalizedSearch, templateSearchBase]);
 
-  const canReorderTemplates = normalizedSearch.length === 0;
+  const canReorderTemplates = normalizedSearch.length === 0 && !filtersActive;
 
   const createTemplateAtCurrentLocation = async () => {
     const createdId = await onCreateTemplate(selectedFolderId);
@@ -584,6 +595,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                   />
                 </div>
               </div>
+              {renderFilters ? renderFilters() : null}
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Button type="button" variant="outline" onClick={createFolderAtCurrentLevel}>

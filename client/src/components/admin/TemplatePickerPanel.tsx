@@ -4,6 +4,16 @@ import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { templateFoldersQuery, type TemplateFolder } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  ExerciseFacetFilterBar,
+  isFacetFilterActive,
+} from "@/components/admin/ExerciseFacetFilterBar";
+import {
+  facetLabel,
+  matchesFacetFilter,
+  readExerciseFacets,
+  type ExerciseFacetFilter,
+} from "@shared/exerciseFacets";
 
 type TemplatePickerPanelProps<T> = {
   templates: T[];
@@ -79,6 +89,10 @@ export function TemplatePickerPanel<T>({
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  // Exercise pickers get the same facet filters as the template library.
+  const isExercisePicker = folderType === "exercise";
+  const [facetFilter, setFacetFilter] = useState<ExerciseFacetFilter>({});
+  const facetFilterActive = isExercisePicker && isFacetFilterActive(facetFilter);
 
   const sortedFolders = useMemo(() => sortFolders(folders), [folders]);
 
@@ -140,14 +154,22 @@ export function TemplatePickerPanel<T>({
     return totals;
   }, [childrenByParent, sortedFolders, templateCountsByFolder]);
 
+  const facetFilteredTemplates = useMemo(
+    () =>
+      facetFilterActive
+        ? templates.filter((item) => matchesFacetFilter(item as any, facetFilter))
+        : templates,
+    [facetFilter, facetFilterActive, templates],
+  );
+
   const baseItems = useMemo(
     () =>
-      templates.filter((item) => {
+      facetFilteredTemplates.filter((item) => {
         const folderId = getTemplateFolderId ? getTemplateFolderId(item) : null;
-        if (!selectedFolderId) return true;
+        if (!selectedFolderId || facetFilterActive) return true;
         return folderId === selectedFolderId;
       }),
-    [getTemplateFolderId, selectedFolderId, templates],
+    [facetFilterActive, facetFilteredTemplates, getTemplateFolderId, selectedFolderId],
   );
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -164,7 +186,7 @@ export function TemplatePickerPanel<T>({
       if (meta.includes(normalizedSearch)) return 4;
       return 99;
     };
-    return templates
+    return facetFilteredTemplates
       .map((item) => ({ item, score: scoreItem(item) }))
       .filter(({ score }) => score < 99)
       .sort(
@@ -178,7 +200,7 @@ export function TemplatePickerPanel<T>({
     getTemplateName,
     getTemplateSearchText,
     normalizedSearch,
-    templates,
+    facetFilteredTemplates,
   ]);
 
   const selectedFolderPath = useMemo(() => {
@@ -187,7 +209,7 @@ export function TemplatePickerPanel<T>({
   }, [foldersById, rootNodeLabel, selectedFolderId]);
   const currentLocationLabel =
     selectedFolderPath[selectedFolderPath.length - 1]?.name || rootNodeLabel;
-  const searchScopeLabel = normalizedSearch
+  const searchScopeLabel = normalizedSearch || facetFilterActive
     ? "Searching all folders"
     : `Current location: ${currentLocationLabel}`;
 
@@ -313,6 +335,11 @@ export function TemplatePickerPanel<T>({
               autoFocus
             />
           </div>
+          {isExercisePicker ? (
+            <div className="mt-2">
+              <ExerciseFacetFilterBar value={facetFilter} onChange={setFacetFilter} />
+            </div>
+          ) : null}
           <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
             <span>{searchScopeLabel}</span>
             <span>
@@ -362,7 +389,17 @@ export function TemplatePickerPanel<T>({
                   <div className="truncate font-medium text-slate-900">{getTemplateName(item)}</div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
                     {getTemplateMeta ? <span>{getTemplateMeta(item)}</span> : null}
-                    {normalizedSearch ? (
+                    {isExercisePicker ? (
+                      <span className="text-slate-400">
+                        {(() => {
+                          const facets = readExerciseFacets((item as any).facets);
+                          const tags = [...facets.pattern, ...facets.material].map(facetLabel);
+                          if (!(item as any).demoUrl) tags.push("no video");
+                          return tags.join(" · ");
+                        })()}
+                      </span>
+                    ) : null}
+                    {normalizedSearch || facetFilterActive ? (
                       <span className="truncate text-slate-400">{getFolderLabelForItem(item)}</span>
                     ) : null}
                   </div>

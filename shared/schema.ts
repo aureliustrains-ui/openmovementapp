@@ -103,6 +103,10 @@ export const exerciseTemplates = pgTable("exercise_templates", {
   additionalInstructions: text("additional_instructions"),
   enableStructuredLogging: boolean("enable_structured_logging").notNull().default(false),
   requiresMovementCheck: boolean("requires_movement_check").notNull().default(false),
+  // Coach-only library tags (see shared/exerciseFacets.ts). Never copied into client plans.
+  facets: jsonb("facets").notNull().default({}),
+  keywords: jsonb("keywords").notNull().default([]),
+  needsVideo: boolean("needs_video").notNull().default(false),
 });
 
 export const sectionTemplates = pgTable("section_templates", {

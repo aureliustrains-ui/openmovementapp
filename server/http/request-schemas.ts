@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { exerciseFacetsSchema, exerciseKeywordsSchema } from "@shared/exerciseFacets";
 
 export const createMessageSchema = z
   .object({
@@ -164,6 +165,9 @@ export const createExerciseTemplateSchema = z
     additionalInstructions: nullableText(4000),
     enableStructuredLogging: z.boolean().optional(),
     requiresMovementCheck: z.boolean().optional(),
+    facets: exerciseFacetsSchema.optional(),
+    keywords: exerciseKeywordsSchema.optional(),
+    needsVideo: z.boolean().optional(),
   })
   .strict();
 
@@ -183,6 +187,9 @@ export const updateExerciseTemplateSchema = z
     additionalInstructions: nullableText(4000),
     enableStructuredLogging: z.boolean().optional(),
     requiresMovementCheck: z.boolean().optional(),
+    facets: exerciseFacetsSchema.optional(),
+    keywords: exerciseKeywordsSchema.optional(),
+    needsVideo: z.boolean().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
