@@ -100,11 +100,6 @@ export function ExerciseStandardDetails({
         </div>
       )}
 
-      {exercise.notes && (
-        <div className={`${offset}${integrated ? "py-1 text-sm text-slate-600 italic leading-relaxed" : "p-3 bg-slate-50 rounded-xl text-sm text-slate-600 border border-slate-100 italic leading-relaxed"}`}>
-          {exercise.notes}
-        </div>
-      )}
 
       {showDemoLink && exercise.demoUrl && (
         <div className={`${offset}`}>

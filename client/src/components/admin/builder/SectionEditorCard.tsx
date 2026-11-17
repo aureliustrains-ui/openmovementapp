@@ -24,6 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { type DragEvent, useState } from "react";
+import { formatReps, formatSets } from "@/lib/prescription";
 
 type SectionEditorCardProps = {
   section: BlueprintSection;
@@ -62,8 +63,8 @@ function sectionLetterForIndex(index: number): string {
 
 function formatPrescription(exercise: BlueprintExercise): string {
   return [
-    exercise.sets ? `${exercise.sets} sets` : null,
-    exercise.reps ? `${exercise.reps} reps` : null,
+    formatSets(exercise.sets),
+    formatReps(exercise.reps),
     exercise.load && exercise.load !== "Auto" ? exercise.load : null,
     exercise.tempo || null,
   ]

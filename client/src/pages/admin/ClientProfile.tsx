@@ -91,6 +91,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatReps, formatSets } from "@/lib/prescription";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const CHECKIN_COLORS = {
@@ -2597,8 +2598,8 @@ export default function AdminClientProfile() {
                         {[exercise.sets, exercise.reps, exercise.tempo].some(Boolean) ? (
                           <div className="mt-1 text-xs text-slate-500">
                             {[
-                              exercise.sets ? `${exercise.sets} sets` : null,
-                              exercise.reps ? `${exercise.reps} reps` : null,
+                              formatSets(exercise.sets),
+                              formatReps(exercise.reps),
                               exercise.tempo ? `${exercise.tempo} tempo` : null,
                             ]
                               .filter(Boolean)

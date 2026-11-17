@@ -69,6 +69,11 @@ export default function ClientHome() {
       )
     : null;
   const currentTrainingWeek = weekLifecycle?.currentWeek || 1;
+  const currentWeekStatus = weekLifecycle?.weeks.find((week) => week.week === currentTrainingWeek);
+  // All sessions of the week are done, only the weekly recap is missing.
+  const weekReadyToClose = currentWeekStatus?.state === "ready_for_checkin";
+  const phaseDurationWeeks = progressPhase?.durationWeeks || 1;
+  const isLastWeek = currentTrainingWeek >= phaseDurationWeeks;
 
   const weekSchedulePreview = getWeekSchedulePreview(
     currentTrainingWeek,
@@ -112,8 +117,11 @@ export default function ClientHome() {
   );
   const movementActionCount =
     (notificationSummary as { movementActionCount?: number } | undefined)?.movementActionCount || 0;
+  // When the week is ready to close, the weekly recap is the main card (below) instead of a
+  // secondary action card.
+  const showWeeklyActionCard = weeklyCheckinDue && !weekReadyToClose;
   const dueCount =
-    Number(progressNeedsAction) + Number(weeklyCheckinDue) + Number(movementActionCount > 0);
+    Number(progressNeedsAction) + Number(showWeeklyActionCard) + Number(movementActionCount > 0);
 
   if (loadingPhases) {
     return (
@@ -153,6 +161,34 @@ export default function ClientHome() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-4">
+        {weekReadyToClose && currentWeekStatus ? (
+          <Card
+            className="border-[var(--color-brand-500)] shadow-sm rounded-xl bg-[var(--color-brand-100)]"
+            data-testid="card-home-week-ready-to-close"
+          >
+            <CardContent className="p-5 md:p-6 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-[var(--color-brand-700)]">
+                  Week {currentTrainingWeek} of {phaseDurationWeeks} done
+                </p>
+                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
+                  {currentWeekStatus.completedCount}/{currentWeekStatus.scheduledCount} sessions completed
+                </h2>
+                <p className="mt-1 text-sm text-slate-700">
+                  {isLastWeek
+                    ? "Close the week with a short recap to finish this phase."
+                    : `Close the week with a short recap to unlock week ${currentTrainingWeek + 1}.`}
+                </p>
+              </div>
+              <Link href="/app/client/my-phase?weeklyCheckin=1">
+                <Button className="w-full sm:w-auto" data-testid="button-home-weekly-recap">
+                  Complete weekly recap
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
         <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
           <CardContent className="p-5 md:p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -185,6 +221,7 @@ export default function ClientHome() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {dueCount > 0 ? (
@@ -217,7 +254,7 @@ export default function ClientHome() {
               testId="card-home-movement-check"
             />
           ) : null}
-          {weeklyCheckinDue ? (
+          {showWeeklyActionCard ? (
             <ActionRequiredCard
               title="Weekly recap"
               description="Your current training week is ready to close."

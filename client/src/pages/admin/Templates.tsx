@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { formatReps, formatSets } from "@/lib/prescription";
 
 function DemoVideoPreview({
   url,
@@ -199,8 +200,8 @@ function getNextSortOrder(
 
 function exercisePrescription(exercise: any) {
   return [
-    exercise?.sets ? `${exercise.sets} sets` : null,
-    exercise?.reps ? `${exercise.reps} reps` : null,
+    formatSets(exercise?.sets),
+    formatReps(exercise?.reps),
     exercise?.tempo || null,
   ]
     .filter(Boolean)

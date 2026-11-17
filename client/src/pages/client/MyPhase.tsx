@@ -101,9 +101,9 @@ export default function ClientMyPhase() {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [weeklyCheckinOpen, setWeeklyCheckinOpen] = useState(false);
   const [weeklyCheckinStep, setWeeklyCheckinStep] = useState<1 | 2>(1);
-  const [weeklySleep, setWeeklySleep] = useState(3);
-  const [weeklyEnergy, setWeeklyEnergy] = useState(3);
-  const [weeklyInjuryAffected, setWeeklyInjuryAffected] = useState(false);
+  const [weeklySleep, setWeeklySleep] = useState<number | null>(null);
+  const [weeklyEnergy, setWeeklyEnergy] = useState<number | null>(null);
+  const [weeklyInjuryAffected, setWeeklyInjuryAffected] = useState<boolean | null>(null);
   const [weeklyInjuryImpact, setWeeklyInjuryImpact] = useState<number | null>(null);
   const [weeklyNote, setWeeklyNote] = useState("");
   const [submittingWeeklyCheckin, setSubmittingWeeklyCheckin] = useState(false);
@@ -356,6 +356,7 @@ export default function ClientMyPhase() {
       return;
     }
     if (submittingWeeklyCheckin) return;
+    if (weeklySleep === null || weeklyEnergy === null || weeklyInjuryAffected === null) return;
     setSubmittingWeeklyCheckin(true);
     try {
       await createWeeklyCheckin.mutateAsync({
@@ -465,6 +466,16 @@ export default function ClientMyPhase() {
     Boolean(weeklyCheckinStatusForPhase?.due) ||
     currentWeekStatus?.state === "ready_for_checkin";
 
+  const openWeeklyCheckin = () => {
+    setWeeklyCheckinStep(1);
+    setWeeklySleep(null);
+    setWeeklyEnergy(null);
+    setWeeklyInjuryAffected(null);
+    setWeeklyInjuryImpact(null);
+    setWeeklyNote("");
+    setWeeklyCheckinOpen(true);
+  };
+
   useEffect(() => {
     if (weeklyCheckinQueryHandledRef.current) return;
     if (typeof window === "undefined") return;
@@ -474,9 +485,9 @@ export default function ClientMyPhase() {
     weeklyCheckinQueryHandledRef.current = true;
     if (!isMovementCheckPhase && !isCheckinReadOnly && weeklyCheckinDue) {
       setWeeklyCheckinStep(1);
-      setWeeklySleep(3);
-      setWeeklyEnergy(3);
-      setWeeklyInjuryAffected(false);
+      setWeeklySleep(null);
+      setWeeklyEnergy(null);
+      setWeeklyInjuryAffected(null);
       setWeeklyInjuryImpact(null);
       setWeeklyNote("");
       setWeeklyCheckinOpen(true);
@@ -829,6 +840,18 @@ export default function ClientMyPhase() {
                           : "Future"}
                     </p>
                   ) : null}
+                  {selectedWeekStatus.state === "ready_for_checkin" &&
+                  !isMovementCheckPhase &&
+                  !isCheckinReadOnly ? (
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      onClick={openWeeklyCheckin}
+                      data-testid="button-my-phase-weekly-recap"
+                    >
+                      Complete weekly recap
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">No scheduled sessions</p>
@@ -976,7 +999,7 @@ export default function ClientMyPhase() {
                     type="button"
                     onClick={() => setWeeklyInjuryAffected(false)}
                     className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
-                      !weeklyInjuryAffected
+                      weeklyInjuryAffected === false
                         ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
@@ -987,7 +1010,7 @@ export default function ClientMyPhase() {
                     type="button"
                     onClick={() => setWeeklyInjuryAffected(true)}
                     className={`rounded-xl border px-4 py-3 text-sm font-semibold ${
-                      weeklyInjuryAffected
+                      weeklyInjuryAffected === true
                         ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-600)]"
                         : "border-slate-200 bg-white text-slate-700"
                     }`}
@@ -1049,7 +1072,10 @@ export default function ClientMyPhase() {
               </Button>
             )}
             {weeklyCheckinStep === 1 ? (
-              <Button onClick={() => setWeeklyCheckinStep(2)} disabled={isCheckinReadOnly}>
+              <Button
+                onClick={() => setWeeklyCheckinStep(2)}
+                disabled={isCheckinReadOnly || weeklySleep === null || weeklyEnergy === null}
+              >
                 Continue
               </Button>
             ) : (
@@ -1058,6 +1084,7 @@ export default function ClientMyPhase() {
                 disabled={
                   submittingWeeklyCheckin ||
                   isCheckinReadOnly ||
+                  weeklyInjuryAffected === null ||
                   (weeklyInjuryAffected && weeklyInjuryImpact === null)
                 }
               >

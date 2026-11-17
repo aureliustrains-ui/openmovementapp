@@ -55,6 +55,7 @@ import {
   moveTemplateToFolderSchema,
   reorderTemplatesSchema,
 } from "./http/request-schemas";
+import { stripCoachOnlyFieldsForClient } from "./client-visibility";
 import {
   assertCanReadClientCheckins,
   assertSessionOwnedByClient,
@@ -1456,7 +1457,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allowedPhaseIds = new Set(
         (await storage.getPhasesByClient(authUser.id)).map((p) => p.id),
       );
-      result = result.filter((session) => allowedPhaseIds.has(session.phaseId));
+      result = result
+        .filter((session) => allowedPhaseIds.has(session.phaseId))
+        .map((session) => stripCoachOnlyFieldsForClient(session));
     }
     res.json(result);
   });
@@ -1471,6 +1474,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!phase || phase.clientId !== authUser.id) {
         return res.status(403).json({ message: "Forbidden" });
       }
+      return res.json(stripCoachOnlyFieldsForClient(session));
     }
     res.json(session);
   });

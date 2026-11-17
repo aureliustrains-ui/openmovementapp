@@ -40,6 +40,7 @@ import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDet
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { normalizeVideoSource } from "@/lib/video";
 import { requiresMovementCheckBeforeSession } from "@/lib/sessionEntry";
+import { formatReps, formatSets } from "@/lib/prescription";
 
 type SetLog = { weight: string; reps: string };
 
@@ -51,8 +52,8 @@ function sectionLetterForIndex(index: number): string {
 
 function formatExercisePrescription(exercise: any): string {
   return [
-    exercise.sets ? `${exercise.sets} sets` : null,
-    exercise.reps ? `${exercise.reps} reps` : null,
+    formatSets(exercise.sets),
+    formatReps(exercise.reps),
     exercise.tempo ? `${exercise.tempo}` : null,
   ]
     .filter(Boolean)
@@ -95,9 +96,9 @@ export default function ClientSessionView() {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [afterSessionOpen, setAfterSessionOpen] = useState(false);
-  const [afterSessionRpe, setAfterSessionRpe] = useState(6);
-  const [afterSessionSleep, setAfterSessionSleep] = useState(6);
-  const [afterSessionFeltOff, setAfterSessionFeltOff] = useState(false);
+  const [afterSessionRpe, setAfterSessionRpe] = useState<number | null>(null);
+  const [afterSessionSleep, setAfterSessionSleep] = useState<number | null>(null);
+  const [afterSessionFeltOff, setAfterSessionFeltOff] = useState<boolean | null>(null);
   const [afterSessionWhatFeltOff, setAfterSessionWhatFeltOff] = useState("");
   const [afterSessionOptionalNote, setAfterSessionOptionalNote] = useState("");
   const [savingAfterSession, setSavingAfterSession] = useState(false);
@@ -300,9 +301,9 @@ export default function ClientSessionView() {
         title: "Session Complete",
         description: "Your workout has been saved.",
       });
-      setAfterSessionRpe(6);
-      setAfterSessionSleep(6);
-      setAfterSessionFeltOff(false);
+      setAfterSessionRpe(null);
+      setAfterSessionSleep(null);
+      setAfterSessionFeltOff(null);
       setAfterSessionWhatFeltOff("");
       setAfterSessionOptionalNote("");
       setAfterSessionOpen(true);
@@ -328,6 +329,9 @@ export default function ClientSessionView() {
       return;
     }
     if (!session || savingAfterSession) return;
+    if (afterSessionRpe === null || afterSessionSleep === null || afterSessionFeltOff === null) {
+      return;
+    }
     const payload = {
       sessionId: session.id,
       sessionRpe: afterSessionRpe,
@@ -634,7 +638,7 @@ export default function ClientSessionView() {
                                 <div className="space-y-2 pt-2 border-t border-slate-200/70">
                                   <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider px-2">
                                     <div className="col-span-2 text-center">Set</div>
-                                    <div className="col-span-5 text-center">Weight (lbs)</div>
+                                    <div className="col-span-5 text-center">Weight (kg)</div>
                                     <div className="col-span-5 text-center">Reps</div>
                                   </div>
 
@@ -707,7 +711,7 @@ export default function ClientSessionView() {
                                                 key={si}
                                                 className="text-[11px] border border-slate-200 rounded-sm px-2 py-0.5 text-slate-600 font-medium"
                                               >
-                                                Set {si + 1}: {s.weight || "--"}lbs ×{" "}
+                                                Set {si + 1}: {s.weight || "--"} kg ×{" "}
                                                 {s.reps || "--"}
                                               </span>
                                             ))}
@@ -828,7 +832,7 @@ export default function ClientSessionView() {
                   type="button"
                   onClick={() => setAfterSessionFeltOff(false)}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-                    !afterSessionFeltOff
+                    afterSessionFeltOff === false
                       ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
@@ -839,7 +843,7 @@ export default function ClientSessionView() {
                   type="button"
                   onClick={() => setAfterSessionFeltOff(true)}
                   className={`rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
-                    afterSessionFeltOff
+                    afterSessionFeltOff === true
                       ? "border-[var(--color-brand-500)] bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
@@ -875,7 +879,13 @@ export default function ClientSessionView() {
           <DialogFooter>
             <Button
               onClick={handleSubmitAfterSessionCheckin}
-              disabled={savingAfterSession || isCheckinReadOnly}
+              disabled={
+                savingAfterSession ||
+                isCheckinReadOnly ||
+                afterSessionRpe === null ||
+                afterSessionSleep === null ||
+                afterSessionFeltOff === null
+              }
             >
               {savingAfterSession ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               Save recap
