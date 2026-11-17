@@ -42,8 +42,7 @@ test("session view renders compact exercise rows with collapsible details", () =
   assert.ok(source.includes("button-personal-notes-logs-"));
   assert.ok(source.includes("<ExerciseStandardDetails"));
   assert.ok(source.includes("integrated"));
-  assert.ok(source.includes("Notes for your coach"));
-  assert.ok(source.includes("Your coach reads these."));
+  assert.ok(source.includes("Notes or questions for your coach"));
   assert.ok(source.includes("Reps, weight, effort, or quick notes"));
   assert.equal(
     source.includes("button-details-"),

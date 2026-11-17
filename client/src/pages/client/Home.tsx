@@ -253,14 +253,9 @@ export default function ClientHome() {
           <CardContent className="p-5 md:p-6 space-y-4">
             {progressPhase ? (
               <div className="space-y-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="text-xs uppercase tracking-wider text-slate-500">
-                    Week {currentTrainingWeek} of {phaseDurationWeeks}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {weekDoneCount}/{weekEntries.length} sessions
-                  </p>
-                </div>
+                <p className="text-xs uppercase tracking-wider text-slate-500">
+                  Week {currentTrainingWeek} of {phaseDurationWeeks}
+                </p>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                   <div
                     className="h-full rounded-full bg-[var(--color-brand-600)] transition-all"
@@ -279,7 +274,7 @@ export default function ClientHome() {
                       <Link
                         href={destinationFor(item).href}
                         className={`flex items-center gap-3 py-2.5 ${
-                          isNext ? "font-semibold text-slate-900" : "text-slate-600"
+                          isNext ? "text-slate-900" : "text-slate-600"
                         }`}
                       >
                         {item.isCompleted ? (

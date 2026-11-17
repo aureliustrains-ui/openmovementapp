@@ -23,7 +23,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Circle,
   Video,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -104,32 +103,6 @@ export default function ClientSessionView() {
   const [afterSessionOptionalNote, setAfterSessionOptionalNote] = useState("");
   const [savingAfterSession, setSavingAfterSession] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState<Record<string, boolean>>({});
-  // Exercises ticked off during this session. Kept in the browser only (per session instance),
-  // so a client can leave and come back mid-session.
-  const doneStorageKey = sessionId ? `om-done-w${week}_${day}_${slot}_${sessionId}` : null;
-  const [doneExercises, setDoneExercises] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    if (!doneStorageKey) return;
-    try {
-      const raw = window.localStorage.getItem(doneStorageKey);
-      setDoneExercises(raw ? (JSON.parse(raw) as Record<string, boolean>) : {});
-    } catch {
-      setDoneExercises({});
-    }
-  }, [doneStorageKey]);
-  const toggleExerciseDone = (exerciseId: string) => {
-    setDoneExercises((prev) => {
-      const next = { ...prev, [exerciseId]: !prev[exerciseId] };
-      if (doneStorageKey) {
-        try {
-          window.localStorage.setItem(doneStorageKey, JSON.stringify(next));
-        } catch {
-          // Storage can be unavailable (private mode); ticks then only last for this visit.
-        }
-      }
-      return next;
-    });
-  };
   const isClientSession = sessionUser?.role === "Client";
   const isClientContextMatch = Boolean(
     sessionUser?.id && viewedUser?.id && sessionUser.id === viewedUser.id,
@@ -187,12 +160,6 @@ export default function ClientSessionView() {
   const sessionVideoUrl =
     typeof session.sessionVideoUrl === "string" ? session.sessionVideoUrl.trim() : "";
   const sessionSections = useMemo(() => (session.sections as any[]) || [], [session.sections]);
-  const allExerciseIds: string[] = sessionSections.flatMap((section: any) =>
-    ((section?.exercises as any[]) || []).map((exercise: any) => String(exercise.id)),
-  );
-  const doneCount = isSessionComplete
-    ? allExerciseIds.length
-    : allExerciseIds.filter((id) => doneExercises[id]).length;
 
   useEffect(() => {
     if (sessionSections.length === 0) return;
@@ -483,27 +450,6 @@ export default function ClientSessionView() {
       </div>
       <div className="mt-2 border-b border-slate-200" />
 
-      {allExerciseIds.length > 0 ? (
-        <div className="pt-3" data-testid="session-progress">
-          <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>
-              {doneCount} of {allExerciseIds.length} exercises done
-            </span>
-            {!isSessionComplete && doneCount === allExerciseIds.length ? (
-              <span className="font-semibold text-[var(--color-brand-700)]">
-                All done, finish below
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-[var(--color-brand-600)] transition-all"
-              style={{ width: `${Math.round((doneCount / allExerciseIds.length) * 100)}%` }}
-            />
-          </div>
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-1 gap-5 pt-4 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
           <div
@@ -554,7 +500,6 @@ export default function ClientSessionView() {
 
               {section.exercises.map((ex: any, exerciseIdx: number) => {
                 const history = getExerciseHistory(ex.id);
-                const hasHistory = history.length > 0;
                 const parsedSetCount = Number.parseInt(String(ex.sets ?? ""), 10);
                 const totalSets =
                   Number.isFinite(parsedSetCount) && parsedSetCount > 0 ? parsedSetCount : 0;
@@ -565,9 +510,12 @@ export default function ClientSessionView() {
                 const exerciseDisplayName = `${sectionLetterForIndex(sectionIdx)}${exerciseIdx + 1} ${ex.name || "Exercise"}`;
                 const exercisePrescription = formatExercisePrescription(ex);
                 const isExerciseOpen = !!expandedExerciseIds[ex.id];
-                const isExerciseDone = isSessionComplete || !!doneExercises[String(ex.id)];
-                const lastEntry = history[0];
-                const olderHistory = history.slice(1);
+                // Only entries where something was actually logged are worth showing.
+                const loggedHistory = history.filter(
+                  (h) => Boolean(h.notes) || (Array.isArray(h.sets) && h.sets.length > 0),
+                );
+                const lastEntry = loggedHistory[0];
+                const olderHistory = loggedHistory.slice(1);
                 const isShowingAllHistory = !!showAllHistory[ex.id];
 
                 return (
@@ -582,26 +530,11 @@ export default function ClientSessionView() {
                         setExpandedExerciseIds((prev) => ({ ...prev, [ex.id]: open }))
                       }
                     >
-                      <div className="flex items-stretch">
-                      <button
-                        type="button"
-                        onClick={() => toggleExerciseDone(String(ex.id))}
-                        disabled={isSessionComplete}
-                        aria-label={isExerciseDone ? "Mark as not done" : "Mark as done"}
-                        aria-pressed={isExerciseDone}
-                        className="flex shrink-0 items-center pl-2.5 pr-1 text-slate-300 hover:text-[var(--color-brand-600)] disabled:cursor-default"
-                        data-testid={`button-exercise-done-${ex.id}`}
-                      >
-                        {isExerciseDone ? (
-                          <CheckCircle2 className="h-5 w-5 text-[var(--color-brand-600)]" />
-                        ) : (
-                          <Circle className="h-5 w-5" />
-                        )}
-                      </button>
+
                       <CollapsibleTrigger asChild>
                         <button
                           type="button"
-                          className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2 pl-1.5 pr-2.5 text-left hover:bg-slate-50"
+                          className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50"
                           data-testid={`button-exercise-details-${ex.id}`}
                         >
                           <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
@@ -610,11 +543,7 @@ export default function ClientSessionView() {
                               {exerciseIdx + 1}
                             </span>
                             <div className="min-w-0">
-                              <div
-                                className={`truncate text-sm font-semibold ${
-                                  isExerciseDone ? "text-slate-400 line-through" : "text-slate-900"
-                                }`}
-                              >
+                              <div className="truncate text-sm font-semibold text-slate-900">
                                 {ex.name || "Exercise"}
                               </div>
                               {exercisePrescription ? (
@@ -633,7 +562,6 @@ export default function ClientSessionView() {
                           </div>
                         </button>
                       </CollapsibleTrigger>
-                      </div>
 
                       <CollapsibleContent>
                         <div className="space-y-0 border-t border-slate-100 bg-slate-50/50 px-3 pb-3 pt-3">
@@ -695,14 +623,7 @@ export default function ClientSessionView() {
                                 className="flex w-full items-center py-2.5 text-left text-sm font-semibold text-slate-700 hover:text-slate-900"
                                 data-testid={`button-personal-notes-logs-${ex.id}`}
                               >
-                                <span className="flex-1">
-                                  Notes for your coach
-                                  {lastEntry && (lastEntry.notes || lastEntry.sets?.length) ? (
-                                    <span className="ml-1.5 font-normal text-slate-400">
-                                      · last time logged
-                                    </span>
-                                  ) : null}
-                                </span>
+                                <span className="flex-1">Notes or questions for your coach</span>
                                 {isNotesOpen ? (
                                   <ChevronUp className="h-4 w-4 text-slate-400" />
                                 ) : (
@@ -736,17 +657,8 @@ export default function ClientSessionView() {
                                       "{lastEntry.notes}"
                                     </p>
                                   ) : null}
-                                  {!lastEntry.notes &&
-                                  (!lastEntry.sets || (lastEntry.sets as any[]).length === 0) ? (
-                                    <p className="mt-0.5 text-xs text-slate-400 italic">
-                                      Completed, nothing logged
-                                    </p>
-                                  ) : null}
                                 </div>
                               ) : null}
-                              <p className="text-xs text-slate-500">
-                                Your coach reads these. Reps, weights, how it felt, questions.
-                              </p>
                               <Textarea
                                 placeholder="Reps, weight, effort, or quick notes"
                                 value={exerciseNotes[ex.id] || ""}
@@ -811,7 +723,7 @@ export default function ClientSessionView() {
                                 </div>
                               )}
 
-                              {hasHistory && olderHistory.length > 0 && (
+                              {olderHistory.length > 0 && (
                                 <div
                                   className="space-y-2 pt-2 border-t border-slate-200/70"
                                   data-testid={`past-notes-logs-${ex.id}`}
@@ -827,8 +739,8 @@ export default function ClientSessionView() {
                                     className="text-xs font-medium text-slate-600 underline-offset-2 hover:underline"
                                   >
                                     {isShowingAllHistory
-                                      ? "Hide earlier notes"
-                                      : `Show earlier notes (${olderHistory.length})`}
+                                      ? "Hide earlier logs"
+                                      : `Earlier logs (${olderHistory.length})`}
                                   </button>
                                   {isShowingAllHistory ? (
                                   <div className="divide-y divide-slate-200/70">
@@ -857,12 +769,6 @@ export default function ClientSessionView() {
                                             "{h.notes}"
                                           </p>
                                         )}
-                                        {!h.notes &&
-                                          (!h.sets || (h.sets as any[]).length === 0) && (
-                                            <p className="text-[11px] text-slate-400 italic mt-0.5">
-                                              Completed, no details logged
-                                            </p>
-                                          )}
                                       </div>
                                     ))}
                                   </div>
