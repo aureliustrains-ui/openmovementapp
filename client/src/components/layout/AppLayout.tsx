@@ -45,7 +45,7 @@ const getClientPrimaryNavItems = (input: { checkinsAttentionCount: number }) => 
     icon: ListChecks,
     badgeCount: input.checkinsAttentionCount,
   },
-  { href: "/app/client/you", label: "You", icon: User },
+  // Profile and guide live in the avatar menu ("Profile & guide").
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -242,7 +242,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuItem asChild>
                     <Link href="/app/client/you" className="flex items-center gap-2">
                       <User className="h-4 w-4" />
-                      <span>You</span>
+                      <span>Profile &amp; guide</span>
                     </Link>
                   </DropdownMenuItem>
                 </>

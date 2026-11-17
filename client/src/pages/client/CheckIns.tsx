@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
+  sessionsQuery,
   myNotificationSummaryQuery,
   myActivePhaseProgressReportsQuery,
   phasesQuery,
@@ -11,7 +12,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
-import ClientReadinessSection from "@/components/client/ClientReadinessSection";
+import { buildWeekHistory } from "@/lib/weekHistory";
+import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,29 +30,6 @@ type ActivePhaseProgressReport = {
   status: ProgressStatus;
   createdAt: string;
 };
-type RecentActivityItem = {
-  id: string;
-  type: "Weekly" | "Session" | "Progress";
-  submittedAt: string | null;
-  detail: string;
-  href?: string;
-};
-
-function formatDateLabel(value: string | null | undefined): string {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleDateString();
-  } catch {
-    return value;
-  }
-}
-
-function toTimestamp(value: string | null | undefined): number {
-  if (!value) return 0;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function getProgressStatusLabel(status: ProgressStatus | null | undefined): string {
   if (status === "requested") return "Requested";
   if (status === "submitted") return "Submitted";
@@ -69,6 +48,7 @@ export default function ClientCheckIns() {
   const isReadOnly = impersonating || !isClientSession || !isClientContextMatch;
 
   const { data: allPhases = [] } = useQuery(phasesQuery);
+  const { data: allSessions = [] } = useQuery(sessionsQuery);
   const { data: weeklyCheckins = [] } = useQuery({
     ...weeklyCheckinsMeQuery,
     enabled: !!sessionUser && !impersonating && isClientSession,
@@ -119,7 +99,6 @@ export default function ClientCheckIns() {
   const movementActionCount =
     (notificationSummary as { movementActionCount?: number } | undefined)?.movementActionCount ??
     computedMovementActions;
-  const isMovementCheckBlocking = currentPhase?.status === "Waiting for Movement Check";
   const weeklyDue =
     Boolean(
       (notificationSummary as { weeklyCheckinDue?: boolean } | undefined)?.weeklyCheckinDue,
@@ -131,22 +110,6 @@ export default function ClientCheckIns() {
   const dueCount =
     Number(weeklyDue) + Number(movementActionCount > 0) + Number(progressNeedsAction);
 
-  const recentWeekly = [
-    ...(weeklyCheckins as Array<{
-      id: string;
-      submittedAt?: string;
-      phaseWeekNumber?: number | null;
-    }>),
-  ].sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")));
-  const recentSession = [
-    ...(sessionCheckins as Array<{
-      id: string;
-      submittedAt?: string;
-      rpeOverall?: number;
-      sleepLastNight?: number | null;
-    }>),
-  ].sort((a, b) => String(b.submittedAt || "").localeCompare(String(a.submittedAt || "")));
-
   const movementSummary = {
     approved: movementChecks.filter((check) => check.status === "Approved").length,
     pending: movementChecks.filter((check) => check.status === "Pending").length,
@@ -157,56 +120,33 @@ export default function ClientCheckIns() {
     latestProgressReport?.status === "approved" ||
     latestProgressReport?.status === "reviewed";
 
-  const recentActivity: RecentActivityItem[] = [
-    ...recentWeekly.slice(0, 4).map((entry) => ({
-      id: `weekly-${entry.id}`,
-      type: "Weekly" as const,
-      submittedAt: entry.submittedAt || null,
-      detail: `Week ${entry.phaseWeekNumber ?? "—"} recap submitted.`,
-    })),
-    ...recentSession.slice(0, 4).map((entry) => ({
-      id: `session-${entry.id}`,
-      type: "Session" as const,
-      submittedAt: entry.submittedAt || null,
-      detail: `Effort ${entry.rpeOverall ?? "—"}/10 · Sleep ${entry.sleepLastNight ?? "—"}/10`,
-    })),
-    ...(latestProgressReport && latestProgressReport.status !== "requested"
-      ? [
-          {
-            id: `progress-${latestProgressReport.id}`,
-            type: "Progress" as const,
-            submittedAt: latestProgressReport.createdAt || null,
-            detail: `Progress update status: ${getProgressStatusLabel(latestProgressReport.status)}.`,
-            href: `/app/client/progress-reports/${latestProgressReport.id}`,
-          },
-        ]
-      : []),
-  ]
-    .sort((a, b) => toTimestamp(b.submittedAt) - toTimestamp(a.submittedAt))
-    .slice(0, 8);
-  const recentActivityList = (
-    <div className="divide-y divide-slate-100">
-      {recentActivity.map((entry) => (
-        <div key={entry.id} className="py-2.5 first:pt-0 last:pb-0">
-          <div className="flex items-center justify-between gap-3">
-            <Badge variant="outline" className="border-slate-300 text-slate-700 text-[11px]">
-              {entry.type}
-            </Badge>
-            <p className="text-xs text-slate-500">{formatDateLabel(entry.submittedAt)}</p>
-          </div>
-          <p className="mt-1 text-sm text-slate-700">{entry.detail}</p>
-          {entry.href ? (
-            <Link
-              href={entry.href}
-              className="mt-1 inline-block text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
-            >
-              Open
-            </Link>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
+  const phaseSchedule = ((currentPhase?.schedule as any[]) || []) as TrainingScheduleEntry[];
+  const completedInstances = ((currentPhase?.completedScheduleInstances as string[]) ||
+    []) as string[];
+  const lifecycle = currentPhase
+    ? getTrainingWeekLifecycle(
+        currentPhase.durationWeeks || 1,
+        phaseSchedule,
+        completedInstances,
+        currentPhase.id,
+        weeklyCheckins as Array<{ phaseId?: string | null; phaseWeekNumber?: number | null }>,
+      )
+    : null;
+  const weekHistory = currentPhase
+    ? buildWeekHistory({
+        phaseId: currentPhase.id,
+        durationWeeks: currentPhase.durationWeeks || 1,
+        schedule: phaseSchedule,
+        completedInstances,
+        phaseSessionIds: (allSessions as Array<{ id: string; phaseId?: string }>)
+          .filter((session) => session.phaseId === currentPhase.id)
+          .map((session) => session.id),
+        weeklyRecaps: weeklyCheckins as any[],
+        sessionRecaps: sessionCheckins as any[],
+        currentWeek: lifecycle?.currentWeek || 1,
+      })
+    : [];
+  const showInReview = hasMovementInReview || hasProgressInReview;
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 animate-in fade-in">
@@ -218,23 +158,13 @@ export default function ClientCheckIns() {
         </Card>
       ) : null}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-display font-bold text-slate-900">Action required</h2>
-          <Badge variant="outline" className="border-slate-300 text-slate-700">
-            {dueCount} open
-          </Badge>
-        </div>
-
+      <section className="space-y-3" data-testid="section-recaps-due">
+        <h2 className="text-xl font-display font-bold text-slate-900">Due now</h2>
         {dueCount === 0 ? (
-          <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-            <CardContent className="p-4 text-sm text-slate-600">
-              You are all caught up for now.
-            </CardContent>
-          </Card>
+          <p className="text-sm text-slate-600">Nothing due. You are all caught up.</p>
         ) : (
           <div className="space-y-3">
-            {movementActionCount > 0 && isMovementCheckBlocking ? (
+            {movementActionCount > 0 ? (
               <ActionRequiredCard
                 title="Movement check"
                 description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
@@ -244,7 +174,6 @@ export default function ClientCheckIns() {
                 ctaVariant="secondaryDark"
               />
             ) : null}
-
             {weeklyDue ? (
               <ActionRequiredCard
                 title="Weekly recap"
@@ -255,7 +184,6 @@ export default function ClientCheckIns() {
                 ctaVariant="secondaryDark"
               />
             ) : null}
-
             {progressNeedsAction ? (
               <ActionRequiredCard
                 title="Progress update"
@@ -270,105 +198,97 @@ export default function ClientCheckIns() {
                 ctaVariant="secondaryDark"
               />
             ) : null}
-
-            {movementActionCount > 0 && !isMovementCheckBlocking ? (
-              <ActionRequiredCard
-                title="Movement check"
-                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
-                ctaLabel="Open movement checks"
-                ctaHref="/app/client/my-phase#movement-checks"
-                ctaDisabled={isReadOnly}
-                ctaVariant="secondaryDark"
-              />
-            ) : null}
           </div>
         )}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-display font-bold text-slate-900">In review</h2>
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardContent className="p-4 space-y-3">
-            {!hasMovementInReview && !hasProgressInReview ? (
-              <p className="text-sm text-slate-600">No items are currently waiting for review.</p>
-            ) : (
-              <>
-                {movementSummary.pending > 0 ? (
-                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Movement checks</p>
-                      <p className="text-xs text-slate-600">
-                        {movementSummary.pending} pending coach review
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="border-slate-300 text-slate-700">
-                      Pending review
-                    </Badge>
-                  </div>
-                ) : null}
-                {movementSummary.approved > 0 ? (
-                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Movement checks</p>
-                      <p className="text-xs text-slate-600">{movementSummary.approved} approved</p>
-                    </div>
-                    <Badge variant="outline" className="border-slate-300 text-slate-700">
-                      Approved
-                    </Badge>
-                  </div>
-                ) : null}
-                {hasProgressInReview && latestProgressReport ? (
-                  <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">Progress update</p>
-                      <p className="text-xs text-slate-600">
-                        {getProgressStatusLabel(latestProgressReport.status)}
-                      </p>
-                    </div>
-                    <Link
-                      href={`/app/client/progress-reports/${latestProgressReport.id}`}
-                      className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
-                    >
-                      Open
-                    </Link>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-xl font-display font-bold text-slate-900">Trends</h2>
-        <ClientReadinessSection compactForCheckins />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-xl font-display font-bold text-slate-900">Recent activity</h2>
-        {recentActivity.length === 0 ? (
+      {showInReview ? (
+        <section className="space-y-3">
+          <h2 className="text-xl font-display font-bold text-slate-900">With your coach</h2>
           <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-            <CardContent className="p-4">
-              <p className="text-sm text-slate-600">No recent recap activity yet.</p>
+            <CardContent className="p-4 space-y-3">
+              {movementSummary.pending > 0 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-900">Movement checks</p>
+                  <Badge variant="outline" className="border-slate-300 text-slate-700">
+                    {movementSummary.pending} waiting for review
+                  </Badge>
+                </div>
+              ) : null}
+              {movementSummary.approved > 0 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-900">Movement checks</p>
+                  <Badge variant="outline" className="border-slate-300 text-slate-700">
+                    {movementSummary.approved} approved
+                  </Badge>
+                </div>
+              ) : null}
+              {hasProgressInReview && latestProgressReport ? (
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-900">Progress update</p>
+                  <Link
+                    href={`/app/client/progress-reports/${latestProgressReport.id}`}
+                    className="text-xs font-medium text-slate-700 underline-offset-2 hover:underline"
+                  >
+                    {getProgressStatusLabel(latestProgressReport.status)} · Open
+                  </Link>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
+        </section>
+      ) : null}
+
+      <section className="space-y-3" data-testid="section-recaps-weeks">
+        <h2 className="text-xl font-display font-bold text-slate-900">Your weeks</h2>
+        {weekHistory.length === 0 ? (
+          <p className="text-sm text-slate-600">Your weeks will show up here once you start.</p>
         ) : (
-          <>
-            <div className="md:hidden">
-              <details
-                className="rounded-xl border border-slate-200 bg-white p-3"
-                data-testid="details-checkins-recent-activity-mobile"
+          <div className="space-y-2">
+            {weekHistory.map((item) => (
+              <Card
+                key={item.week}
+                className="border-slate-200 shadow-sm rounded-xl bg-white"
+                data-testid={`card-recap-week-${item.week}`}
               >
-                <summary className="cursor-pointer text-sm font-medium text-slate-700">
-                  Show recent activity
-                </summary>
-                <div className="mt-2">{recentActivityList}</div>
-              </details>
-            </div>
-            <Card className="hidden md:block border-slate-200 shadow-sm rounded-xl bg-white">
-              <CardContent className="p-4">{recentActivityList}</CardContent>
-            </Card>
-          </>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-900">Week {item.week}</p>
+                    <Badge
+                      variant="outline"
+                      className={
+                        item.recap
+                          ? "border-[var(--color-brand-500)] text-[var(--color-brand-700)]"
+                          : "border-slate-300 text-slate-600"
+                      }
+                    >
+                      {item.recap ? "Done" : item.isCurrent ? "This week" : "Open"}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400">Sessions</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.completedCount}/{item.scheduledCount}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400">Effort</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.averageEffort !== null ? `${item.averageEffort}/10` : "–"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-slate-400">Recovery</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.recap?.recovery != null ? `${item.recap.recovery}/5` : "–"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
       </section>
     </div>

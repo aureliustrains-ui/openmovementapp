@@ -186,10 +186,12 @@ test("client recaps route reuses shared readiness section while home stays actio
     appSource.includes('return <Redirect to="/app/client/check-ins" />'),
     "Legacy readiness route should redirect to the new check-ins destination",
   );
-  assert.ok(
-    checkinsSource.includes("<ClientReadinessSection compactForCheckins />"),
-    "Recaps should host the compact trends-focused readiness section",
+  assert.equal(
+    checkinsSource.includes("<ClientReadinessSection"),
+    false,
+    "Client recaps show due items and a simple week history; detailed trends stay coach-side",
   );
+  assert.ok(checkinsSource.includes("buildWeekHistory("), "Recaps should list the client's weeks");
   assert.ok(
     readinessPageSource.includes("<ClientReadinessSection showFullDetails />"),
     "Legacy readiness page should remain full-details if routed directly",

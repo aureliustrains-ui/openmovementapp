@@ -17,7 +17,7 @@ import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
-import { Loader2, ChevronRight } from "lucide-react";
+import { Loader2, ChevronRight, CheckCircle2, Circle } from "lucide-react";
 
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
@@ -81,6 +81,20 @@ export default function ClientHome() {
     phaseSessions as Array<{ id: string; name: string }>,
     completedInstances,
   );
+  const weekEntries = weekSchedulePreview.sortedEntries;
+  const weekDoneCount = weekEntries.filter((item) => item.isCompleted).length;
+  const weekProgressPercent =
+    weekEntries.length > 0 ? Math.round((weekDoneCount / weekEntries.length) * 100) : 0;
+  const nextItemKey = weekEntries.find((item) => !item.isCompleted)?.instanceKey ?? null;
+  const destinationFor = (item: (typeof weekEntries)[number]) =>
+    resolveClientSessionEntryDestination({
+      phase: progressPhase as any,
+      sessionId: item.session.id,
+      week: item.entry.week,
+      day: item.entry.day,
+      slot: item.entry.slot,
+    });
+
   const nextSessionDestination = weekSchedulePreview.nextScheduleItem
     ? resolveClientSessionEntryDestination({
         phase: progressPhase as any,
@@ -160,70 +174,6 @@ export default function ClientHome() {
         </section>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4">
-        {weekReadyToClose && currentWeekStatus ? (
-          <Card
-            className="border-[var(--color-brand-500)] shadow-sm rounded-xl bg-[var(--color-brand-100)]"
-            data-testid="card-home-week-ready-to-close"
-          >
-            <CardContent className="p-5 md:p-6 space-y-4">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-[var(--color-brand-700)]">
-                  Week {currentTrainingWeek} of {phaseDurationWeeks} done
-                </p>
-                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
-                  {currentWeekStatus.completedCount}/{currentWeekStatus.scheduledCount} sessions completed
-                </h2>
-                <p className="mt-1 text-sm text-slate-700">
-                  {isLastWeek
-                    ? "Close the week with a short recap to finish this phase."
-                    : `Close the week with a short recap to unlock week ${currentTrainingWeek + 1}.`}
-                </p>
-              </div>
-              <Link href="/app/client/my-phase?weeklyCheckin=1">
-                <Button className="w-full sm:w-auto" data-testid="button-home-weekly-recap">
-                  Complete weekly recap
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        ) : (
-        <Card className="border-slate-200 shadow-sm rounded-xl bg-white">
-          <CardContent className="p-5 md:p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500">
-                  Next movement session
-                </p>
-                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
-                  {weekSchedulePreview.nextScheduleItem?.session.name || "No session scheduled"}
-                </h2>
-              </div>
-              {weekSchedulePreview.nextScheduleItem && nextSessionDestination ? (
-                <Link href={nextSessionDestination.href}>
-                  <Button className="w-full sm:w-auto" data-testid="button-home-start-next-session">
-                    Start session
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              ) : (
-                <Link href={currentPhase ? "/app/client/my-phase" : "/app/client/home"}>
-                  <Button
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                    data-testid="button-home-open-phase-fallback"
-                  >
-                    Open plan
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        )}
-      </div>
-
       {dueCount > 0 ? (
         <section className="space-y-3">
           {progressNeedsAction ? (
@@ -266,6 +216,122 @@ export default function ClientHome() {
           ) : null}
         </section>
       ) : null}
+
+      <div className="grid grid-cols-1 gap-4">
+        {weekReadyToClose && currentWeekStatus ? (
+          <Card
+            className="border-[var(--color-brand-500)] shadow-sm rounded-xl bg-[var(--color-brand-100)]"
+            data-testid="card-home-week-ready-to-close"
+          >
+            <CardContent className="p-5 md:p-6 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-wider text-[var(--color-brand-700)]">
+                  Week {currentTrainingWeek} of {phaseDurationWeeks} done
+                </p>
+                <h2 className="text-2xl font-display font-bold tracking-tight text-slate-900">
+                  {currentWeekStatus.completedCount}/{currentWeekStatus.scheduledCount} sessions completed
+                </h2>
+                <p className="mt-1 text-sm text-slate-700">
+                  {isLastWeek
+                    ? "Close the week with a short recap to finish this phase."
+                    : `Close the week with a short recap to unlock week ${currentTrainingWeek + 1}.`}
+                </p>
+              </div>
+              <Link href="/app/client/my-phase?weeklyCheckin=1">
+                <Button className="w-full sm:w-auto" data-testid="button-home-weekly-recap">
+                  Complete weekly recap
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
+        <Card
+          className="border-slate-200 shadow-sm rounded-xl bg-white"
+          data-testid="card-home-this-week"
+        >
+          <CardContent className="p-5 md:p-6 space-y-4">
+            {progressPhase ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">
+                    Week {currentTrainingWeek} of {phaseDurationWeeks}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {weekDoneCount}/{weekEntries.length} sessions
+                  </p>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-[var(--color-brand-600)] transition-all"
+                    style={{ width: `${weekProgressPercent}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {weekEntries.length > 0 ? (
+              <ul className="divide-y divide-slate-100" data-testid="list-home-week-sessions">
+                {weekEntries.map((item) => {
+                  const isNext = item.instanceKey === nextItemKey;
+                  return (
+                    <li key={item.instanceKey}>
+                      <Link
+                        href={destinationFor(item).href}
+                        className={`flex items-center gap-3 py-2.5 ${
+                          isNext ? "font-semibold text-slate-900" : "text-slate-600"
+                        }`}
+                      >
+                        {item.isCompleted ? (
+                          <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-brand-600)]" />
+                        ) : (
+                          <Circle
+                            className={`h-5 w-5 shrink-0 ${
+                              isNext ? "text-[var(--color-brand-600)]" : "text-slate-300"
+                            }`}
+                          />
+                        )}
+                        <span className="w-12 shrink-0 text-xs uppercase tracking-wider text-slate-400">
+                          Day {item.dayIndex + 1}
+                        </span>
+                        <span
+                          className={`min-w-0 flex-1 truncate ${
+                            item.isCompleted ? "text-slate-400 line-through" : ""
+                          }`}
+                        >
+                          {item.session.name}
+                        </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+
+            {weekSchedulePreview.nextScheduleItem && nextSessionDestination && nextItemKey ? (
+              <Link href={nextSessionDestination.href}>
+                <Button className="w-full" data-testid="button-home-start-next-session">
+                  Start {weekSchedulePreview.nextScheduleItem.session.name}
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            ) : (
+              <Link href={currentPhase ? "/app/client/my-phase" : "/app/client/home"}>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  data-testid="button-home-open-phase-fallback"
+                >
+                  {currentPhase ? "Open plan" : "No plan yet"}
+                </Button>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+        )}
+      </div>
+
     </div>
   );
 }
