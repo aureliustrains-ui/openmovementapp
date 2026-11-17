@@ -623,7 +623,7 @@ export default function ClientSessionView() {
                                 className="flex w-full items-center py-2.5 text-left text-sm font-semibold text-slate-700 hover:text-slate-900"
                                 data-testid={`button-personal-notes-logs-${ex.id}`}
                               >
-                                <span className="flex-1">Notes or questions for your coach</span>
+                                <span className="flex-1">Notes</span>
                                 {isNotesOpen ? (
                                   <ChevronUp className="h-4 w-4 text-slate-400" />
                                 ) : (
@@ -660,7 +660,7 @@ export default function ClientSessionView() {
                                 </div>
                               ) : null}
                               <Textarea
-                                placeholder="Reps, weight, effort, or quick notes"
+                                placeholder="How did it go? Weights, reps, how it felt, or anything unclear."
                                 value={exerciseNotes[ex.id] || ""}
                                 onChange={(e) =>
                                   setExerciseNotes((prev) => ({ ...prev, [ex.id]: e.target.value }))
