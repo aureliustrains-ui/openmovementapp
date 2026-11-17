@@ -12,6 +12,7 @@ import { createRateLimitMiddleware } from "./http/rate-limit";
 import { createHealthHandlers } from "./http/health";
 import { installGracefulShutdown } from "./lifecycle";
 import { dbPool } from "./db";
+import { applyAdditiveSchemaUpgrades } from "./schema-upgrades";
 
 const app = express();
 const httpServer = createServer(app);
@@ -151,6 +152,14 @@ httpServer.on("error", (error) => {
 });
 
 (async () => {
+  // Additive columns (IF NOT EXISTS) so a deploy doesn't need a manual db:push first.
+  const upgrades = await applyAdditiveSchemaUpgrades(dbPool, (message, meta) =>
+    logError("startup", message, meta),
+  );
+  if (upgrades.failed.length === 0) {
+    logInfo("startup", "schema upgrades checked", { applied: upgrades.applied.length });
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use("/api/{*path}", (_req, res) => {
