@@ -198,12 +198,19 @@ export function ExerciseLibrary({
     },
     [foldersById],
   );
+  // The person filter narrows everything below it: folder counts and the list.
+  const authorScoped = useMemo(() => {
+    if (authorFilter === "all") return exercises;
+    if (authorFilter === "mine") return exercises.filter((item) => isMineItem(item));
+    return exercises.filter((item) => authorIdOf(item) === authorFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, authorFilter, sessionUser?.id, meIsOwner, ownerId]);
   const countInFolder = useCallback(
     (folderId: string) => {
       const ids = descendantIds(folderId);
-      return exercises.filter((item) => item.folderId && ids.has(item.folderId)).length;
+      return authorScoped.filter((item) => item.folderId && ids.has(item.folderId)).length;
     },
-    [descendantIds, exercises],
+    [descendantIds, authorScoped],
   );
 
   // Keep the selected folder's ancestors open.
@@ -223,7 +230,7 @@ export function ExerciseLibrary({
   // ---- list ------------------------------------------------------------------------------
   const normalizedSearch = search.trim().toLowerCase();
   const filtersActive = isFacetFilterActive(facetFilter);
-  const searchingAll = normalizedSearch.length > 0 || filtersActive || authorFilter !== "all";
+  const searchingAll = normalizedSearch.length > 0 || filtersActive;
 
   // One chip per other person who has added exercises: first name, or the full name when two
   // people share a first name.
@@ -250,11 +257,7 @@ export function ExerciseLibrary({
   }, [exercises, staff, sessionUser?.id, meIsOwner, ownerId]);
 
   const visibleExercises = useMemo(() => {
-    let items = exercises;
-    if (authorFilter === "mine") items = items.filter((item) => isMineItem(item));
-    if (authorFilter !== "all" && authorFilter !== "mine") {
-      items = items.filter((item) => authorIdOf(item) === authorFilter);
-    }
+    let items = authorScoped;
     if (!searchingAll && selectedFolderId) {
       const ids = descendantIds(selectedFolderId);
       items = items.filter((item) => item.folderId && ids.has(item.folderId));
@@ -283,10 +286,7 @@ export function ExerciseLibrary({
     normalizedSearch,
     searchingAll,
     selectedFolderId,
-    authorFilter,
-    sessionUser?.id,
-    meIsOwner,
-    ownerId,
+    authorScoped,
   ]);
 
   // Manual order only makes sense inside one folder without search or filters.
@@ -429,7 +429,7 @@ export function ExerciseLibrary({
           folders={sortedFolders}
           selectedFolderId={selectedFolderId}
           onSelect={onSelectFolder}
-          countFor={(folderId) => (folderId ? countInFolder(folderId) : exercises.length)}
+          countFor={(folderId) => (folderId ? countInFolder(folderId) : authorScoped.length)}
           allLabel="All"
           onCreate={onCreateFolder}
           onRename={onRenameFolder}
