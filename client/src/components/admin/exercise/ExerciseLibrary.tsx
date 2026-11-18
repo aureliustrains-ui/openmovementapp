@@ -338,7 +338,7 @@ export function ExerciseLibrary({
       data-testid="exercise-library"
     >
       {/* Left: template types + folders by movement pattern */}
-      <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
+      <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-14 lg:max-h-[calc(100vh-5rem)] lg:self-start lg:overflow-y-auto">
         <nav className="space-y-0.5">
           {categories.map((category) => {
             const Icon = category.icon;
@@ -645,7 +645,7 @@ function ExerciseDetailPane({
           : "Saved";
 
   return (
-    <div className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto">
+    <div className="space-y-4 xl:sticky xl:top-14 xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <Input
