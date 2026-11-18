@@ -43,6 +43,10 @@ function createS3Client() {
     region: config.OBJECT_STORAGE_REGION,
     endpoint: config.OBJECT_STORAGE_ENDPOINT,
     forcePathStyle: config.OBJECT_STORAGE_FORCE_PATH_STYLE,
+    // Presigned browser uploads must not carry a precomputed (empty-body) checksum,
+    // or S3 rejects the real file with BadDigest.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
       accessKeyId: config.OBJECT_STORAGE_ACCESS_KEY_ID!,
       secretAccessKey: config.OBJECT_STORAGE_SECRET_ACCESS_KEY!,
