@@ -1,3 +1,4 @@
+import { isStaffRole } from "@/lib/roles";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -39,7 +40,7 @@ function generatePassword(length = 12) {
 export default function AdminClientsList() {
   const [search, setSearch] = useState("");
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [creatingRole, setCreatingRole] = useState<"Client" | "Admin">("Client");
+  const [creatingRole, setCreatingRole] = useState<"Client">("Client");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,7 +53,7 @@ export default function AdminClientsList() {
   const { data: allPhases = [], isLoading: loadingPhases } = useQuery(phasesQuery);
   const { data: clientNotificationSummary } = useQuery({
     ...adminClientsNotificationSummaryQuery,
-    enabled: sessionUser?.role === "Admin",
+    enabled: isStaffRole(sessionUser?.role),
   });
 
   const notificationByClientId = useMemo(() => {
@@ -185,10 +186,10 @@ export default function AdminClientsList() {
 
   const handleCreateUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!sessionUser || sessionUser.role !== "Admin") {
+    if (!sessionUser || !isStaffRole(sessionUser.role)) {
       toast({
         title: "Unauthorized",
-        description: "Only admins can create new accounts.",
+        description: "Only coaches can create new accounts.",
         variant: "destructive",
       });
       return;
@@ -218,7 +219,7 @@ export default function AdminClientsList() {
       });
 
       toast({
-        title: creatingRole === "Admin" ? "Coach account created" : "Client account created",
+        title: "Client account created",
         description: `${normalizedName} can now sign in with ${normalizedEmail}.`,
       });
       setIsAddUserOpen(false);
@@ -278,7 +279,7 @@ export default function AdminClientsList() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{creatingRole === "Admin" ? "Add coach" : "Add client"}</DialogTitle>
+            <DialogTitle>Add client</DialogTitle>
             <DialogDescription>
               They sign in with this email and password. You can send them the password yourself.
             </DialogDescription>
@@ -331,13 +332,7 @@ export default function AdminClientsList() {
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2">
-              <button
-                type="button"
-                className="text-xs text-slate-500 underline-offset-2 hover:underline"
-                onClick={() => setCreatingRole(creatingRole === "Admin" ? "Client" : "Admin")}
-              >
-                {creatingRole === "Admin" ? "Add a client instead" : "Add a coach instead"}
-              </button>
+              <span />
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>
                   Cancel

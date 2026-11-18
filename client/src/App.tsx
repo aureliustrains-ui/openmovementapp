@@ -25,6 +25,8 @@ import AdminTemplateBuilder from "@/pages/admin/TemplateBuilder";
 import SessionTemplateEditor from "@/pages/admin/SessionTemplateEditor";
 import SectionTemplateEditor from "@/pages/admin/SectionTemplateEditor";
 import ExerciseTemplateEditor from "@/pages/admin/ExerciseTemplateEditor";
+import AdminCoaches from "@/pages/admin/Coaches";
+import { isStaffRole, isOwnerRole } from "@/lib/roles";
 
 // Client
 import ClientHome from "@/pages/client/Home";
@@ -44,9 +46,15 @@ function ProtectedRoute({ component: Component, allowedRole, ...rest }: any) {
 
   const canAccessAsImpersonatedClient =
     allowedRole === "Client" && impersonating && sessionUser.role === "Admin";
-  if (allowedRole && sessionUser.role !== allowedRole && !canAccessAsImpersonatedClient) {
+  const roleMatches =
+    allowedRole === "Admin"
+      ? isStaffRole(sessionUser.role)
+      : allowedRole === "Owner"
+        ? isOwnerRole(sessionUser.role)
+        : sessionUser.role === allowedRole;
+  if (allowedRole && !roleMatches && !canAccessAsImpersonatedClient) {
     return (
-      <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
+      <Redirect to={isStaffRole(sessionUser.role) ? "/app/admin/clients" : "/app/client/home"} />
     );
   }
 
@@ -76,7 +84,7 @@ function Router() {
     <Switch>
       <Route path="/">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={isStaffRole(sessionUser.role) ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Redirect to="/login" />
         )}
@@ -84,7 +92,7 @@ function Router() {
 
       <Route path="/login">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={isStaffRole(sessionUser.role) ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <Login />
         )}
@@ -92,7 +100,7 @@ function Router() {
 
       <Route path="/signup">
         {sessionUser ? (
-          <Redirect to={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"} />
+          <Redirect to={isStaffRole(sessionUser.role) ? "/app/admin/clients" : "/app/client/home"} />
         ) : (
           <SignUp />
         )}
@@ -127,6 +135,9 @@ function Router() {
                 </Route>
                 <Route path="/app/admin/templates/exercises/:exerciseTemplateId">
                   {() => <ProtectedRoute component={ExerciseTemplateEditor} allowedRole="Admin" />}
+                </Route>
+                <Route path="/app/admin/coaches">
+                  {() => <ProtectedRoute component={AdminCoaches} allowedRole="Owner" />}
                 </Route>
                 <Route path="/app/admin/templates">
                   {() => <ProtectedRoute component={AdminTemplates} allowedRole="Admin" />}

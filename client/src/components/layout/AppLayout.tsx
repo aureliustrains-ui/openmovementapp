@@ -14,6 +14,7 @@ import {
   User,
   LogOut,
   Repeat,
+  UserCog,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -25,11 +26,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { isStaffRole, isOwnerRole } from "@/lib/roles";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
-const getAdminNavItems = (attentionClientsCount: number) => [
+const getAdminNavItems = (attentionClientsCount: number, isOwner: boolean) => [
   { href: "/app/admin/clients", label: "Clients", icon: Users, badgeCount: attentionClientsCount },
   { href: "/app/admin/templates", label: "Templates", icon: Library },
+  ...(isOwner ? [{ href: "/app/admin/coaches", label: "Coaches", icon: UserCog }] : []),
 ];
 
 const getClientPrimaryNavItems = (input: { checkinsAttentionCount: number }) => [
@@ -57,7 +60,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const { data: adminNotificationSummary } = useQuery({
     ...adminClientsNotificationSummaryQuery,
-    enabled: sessionUser.role === "Admin",
+    enabled: isStaffRole(sessionUser.role),
   });
   const { data: clientNotificationSummary } = useQuery({
     ...myNotificationSummaryQuery,
@@ -65,7 +68,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   });
 
   const attentionClientsCount =
-    sessionUser.role === "Admin"
+    isStaffRole(sessionUser.role)
       ? (
           (adminNotificationSummary as { clients?: Array<{ hasAttention?: boolean }> } | undefined)
             ?.clients || []
@@ -92,8 +95,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
       : 0;
 
   const navItems =
-    sessionUser.role === "Admin"
-      ? getAdminNavItems(attentionClientsCount)
+    isStaffRole(sessionUser.role)
+      ? getAdminNavItems(attentionClientsCount, isOwnerRole(sessionUser.role))
       : getClientPrimaryNavItems({
           checkinsAttentionCount: clientCheckinsAttentionCount,
         });
@@ -115,7 +118,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   };
 
   const contentContainerClass =
-    sessionUser.role === "Admin"
+    isStaffRole(sessionUser.role)
       ? "w-full max-w-[1680px] mx-auto p-6 md:p-8"
       : isClientChatRoute
         ? "w-full max-w-7xl mx-auto h-full min-h-0 box-border flex flex-col px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+5.25rem)] sm:px-6 sm:pt-4 sm:pb-8 md:px-8"
@@ -152,7 +155,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex h-full items-center gap-8">
           <Link
-            href={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"}
+            href={isStaffRole(sessionUser.role) ? "/app/admin/clients" : "/app/client/home"}
             className="flex items-center gap-2.5 shrink-0"
           >
             <BrandLogo textClassName="text-sm sm:text-base" />
@@ -167,7 +170,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                   ? isClientRouteActive(item.href)
                   : location.startsWith(item.href) &&
                     (item.href !== "/app/settings" || location === "/app/settings");
-              const isAdminNav = sessionUser.role === "Admin";
+              const isAdminNav = isStaffRole(sessionUser.role);
               const isClientNav = sessionUser.role === "Client";
               const spacingClassName = isAdminNav
                 ? "gap-0 px-2 py-2 sm:gap-2 sm:px-3"

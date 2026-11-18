@@ -985,6 +985,7 @@ export function useCreateUser() {
       email: string;
       password: string;
       role: "Admin" | "Client";
+      coachId?: string | null;
       status?: string;
       avatar?: string | null;
     }) => fetchApi("/api/users", { method: "POST", body: JSON.stringify(data) }),
@@ -1099,5 +1100,94 @@ export function useUpdateClientSpecifics() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["clientSpecifics", vars.clientId] });
     },
+  });
+}
+
+// ---- Team (owner + coaches) ----------------------------------------------------------
+
+export type StaffMember = {
+  id: string;
+  name: string;
+  role: "Owner" | "Coach";
+  status: string;
+};
+
+export const staffQuery = queryOptions({
+  queryKey: ["staff"],
+  queryFn: () => fetchApi("/api/staff") as Promise<StaffMember[]>,
+});
+
+export type CoachRow = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  clientCount: number;
+  exercisesAdded: number;
+  clients: Array<{ id: string; name: string; status: string; activePhaseName: string | null }>;
+};
+
+export const coachesQuery = queryOptions({
+  queryKey: ["coaches"],
+  queryFn: () => fetchApi("/api/admin/coaches") as Promise<CoachRow[]>,
+});
+
+function invalidateCoaches(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["coaches"] });
+  qc.invalidateQueries({ queryKey: ["staff"] });
+  qc.invalidateQueries({ queryKey: ["users"] });
+}
+
+export function useCreateCoach() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; email: string; password: string }) =>
+      fetchApi("/api/admin/coaches", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => invalidateCoaches(qc),
+  });
+}
+
+export function useUpdateCoach() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      status?: "Active" | "Inactive";
+      password?: string;
+    }) => fetchApi(`/api/admin/coaches/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: () => invalidateCoaches(qc),
+  });
+}
+
+export function useRemoveCoach() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => fetchApi(`/api/admin/coaches/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateCoaches(qc),
+  });
+}
+
+export function useConvertClientToCoach() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) =>
+      fetchApi("/api/admin/coaches/convert", { method: "POST", body: JSON.stringify({ userId }) }),
+    onSuccess: () => invalidateCoaches(qc),
+  });
+}
+
+export function useAssignClientCoach() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clientId, coachId }: { clientId: string; coachId: string | null }) =>
+      fetchApi(`/api/admin/clients/${clientId}/coach`, {
+        method: "PATCH",
+        body: JSON.stringify({ coachId }),
+      }),
+    onSuccess: () => invalidateCoaches(qc),
   });
 }

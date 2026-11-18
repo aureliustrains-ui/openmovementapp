@@ -25,6 +25,7 @@ import {
   useReviewProgressReportItem,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { isStaffRole } from "@/lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -240,7 +241,7 @@ export default function AdminClientProfile() {
   });
   const { data: allClientsNotificationSummary } = useQuery({
     ...adminClientsNotificationSummaryQuery,
-    enabled: sessionUser?.role === "Admin",
+    enabled: isStaffRole(sessionUser?.role),
     refetchInterval: 30000,
   });
   const attentionByClientId = useMemo(() => {
@@ -1058,6 +1059,12 @@ export default function AdminClientProfile() {
             {client.email}
             {client.status !== "Active" ? ` · ${client.status}` : ""}
           </p>
+          {sessionUser?.role === "Admin" && client.coachId ? (
+            <p className="truncate text-xs font-medium text-amber-700" data-testid="text-client-coach">
+              {(allUsers as any[]).find((u) => u.id === client.coachId)?.name ?? "A coach"}'s client
+              · change things only with their knowledge
+            </p>
+          ) : null}
         </div>
 
       </div>

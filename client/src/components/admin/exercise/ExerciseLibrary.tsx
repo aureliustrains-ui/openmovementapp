@@ -44,6 +44,10 @@ import {
   type ExerciseFacetFilter,
 } from "@shared/exerciseFacets";
 import { exerciseStandardToPayload } from "@/lib/exerciseStandard";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { isOwnerRole } from "@/lib/roles";
+import { staffQuery } from "@/lib/api";
 
 type ExerciseItem = {
   id: string;
@@ -106,6 +110,19 @@ export function ExerciseLibrary({
   onReorderExercises,
 }: Props) {
   const [search, setSearch] = useState("");
+  const [authorFilter, setAuthorFilter] = useState<"all" | "mine" | "others">("all");
+  const { sessionUser } = useAuth();
+  const { data: staff = [] } = useQuery(staffQuery);
+  const meIsOwner = isOwnerRole(sessionUser?.role);
+  const ownerName = staff.find((member) => member.role === "Owner")?.name ?? "Owner";
+  const authorNameOf = (item: ExerciseItem): string => {
+    if (!item.createdBy) return ownerName;
+    return staff.find((member) => member.id === item.createdBy)?.name ?? "A coach";
+  };
+  const isMineItem = (item: ExerciseItem): boolean =>
+    item.createdBy ? item.createdBy === sessionUser?.id : meIsOwner;
+  // The owner may change everything; a coach only what they added.
+  const canEditItem = (item: ExerciseItem): boolean => meIsOwner || isMineItem(item);
   const [facetFilter, setFacetFilter] = useState<ExerciseFacetFilter>({});
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
@@ -203,10 +220,12 @@ export function ExerciseLibrary({
   // ---- list ------------------------------------------------------------------------------
   const normalizedSearch = search.trim().toLowerCase();
   const filtersActive = isFacetFilterActive(facetFilter);
-  const searchingAll = normalizedSearch.length > 0 || filtersActive;
+  const searchingAll = normalizedSearch.length > 0 || filtersActive || authorFilter !== "all";
 
   const visibleExercises = useMemo(() => {
     let items = exercises;
+    if (authorFilter === "mine") items = items.filter((item) => isMineItem(item));
+    if (authorFilter === "others") items = items.filter((item) => !isMineItem(item));
     if (!searchingAll && selectedFolderId) {
       const ids = descendantIds(selectedFolderId);
       items = items.filter((item) => item.folderId && ids.has(item.folderId));
@@ -235,6 +254,9 @@ export function ExerciseLibrary({
     normalizedSearch,
     searchingAll,
     selectedFolderId,
+    authorFilter,
+    sessionUser?.id,
+    meIsOwner,
   ]);
 
   // Manual order only makes sense inside one folder without search or filters.
@@ -243,7 +265,7 @@ export function ExerciseLibrary({
       sortBySortOrder(exercises.filter((item) => (item.folderId ?? null) === selectedFolderId)),
     [exercises, selectedFolderId],
   );
-  const canReorder = !searchingAll && selectedFolderId !== null;
+  const canReorder = meIsOwner && !searchingAll && selectedFolderId !== null;
   const move = (itemId: string, offset: -1 | 1) => {
     const index = directFolderItems.findIndex((item) => item.id === itemId);
     const target = index + offset;
@@ -332,6 +354,8 @@ export function ExerciseLibrary({
       item={item}
       folders={sortedFolders}
       folderPath={folderPath}
+      canEdit={canEditItem(item)}
+      authorName={isMineItem(item) ? "you" : authorNameOf(item)}
       onMove={(folderId) => onMoveExercise(item.id, folderId)}
       onDuplicate={async () => {
         const createdId = await onDuplicateExercise(item);
@@ -381,6 +405,28 @@ export function ExerciseLibrary({
           onRename={onRenameFolder}
           onDelete={onDeleteFolder}
         />
+        <div className="flex items-center gap-1 text-xs" data-testid="exercise-author-filter">
+          {(
+            [
+              ["all", "All"],
+              ["mine", "Only mine"],
+              ["others", "Added by others"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setAuthorFilter(value)}
+              className={`rounded-full border px-3 py-1 ${
+                authorFilter === value
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 text-slate-600 hover:border-slate-400"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <ExerciseFacetFilterBar value={facetFilter} onChange={setFacetFilter} />
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>
@@ -423,6 +469,9 @@ export function ExerciseLibrary({
                       <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
                       <div className="truncate text-xs text-slate-500">
                         {[prescription, tags].filter(Boolean).join(" · ") || "No tags yet"}
+                      </div>
+                      <div className="truncate text-[11px] text-slate-400">
+                        Added by {isMineItem(item) ? "you" : authorNameOf(item)}
                       </div>
                     </button>
                     {item.needsVideo ? (
@@ -481,10 +530,14 @@ function ExerciseDetailPane({
   item,
   folders,
   folderPath,
+  canEdit,
+  authorName,
   onMove,
   onDuplicate,
   onDelete,
 }: {
+  canEdit: boolean;
+  authorName: string;
   item: ExerciseItem;
   folders: TemplateFolder[];
   folderPath: (folderId: string | null) => string;
@@ -571,6 +624,7 @@ function ExerciseDetailPane({
         <div className="flex items-start justify-between gap-2">
           <Input
             value={draft.name}
+            disabled={!canEdit}
             onChange={(event) => update("name", event.target.value)}
             className="h-9 border-transparent px-1 text-lg font-semibold shadow-none focus-visible:border-slate-300"
             aria-label="Exercise name"
@@ -584,6 +638,7 @@ function ExerciseDetailPane({
             <Button type="button" variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate">
               <Copy className="h-4 w-4" />
             </Button>
+            {canEdit ? (
             <Button
               type="button"
               variant="ghost"
@@ -594,11 +649,18 @@ function ExerciseDetailPane({
             >
               <Trash2 className="h-4 w-4" />
             </Button>
+            ) : null}
           </div>
         </div>
+        {!canEdit ? (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Added by {authorName}. You can look at it, or press Duplicate to make your own copy.
+          </p>
+        ) : null}
         <div className="flex items-center gap-2">
           <Label className="shrink-0 text-xs text-slate-500">Folder</Label>
           <Select
+            disabled={!canEdit}
             value={item.folderId ?? "__none__"}
             onValueChange={(value) => onMove(value === "__none__" ? null : value)}
           >
@@ -620,11 +682,13 @@ function ExerciseDetailPane({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         <div className="space-y-4 lg:order-1">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <ExerciseFieldsEditor
-              idPrefix={`library-${item.id}`}
-              value={draft}
-              onChange={(field, value) => update(field, value as any)}
-            />
+            <fieldset disabled={!canEdit} className="min-w-0 border-0 p-0">
+              <ExerciseFieldsEditor
+                idPrefix={`library-${item.id}`}
+                value={draft}
+                onChange={(field, value) => update(field, value as any)}
+              />
+            </fieldset>
           </div>
 
           <ExerciseLibraryTags item={item} />

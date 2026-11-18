@@ -1,3 +1,4 @@
+import { isStaffRole } from "@/lib/roles";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -36,7 +37,7 @@ export default function Login() {
 
       const payload = await response.json();
       login(payload.user);
-      if (payload.user.role === "Admin") {
+      if (isStaffRole(payload.user.role)) {
         setLocation("/app/admin/clients");
       } else {
         setLocation("/app/client/home");

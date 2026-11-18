@@ -71,7 +71,7 @@ async function run() {
     }
 
     await client.query(
-      "update users set role = 'Client', status = case when status = 'Removed' then 'Removed' else 'Active' end where role = 'Admin' and lower(email) <> lower($1)",
+      "update users set role = 'Coach', status = case when status = 'Removed' then 'Removed' else 'Active' end where role = 'Admin' and lower(email) <> lower($1)",
       [email],
     );
     console.log(`Enforced single-admin policy for ${email}`);
