@@ -11,9 +11,6 @@ export type BlueprintExercise = {
   additionalInstructions: string;
   repsMode: string;
   qualityPoints: string;
-  progressionStart: string;
-  progressionBuild: string;
-  progressionNext: string;
   demoUrl: string;
   enableStructuredLogging: boolean;
   requiresMovementCheck: boolean;

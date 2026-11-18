@@ -20,9 +20,6 @@ export type ExerciseEditableFields = {
   additionalInstructions: string;
   repsMode: string;
   qualityPoints: string;
-  progressionStart: string;
-  progressionBuild: string;
-  progressionNext: string;
   notes: string;
   requiresMovementCheck: boolean;
   enableStructuredLogging: boolean;
@@ -146,28 +143,6 @@ export function ExerciseFieldsEditor({
             placeholder="e.g. Start: arms straight. Top: touch the rings to your ribs. Keep the body in one line, no hip sag"
             className="min-h-[72px] resize-none bg-white text-sm"
           />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(
-            [
-              ["progressionStart", "Start here", "e.g. the angle where you get 8 clean reps"],
-              ["progressionBuild", "Build", "e.g. work up to 12 at the same angle"],
-              ["progressionNext", "Then", "e.g. lower the rings, start again at 8"],
-            ] as const
-          ).map(([field, label, placeholder]) => (
-            <div key={field} className="space-y-1">
-              <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
-                {label}
-              </Label>
-              <Textarea
-                id={`${idPrefix}-${field}`}
-                value={value[field]}
-                onChange={(event) => onChange(field, event.target.value)}
-                placeholder={placeholder}
-                className="min-h-[56px] resize-none bg-white text-sm"
-              />
-            </div>
-          ))}
         </div>
       </div>
 

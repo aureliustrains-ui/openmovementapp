@@ -1,14 +1,11 @@
 /**
  * The structured "standard" of an exercise, shown to clients on the exercise card:
- * what counts as a rep and how to progress, plus `repsMode` ("hold" = the reps value is a hold time).
+ * what counts as a rep, plus `repsMode` ("hold" = the reps value is a hold time).
  * All optional free text; copied from templates into plans together with the prescription.
  */
 export const EXERCISE_STANDARD_KEYS = [
   "repsMode",
   "qualityPoints",
-  "progressionStart",
-  "progressionBuild",
-  "progressionNext",
 ] as const;
 
 export type ExerciseStandardKey = (typeof EXERCISE_STANDARD_KEYS)[number];
@@ -17,17 +14,11 @@ export type ExerciseStandardFields = Record<ExerciseStandardKey, string>;
 export const EMPTY_EXERCISE_STANDARD: ExerciseStandardFields = {
   repsMode: "",
   qualityPoints: "",
-  progressionStart: "",
-  progressionBuild: "",
-  progressionNext: "",
 };
 
 export const EMPTY_EXERCISE_STANDARD_NULL: Record<ExerciseStandardKey, null> = {
   repsMode: null,
   qualityPoints: null,
-  progressionStart: null,
-  progressionBuild: null,
-  progressionNext: null,
 };
 
 /** Read the standard fields from anything (template, plan exercise, null), as strings. */
