@@ -87,7 +87,6 @@ export function TemplatePickerPanel<T>({
   });
 
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [rootExpanded, setRootExpanded] = useState(true);
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   // Exercise pickers get the same facet filters as the template library.
@@ -278,8 +277,6 @@ export function TemplatePickerPanel<T>({
       </div>
     );
   };
-
-  const rootFolders = childrenByParent.get(folderParentKey(null)) || [];
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-3">

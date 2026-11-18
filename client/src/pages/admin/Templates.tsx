@@ -32,7 +32,6 @@ import { TemplateListPane } from "@/components/admin/TemplateListPane";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SectionTemplateEditorBody } from "@/pages/admin/SectionTemplateEditor";
 import { useToast } from "@/hooks/use-toast";
-import { formatReps, formatSets } from "@/lib/prescription";
 import { ExerciseLibrary } from "@/components/admin/exercise/ExerciseLibrary";
 import { EMPTY_EXERCISE_STANDARD_NULL, exerciseStandardToPayload } from "@/lib/exerciseStandard";
 
@@ -174,16 +173,6 @@ function getNextSortOrder(
   return next + 1;
 }
 
-function exercisePrescription(exercise: any) {
-  return [
-    formatSets(exercise?.sets),
-    formatReps(exercise?.reps, exercise?.repsMode),
-    exercise?.tempo || null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 export default function AdminTemplatesPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -298,23 +287,6 @@ export default function AdminTemplatesPage() {
     } catch (error) {
       toast({
         title: "Could not rename folder",
-        description: getErrorMessage(error, "Unknown error"),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleMoveFolder = async (
-    type: TemplateFolderType,
-    folderId: string,
-    parentId: string | null,
-  ) => {
-    try {
-      await updateTemplateFolder.mutateAsync({ id: folderId, type, parentId });
-      toast({ title: "Folder moved" });
-    } catch (error) {
-      toast({
-        title: "Could not move folder",
         description: getErrorMessage(error, "Unknown error"),
         variant: "destructive",
       });
@@ -811,7 +783,7 @@ export default function AdminTemplatesPage() {
       ) : null}
 
       <Sheet open={Boolean(openSectionId)} onOpenChange={(open) => !open && setOpenSectionId(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-6xl">
+        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-6xl [&>button]:hidden">
           <SheetTitle className="sr-only">Section template</SheetTitle>
           {openSectionId ? (
             <SectionTemplateEditorBody
