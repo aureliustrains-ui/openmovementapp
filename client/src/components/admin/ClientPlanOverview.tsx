@@ -89,6 +89,14 @@ export function ClientPlanOverview({
 
   const sessionName = (id: string) => allSessions.find((s: any) => s.id === id)?.name || "Session";
 
+  const visibleDays = useMemo(
+    () =>
+      DAYS.filter(
+        (d, idx) => idx < 5 || schedule.some((e: any) => e.day === d && e.sessionId),
+      ),
+    [schedule],
+  );
+
   const weeks = useMemo(() => {
     const ordered = [...schedule]
       .filter((e: any) => e.sessionId && typeof e.week === "number")
@@ -140,9 +148,15 @@ export function ClientPlanOverview({
             comments,
           };
         });
-      return { week, rows };
+      const items: Array<(typeof rows)[number] | { rest: true; day: string }> = [];
+      visibleDays.forEach((day) => {
+        const dayRows = rows.filter((r) => r.entry.day === day);
+        if (dayRows.length > 0) items.push(...dayRows);
+        else items.push({ rest: true, day });
+      });
+      return { week, rows, items };
     });
-  }, [schedule, completed, duration, phaseLogs, allSessions, checkinsRecent]);
+  }, [schedule, completed, duration, phaseLogs, allSessions, checkinsRecent, visibleDays]);
 
   const phaseSessions = useMemo(() => {
     const seen: string[] = [];
@@ -283,7 +297,7 @@ export function ClientPlanOverview({
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}
             data-testid="plan-weeks"
           >
-            {weeks.map(({ week, rows }) => {
+            {weeks.map(({ week, rows, items }) => {
               const isCurrent = week === currentWeek;
               const doneCount = rows.filter((r) => r.done).length;
               return (
@@ -306,7 +320,19 @@ export function ClientPlanOverview({
                     <p className="text-xs italic text-slate-300">No sessions</p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {rows.map((row) => {
+                      {items.map((row) => {
+                        if ("rest" in row) {
+                          return (
+                            <li
+                              key={`rest-${row.day}`}
+                              className="flex items-center gap-2 text-sm text-slate-300"
+                            >
+                              <span className="h-4 w-4 shrink-0" />
+                              <span className="text-[11px] uppercase">{row.day.slice(0, 3)}</span>
+                              <span className="text-xs">rest</span>
+                            </li>
+                          );
+                        }
                         const tone = row.done
                           ? "text-slate-400"
                           : row.isNext
@@ -422,9 +448,6 @@ export function ClientPlanOverview({
                           return (
                             <div key={section.id || i} className="px-3 py-2">
                               <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-slate-700">
-                                <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-900 text-[10px] text-white">
-                                  {letter}
-                                </span>
                                 <span className="truncate">{section.name || `Section ${letter}`}</span>
                                 {rounds ? (
                                   <span className="font-normal text-slate-400">· {rounds} rounds</span>
