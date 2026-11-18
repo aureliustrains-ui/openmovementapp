@@ -130,6 +130,7 @@ type Section = {
   id: string;
   name: string;
   exercises: Exercise[];
+  rounds?: number | null;
 };
 
 type LocalSession = {

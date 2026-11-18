@@ -17,6 +17,8 @@ export type BlueprintSection = {
   id: string;
   name: string;
   exercises: BlueprintExercise[];
+  /** Circuit: how many times the whole section is done in a row. Empty = a normal section. */
+  rounds?: number | null;
 };
 
 export type BlueprintSession = {
@@ -161,6 +163,9 @@ export function cloneSectionFromTemplate(
     exercises: (section.exercises || []).map((exercise) =>
       cloneExerciseFromTemplate(exercise, libraryExercises),
     ),
+    ...(typeof section.rounds === "number" && section.rounds > 1
+      ? { rounds: Math.floor(section.rounds) }
+      : {}),
   };
 }
 

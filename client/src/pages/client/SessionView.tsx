@@ -496,6 +496,14 @@ export default function ClientSessionView() {
                 <h2 className="text-base font-semibold tracking-tight text-slate-900 md:text-lg">
                   {section.name}
                 </h2>
+                {Number(section.rounds) > 1 ? (
+                  <span
+                    className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600"
+                    data-testid={`section-rounds-${section.id}`}
+                  >
+                    Circuit · {Number(section.rounds)} rounds
+                  </span>
+                ) : null}
               </div>
 
               {section.exercises.map((ex: any, exerciseIdx: number) => {

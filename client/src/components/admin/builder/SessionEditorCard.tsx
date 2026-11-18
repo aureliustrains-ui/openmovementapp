@@ -408,6 +408,14 @@ export function SessionEditorCard<TSession extends SessionLike>({
                   ),
                 }));
               }}
+              onSectionRoundsChange={(rounds) => {
+                onSessionChange((prev) => ({
+                  ...prev,
+                  sections: prev.sections.map((sec, idx) =>
+                    idx === sectionIdx ? { ...sec, rounds } : sec,
+                  ),
+                }));
+              }}
               onRemoveSection={() => {
                 onSessionChange((prev) => ({
                   ...prev,

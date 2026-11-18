@@ -45,6 +45,8 @@ type SectionEditorCardProps = {
   movementCheckEnabled: boolean;
   exerciseTemplates: any[];
   onSectionNameChange: (name: string) => void;
+  /** When given, the section can be made a circuit (done several rounds in a row). */
+  onSectionRoundsChange?: (rounds: number | null) => void;
   onRemoveSection: () => void;
   onMoveSection: (direction: "up" | "down") => void;
   onMoveSectionToIndex?: (targetSectionIdx: number) => void;
@@ -112,6 +114,7 @@ export function SectionEditorCard({
   movementCheckEnabled,
   exerciseTemplates,
   onSectionNameChange,
+  onSectionRoundsChange,
   onRemoveSection,
   onMoveSectionToIndex,
   onDuplicateSection,
@@ -203,6 +206,24 @@ export function SectionEditorCard({
           className="h-8 max-w-[260px] border-none bg-transparent px-1 text-sm font-semibold text-slate-800 shadow-none focus-visible:ring-1 focus-visible:ring-slate-300"
         />
         <div className="flex-1" />
+        {onSectionRoundsChange ? (
+          <label className="flex items-center gap-1.5 text-xs text-slate-500" title="Circuit: do this whole section several times in a row">
+            Rounds
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={section.rounds ?? ""}
+              placeholder="–"
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                onSectionRoundsChange(Number.isFinite(parsed) && parsed > 1 ? Math.min(parsed, 10) : null);
+              }}
+              className="h-7 w-14 px-2 text-center text-sm"
+              data-testid={`input-section-rounds-${section.id}`}
+            />
+          </label>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
