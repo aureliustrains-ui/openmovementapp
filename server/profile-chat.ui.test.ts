@@ -138,7 +138,11 @@ test("chat message bubbles preserve newline formatting", () => {
 test("admin chat marks thread as read on tab open without message-count guard", () => {
   const source = fs.readFileSync(adminClientProfilePath, "utf8");
   assert.equal(source.includes("chatMessages.length > 0"), false);
-  assert.ok(source.includes('if (activeTab === "chat" && sessionUser && clientId)'));
+  assert.ok(
+    source.includes(
+      'if ((activeTab === "chat" || activeTab === "structured-logs") && sessionUser && clientId)',
+    ),
+  );
   assert.ok(source.includes("latestClientChatMessageTime"));
   assert.ok(
     source.includes("}, [activeTab, sessionUser?.id, clientId, latestClientChatMessageTime]);"),
@@ -194,4 +198,14 @@ test("avatar upload route persists avatar and returns updated user payload", () 
     ),
   );
   assert.ok(source.includes("res.json({ avatar: updated.avatar, user: toPublicUser(updated) });"));
+});
+
+test("client home has a note box to the coach and the admin sees it in Notes & Logs", () => {
+  const home = fs.readFileSync(new URL("../client/src/pages/client/Home.tsx", import.meta.url), "utf8");
+  const box = fs.readFileSync(new URL("../client/src/components/client/CoachNoteBox.tsx", import.meta.url), "utf8");
+  const admin = fs.readFileSync(adminClientProfilePath, "utf8");
+  assert.ok(home.includes("<CoachNoteBox"));
+  assert.ok(box.includes("What's on your mind?"));
+  assert.ok(box.includes("useSendMessage"));
+  assert.ok(admin.includes("client-messages-card"));
 });

@@ -16,6 +16,7 @@ import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { CoachNoteBox } from "@/components/client/CoachNoteBox";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { Loader2, ChevronRight, CheckCircle2, Circle } from "lucide-react";
 
@@ -347,6 +348,7 @@ export default function ClientHome() {
         )}
       </div>
 
+      <CoachNoteBox clientId={viewedUser.id} disabled={!isClientSession || impersonating} />
     </div>
   );
 }

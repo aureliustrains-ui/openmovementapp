@@ -260,7 +260,7 @@ export default function AdminClientProfile() {
   }, [chatMessages]);
 
   useEffect(() => {
-    if (activeTab === "chat" && sessionUser && clientId) {
+    if ((activeTab === "chat" || activeTab === "structured-logs") && sessionUser && clientId) {
       markRead.mutate({ userId: sessionUser.id, clientId });
     }
   }, [activeTab, sessionUser?.id, clientId, latestClientChatMessageTime]);
@@ -2047,7 +2047,39 @@ export default function AdminClientProfile() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="structured-logs" className="m-0 outline-none">
+          <TabsContent value="structured-logs" className="m-0 space-y-4 outline-none">
+            <Card
+              className="border-slate-200 shadow-sm rounded-2xl bg-white"
+              data-testid="client-messages-card"
+            >
+              <CardHeader className="border-b border-slate-100 bg-slate-50/50">
+                <CardTitle>Messages from {client?.name?.split(" ")[0] || "client"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-4">
+                {(chatMessages as any[]).filter((m: any) => m.isClient).length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Nothing yet. Clients can write from the box on their home screen.
+                  </p>
+                ) : (
+                  [...(chatMessages as any[])]
+                    .filter((m: any) => m.isClient)
+                    .sort((a: any, b: any) => String(b.time).localeCompare(String(a.time)))
+                    .map((m: any) => (
+                      <div key={m.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                          {new Date(m.time).toLocaleString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{m.text}</p>
+                      </div>
+                    ))
+                )}
+              </CardContent>
+            </Card>
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
                 <div className="flex items-center justify-between gap-3">
