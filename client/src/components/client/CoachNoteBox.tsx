@@ -52,7 +52,7 @@ export function CoachNoteBox({ clientId, disabled }: { clientId: string; disable
             <Textarea
               value={text}
               onChange={(event) => setText(event.target.value.slice(0, 2000))}
-              placeholder="Questions about the schedule, the movements or the plan. Difficulties. Anything we should have in mind to move on."
+              placeholder="Questions on schedule or movements, difficulties, anything to keep in mind."
               className="min-h-[84px] resize-none"
               disabled={disabled}
               data-testid="input-coach-note"
