@@ -20,6 +20,7 @@ import {
   clientMovementChecksGroupedQuery,
   clientProgressReportsGroupedQuery,
   adminClientNotificationSummaryQuery,
+  adminClientsNotificationSummaryQuery,
   useCreateClientProgressReport,
   useReviewProgressReportItem,
 } from "@/lib/api";
@@ -83,6 +84,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ClientPlanOverview } from "@/components/admin/ClientPlanOverview";
+import { getRecommendedTrainingWeek, getTrainingWeekStatuses } from "@/lib/trainingWeek";
 import { ReviewSubmissionRow } from "@/components/admin/review/ReviewSubmissionRow";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { getChatDisplayFirstName } from "@/lib/chatDisplayName";
@@ -205,7 +208,6 @@ export default function AdminClientProfile() {
   const [phaseHomeVideoDrafts, setPhaseHomeVideoDrafts] = useState<Record<string, string>>({});
   const [phaseGuideVideoDrafts, setPhaseGuideVideoDrafts] = useState<Record<string, string>>({});
   const [savingPhaseVideoId, setSavingPhaseVideoId] = useState<string | null>(null);
-  const [viewPhaseId, setViewPhaseId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -226,7 +228,7 @@ export default function AdminClientProfile() {
   });
   const { data: checkinsRecent } = useQuery({
     ...clientCheckinsRecentQuery(clientId || ""),
-    enabled: !!clientId && activeTab === "checkins",
+    enabled: !!clientId && (activeTab === "checkins" || activeTab === "programming"),
   });
   const { data: movementCheckGroupsData = [] } = useQuery({
     ...(clientId
@@ -241,6 +243,18 @@ export default function AdminClientProfile() {
       : clientProgressReportsGroupedQuery("")),
     enabled: !!clientId && (activeTab === "progress-report" || activeTab === "checkins"),
   });
+  const { data: allClientsNotificationSummary } = useQuery({
+    ...adminClientsNotificationSummaryQuery,
+    enabled: sessionUser?.role === "Admin",
+    refetchInterval: 30000,
+  });
+  const attentionByClientId = useMemo(() => {
+    const rows = ((allClientsNotificationSummary as any)?.clients || []) as Array<{
+      clientId: string;
+      totalAttentionCount?: number;
+    }>;
+    return new Map(rows.map((r) => [r.clientId, r.totalAttentionCount || 0]));
+  }, [allClientsNotificationSummary]);
   const { data: notificationSummary } = useQuery({
     ...(clientId
       ? adminClientNotificationSummaryQuery(clientId)
@@ -285,14 +299,12 @@ export default function AdminClientProfile() {
   const draftPhases = clientPhases.filter((p: any) => p.status === "Draft");
   const completedPhases = clientPhases.filter((p: any) => p.status === "Completed");
   const activePhaseForProgress = activePhases[0];
-  const orderedPhases = [
-    ...activePhases,
+  const otherPhasesOrdered = [
+    ...activePhases.slice(1),
     ...pendingPhases,
     ...draftPhases,
     ...[...completedPhases].reverse(),
   ];
-  const viewPhase =
-    orderedPhases.find((p: any) => p.id === viewPhaseId) ?? orderedPhases[0] ?? null;
   const progressPhaseSessions = allSessions.filter(
     (session: any) => session.phaseId === activePhaseForProgress?.id,
   );
@@ -948,6 +960,26 @@ export default function AdminClientProfile() {
     };
   }, [notificationSummary]);
 
+  const railSubline = (id: string) => {
+    const phase = (allPhases as any[]).find((p: any) => p.clientId === id && p.status === "Active");
+    if (!phase) return "No active phase";
+    const week = getRecommendedTrainingWeek(
+      getTrainingWeekStatuses(
+        phase.durationWeeks || 1,
+        Array.isArray(phase.schedule) ? phase.schedule : [],
+        Array.isArray(phase.completedScheduleInstances) ? phase.completedScheduleInstances : [],
+      ),
+    );
+    return `Week ${week}`;
+  };
+
+  useEffect(() => {
+    if (!clientId) return;
+    try {
+      window.localStorage.setItem("om_last_client", clientId);
+    } catch {}
+  }, [clientId]);
+
   const switchableClients = (allUsers as any[])
     .filter((u) => u.role === "Client" && u.status === "Active")
     .sort((a, b) => resolveUserFullName(a).localeCompare(resolveUserFullName(b)));
@@ -958,7 +990,11 @@ export default function AdminClientProfile() {
     const parts: string[] = [];
     const phase = activePhaseForProgress;
     const logs = (workoutLogs as any[]).filter((l: any) => !phase || l.phaseId === phase.id);
-    const instances = new Set(logs.map((l: any) => String(l.instanceId || "")).filter(Boolean));
+    const instances = new Set(
+      Array.isArray(phase?.completedScheduleInstances)
+        ? phase.completedScheduleInstances
+        : logs.map((l: any) => String(l.instanceId || "")).filter(Boolean),
+    );
     const dates = logs.map((l: any) => String(l.date || "")).filter(Boolean).sort();
     const lastDate = dates.length ? dates[dates.length - 1] : null;
     const lastLog = lastDate ? logs.find((l: any) => l.date === lastDate) : null;
@@ -1078,116 +1114,7 @@ export default function AdminClientProfile() {
     const isSavingHomeVideo = savingPhaseVideoId === phase.id;
 
     return (
-      <Card
-        key={phase.id}
-        className={`overflow-hidden rounded-xl bg-white shadow-sm ${
-          phase.status === "Active" ? "border-slate-900" : "border-slate-200"
-        }`}
-        data-testid={`card-phase-${phase.id}`}
-      >
-        <div className="flex flex-col gap-1 px-5 py-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <Badge
-              variant="outline"
-              className={`h-5 rounded-md px-2 text-[11px] font-semibold ${statusColor}`}
-              data-testid={`badge-status-${phase.id}`}
-            >
-              {displayStatus}
-            </Badge>
-            <span>
-              {phase.durationWeeks} weeks · {getSessionCount(phase.id)} sessions
-            </span>
-            {pendingChecks && checksInfo.length > 0 && (
-              <span>
-                · {approvedCount}/{checksInfo.length} old movement checks approved
-              </span>
-            )}
-          </div>
-          <h3
-            className="truncate text-lg font-semibold text-slate-900"
-            data-testid={`text-phase-name-${phase.id}`}
-          >
-            {phase.name}
-          </h3>
-          {phase.goal && <p className="line-clamp-3 text-sm text-slate-500">{phase.goal}</p>}
-        </div>
-
-        {(
-          <CardContent className="border-t border-slate-100 bg-slate-50/60 p-4">
-            <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <CalendarDays className="h-4 w-4" /> Weekly schedule (week 1)
-            </h4>
-            {(() => {
-              const schedule = (phase.schedule as any[]) || [];
-              const week1 = schedule.filter((s: any) => s.week === 1);
-              if (week1.length === 0) {
-                return <p className="text-sm text-slate-400 italic">No schedule assigned yet.</p>;
-              }
-              return (
-                <div className="overflow-x-auto">
-                  <div className="grid min-w-[400px] grid-cols-[64px_1fr_1fr] overflow-hidden rounded-lg border border-slate-200">
-                    <div className="p-2 bg-white border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase" />
-                    <div className="p-2 bg-white border-b border-r border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">
-                      AM
-                    </div>
-                    <div className="p-2 bg-white border-b border-slate-200 text-[10px] font-semibold text-slate-400 uppercase text-center">
-                      PM
-                    </div>
-                    {WEEKDAYS.map((day) => {
-                      const amEntries = week1.filter(
-                        (s: any) => s.day === day && (s.slot || "AM") === "AM",
-                      );
-                      const pmEntries = week1.filter((s: any) => s.day === day && s.slot === "PM");
-                      if (amEntries.length === 0 && pmEntries.length === 0) return null;
-                      return [
-                        <div
-                          key={`${day}-label`}
-                          className="p-2 border-b border-r border-slate-100 text-xs font-medium text-slate-600"
-                        >
-                          {day.slice(0, 3)}
-                        </div>,
-                        <div
-                          key={`${day}-am`}
-                          className="p-1.5 border-b border-r border-slate-100 flex flex-wrap gap-1"
-                        >
-                          {amEntries.map((e: any, i: number) => {
-                            const s = allSessions.find((ss: any) => ss.id === e.sessionId);
-                            return s ? (
-                              <Badge
-                                key={i}
-                                variant="outline"
-                                className="border-slate-200 bg-white text-[10px] text-slate-700"
-                              >
-                                {s.name}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>,
-                        <div
-                          key={`${day}-pm`}
-                          className="p-1.5 border-b border-slate-100 flex flex-wrap gap-1"
-                        >
-                          {pmEntries.map((e: any, i: number) => {
-                            const s = allSessions.find((ss: any) => ss.id === e.sessionId);
-                            return s ? (
-                              <Badge
-                                key={i}
-                                variant="outline"
-                                className="border-slate-200 bg-white text-[10px] text-slate-700"
-                              >
-                                {s.name}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>,
-                      ];
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2" data-testid={`videos-${phase.id}`}>
               <div className="order-2 space-y-3">
                 <div>
                   <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -1307,10 +1234,7 @@ export default function AdminClientProfile() {
                   </div>
                 ) : null}
               </div>
-            </div>
-          </CardContent>
-        )}
-      </Card>
+      </div>
     );
   };
 
@@ -1325,7 +1249,7 @@ export default function AdminClientProfile() {
             Clients
           </span>
           <Link
-            href="/app/admin/clients"
+            href="/app/admin/clients?all=1"
             className="text-xs text-slate-500 hover:text-slate-900"
             data-testid="link-all-clients"
           >
@@ -1344,14 +1268,24 @@ export default function AdminClientProfile() {
               }`}
               data-testid={`rail-client-${other.id}`}
             >
-              {resolveUserFullName(other)}
+              <span className="flex items-center justify-between gap-2">
+                <span className="truncate">{resolveUserFullName(other)}</span>
+                {(attentionByClientId.get(other.id) || 0) > 0 ? (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-label="Needs attention" />
+                ) : null}
+              </span>
+              <span
+                className={`block truncate text-[11px] ${other.id === clientId ? "text-slate-300" : "text-slate-400"}`}
+              >
+                {railSubline(other.id)}
+              </span>
             </Link>
           ))}
         </nav>
       </aside>
       <div className="min-w-0 flex-1 space-y-4">
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-3">
-        <Link href="/app/admin/clients" className="lg:hidden">
+        <Link href="/app/admin/clients?all=1" className="lg:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -1380,93 +1314,6 @@ export default function AdminClientProfile() {
           </p>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-9 max-w-[280px] justify-between gap-2 border-slate-200 bg-white"
-                data-testid="button-phase-menu"
-              >
-                <span className="truncate text-sm">
-                  {viewPhase ? viewPhase.name : "No phase yet"}
-                </span>
-                {viewPhase ? (
-                  <span className="shrink-0 text-xs text-slate-400">
-                    {getPhaseDisplayStatus(viewPhase)}
-                  </span>
-                ) : null}
-                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              {orderedPhases.length > 0 ? (
-                <>
-                  <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Phases
-                  </DropdownMenuLabel>
-                  {orderedPhases.map((phase: any) => (
-                    <DropdownMenuItem
-                      key={phase.id}
-                      onSelect={() => {
-                        setViewPhaseId(phase.id);
-                        setActiveTab("programming");
-                      }}
-                      className="flex items-center justify-between gap-3"
-                      data-testid={`menu-phase-${phase.id}`}
-                    >
-                      <span className="truncate">{phase.name}</span>
-                      <span className="shrink-0 text-xs text-slate-400">
-                        {getPhaseDisplayStatus(phase)}
-                      </span>
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                </>
-              ) : null}
-              {viewPhase ? (
-                <>
-                  <DropdownMenuItem asChild data-testid={`button-edit-${viewPhase.id}`}>
-                    <Link href={`/app/admin/clients/${clientId}/builder/${viewPhase.id}`}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      {viewPhase.status === "Completed" ? "View phase" : "Edit phase"}
-                    </Link>
-                  </DropdownMenuItem>
-                  {viewPhase.status === "Waiting for Movement Check" &&
-                  isPhaseReadyToActivate(viewPhase) ? (
-                    <DropdownMenuItem
-                      onSelect={() => setActivateTargetPhase(viewPhase)}
-                      data-testid={`button-activate-${viewPhase.id}`}
-                    >
-                      <Zap className="mr-2 h-4 w-4" /> Activate
-                    </DropdownMenuItem>
-                  ) : null}
-                  {viewPhase.status === "Active" ? (
-                    <DropdownMenuItem
-                      onSelect={() => setFinishTargetPhase(viewPhase)}
-                      data-testid={`button-finish-${viewPhase.id}`}
-                    >
-                      <Archive className="mr-2 h-4 w-4" /> Finish phase
-                    </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem
-                    onSelect={() => setDeleteTargetPhase(viewPhase)}
-                    className="text-red-600 focus:text-red-700"
-                    data-testid={`button-delete-${viewPhase.id}`}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete phase
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              ) : null}
-              <DropdownMenuItem asChild data-testid="button-create-phase">
-                <Link href={`/app/admin/clients/${clientId}/builder/new`}>
-                  <Plus className="mr-2 h-4 w-4" /> New phase
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -1500,26 +1347,22 @@ export default function AdminClientProfile() {
         </TabsList>
 
         <div className="mt-5">
-          <TabsContent value="programming" className="m-0 space-y-4 outline-none">
-            {viewPhase ? (
-              renderPhaseCard(viewPhase)
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
-                <Dumbbell className="mx-auto mb-4 h-12 w-12 text-slate-300" />
-                <h3 className="text-lg font-medium text-slate-900">No phases yet</h3>
-                <p className="mx-auto mb-6 mt-1 max-w-sm text-slate-500">
-                  Build one from scratch or start from a template.
-                </p>
-                <Link href={`/app/admin/clients/${clientId}/builder/new`}>
-                  <Button
-                    className="rounded-full bg-slate-900 text-white hover:bg-slate-800"
-                    data-testid="button-build-phase"
-                  >
-                    Build phase
-                  </Button>
-                </Link>
-              </div>
-            )}
+          <TabsContent value="programming" className="m-0 outline-none">
+            <ClientPlanOverview
+              clientId={clientId as string}
+              firstName={String(clientDisplayName).split(" ")[0] || "client"}
+              activePhase={activePhases[0] ?? null}
+              otherPhases={otherPhasesOrdered}
+              allSessions={allSessions as any[]}
+              workoutLogs={workoutLogs as any[]}
+              checkinsRecent={checkinsRecent}
+              getPhaseDisplayStatus={getPhaseDisplayStatus}
+              isReadyToActivate={isPhaseReadyToActivate}
+              onFinish={setFinishTargetPhase}
+              onDelete={setDeleteTargetPhase}
+              onActivate={setActivateTargetPhase}
+              videosSlot={activePhases[0] ? renderPhaseCard(activePhases[0]) : null}
+            />
           </TabsContent>
 
           <TabsContent value="movement" className="m-0 outline-none">

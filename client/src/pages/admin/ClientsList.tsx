@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   usersQuery,
@@ -97,6 +97,23 @@ export default function AdminClientsList() {
         String(a.name).localeCompare(String(b.name)),
     );
   const inactiveClients = clients.filter((client: any) => client.status !== "Active");
+
+  // The client list lives in the left rail on every client page, so opening
+  // "Clients" goes straight to a client (the last one viewed, else the first).
+  // "?all=1" keeps the full list for adding clients and the inactive ones.
+  const [, setLocation] = useLocation();
+  const showAll =
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("all") === "1";
+  useEffect(() => {
+    if (showAll || loadingUsers || loadingPhases || sessionUser?.role !== "Admin") return;
+    if (activeClients.length === 0) return;
+    let lastId: string | null = null;
+    try {
+      lastId = window.localStorage.getItem("om_last_client");
+    } catch {}
+    const target = activeClients.find((c: any) => c.id === lastId) ?? activeClients[0];
+    setLocation(`/app/admin/clients/${target.id}`, { replace: true });
+  }, [showAll, loadingUsers, loadingPhases, sessionUser?.role, activeClients.length]);
 
   const getClientStatus = (client: any) => {
     if (client.status !== "Active") {

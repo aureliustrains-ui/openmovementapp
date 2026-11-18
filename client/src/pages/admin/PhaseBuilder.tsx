@@ -333,7 +333,14 @@ export default function AdminPhaseBuilder() {
   const [durationWeeks, setDurationWeeks] = useState("4");
   const [localSessions, setLocalSessions] = useState<LocalSession[]>([]);
   const [localSchedule, setLocalSchedule] = useState<ScheduleEntry[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState(1);
+  const [selectedWeek, setSelectedWeek] = useState(() => {
+    try {
+      const w = Number(new URLSearchParams(window.location.search).get("week"));
+      return Number.isInteger(w) && w >= 1 ? w : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [initializedForPhase, setInitializedForPhase] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [movementCheckEnabled, setMovementCheckEnabled] = useState(false);
