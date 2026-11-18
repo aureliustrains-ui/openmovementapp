@@ -1580,7 +1580,7 @@ export default function AdminPhaseBuilder() {
                 <span className="ml-2 text-xs text-slate-500">
                   Goal {goal.trim() ? "set" : "empty"} · Progress update{" "}
                   {movementCheckEnabled ? "on" : "off"} ·{" "}
-                  {[homeIntroVideoUrl, homeGuideVideoUrl].filter((v) => v.trim()).length} of 2 videos
+                  {[homeIntroVideoUrl, homeGuideVideoUrl].filter((v) => v.trim()).length} of 2 starting page videos
                 </span>
               </span>
               <DetailsChevron
@@ -1634,26 +1634,34 @@ export default function AdminPhaseBuilder() {
             <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Home video
+                  Starting page video 1
                 </Label>
+                <p className="text-xs text-slate-400">
+                  Shown at the top of the client's starting page. Good for the general guide on how
+                  the app works.
+                </p>
                 <Input
-                  value={homeIntroVideoUrl}
-                  onChange={(e) => setHomeIntroVideoUrl(e.target.value)}
-                  placeholder="Client home video URL"
+                  value={homeGuideVideoUrl}
+                  onChange={(e) => setHomeGuideVideoUrl(e.target.value)}
+                  placeholder="Paste YouTube, Google Drive, or direct video URL"
                   className="h-9 bg-slate-50"
-                  data-testid="input-phase-home-video"
+                  data-testid="input-phase-guide-video"
                 />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Guide video
+                  Starting page video 2
                 </Label>
+                <p className="text-xs text-slate-400">
+                  Shown on the client's starting page, below video 1. Good for a short welcome or
+                  the focus of this phase.
+                </p>
                 <Input
-                  value={homeGuideVideoUrl}
-                  onChange={(e) => setHomeGuideVideoUrl(e.target.value)}
-                  placeholder="General information video URL"
+                  value={homeIntroVideoUrl}
+                  onChange={(e) => setHomeIntroVideoUrl(e.target.value)}
+                  placeholder="Paste YouTube, Google Drive, or direct video URL"
                   className="h-9 bg-slate-50"
-                  data-testid="input-phase-guide-video"
+                  data-testid="input-phase-home-video"
                 />
               </div>
             </div>
