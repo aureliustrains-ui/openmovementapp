@@ -470,9 +470,6 @@ export function ExerciseLibrary({
                       <div className="truncate text-xs text-slate-500">
                         {[prescription, tags].filter(Boolean).join(" · ") || "No tags yet"}
                       </div>
-                      <div className="truncate text-[11px] text-slate-400">
-                        Added by {isMineItem(item) ? "you" : authorNameOf(item)}
-                      </div>
                     </button>
                     {item.needsVideo ? (
                       <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
