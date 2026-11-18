@@ -43,44 +43,51 @@ export function ReviewSubmissionRow({
   const statusLabel = status === "resubmission_requested" ? "resubmission requested" : status;
 
   return (
-    <div className="p-5 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between hover:bg-slate-50/50 transition-colors" data-testid={testId}>
-      <div className="flex-1 space-y-2">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={`${statusStyles[status]} capitalize`}>
-            {statusLabel}
-          </Badge>
-          {submittedAt ? (
-            <span className="text-xs text-slate-500">
-              {submittedLabel} {new Date(submittedAt).toLocaleDateString()}
-            </span>
+    <div
+      className="grid gap-5 p-5 transition-colors hover:bg-slate-50/50 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] md:items-start"
+      data-testid={testId}
+    >
+      <div className="min-w-0">
+        {videoUrl ? (
+          <InlineVideoPlayer url={videoUrl} sourceType={videoSource} openLinkLabel="Open video" flush />
+        ) : (
+          <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-sm italic text-slate-400">
+            No video submitted
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 space-y-3">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className={`${statusStyles[status]} capitalize`}>
+              {statusLabel}
+            </Badge>
+            {submittedAt ? (
+              <span className="text-xs text-slate-500">
+                {submittedLabel} {new Date(submittedAt).toLocaleDateString()}
+              </span>
+            ) : null}
+          </div>
+          <h4 className="text-lg font-semibold text-slate-900">{exerciseName}</h4>
+          {tags && tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
-        <h4 className="font-semibold text-lg text-slate-900">{exerciseName}</h4>
-        {tags && tags.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        ) : null}
         {note ? (
-          <div className="mt-2 text-sm bg-slate-50 text-slate-800 p-2 rounded-lg border border-slate-100">
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-2 text-sm text-slate-800">
             <span className="font-bold">{noteLabel || "Note"}:</span> {note}
           </div>
         ) : null}
-      </div>
-
-      <div className="w-full md:w-[360px] shrink-0 space-y-3">
-        {videoUrl ? (
-          <InlineVideoPlayer url={videoUrl} sourceType={videoSource} openLinkLabel="Open video" />
-        ) : (
-          <div className="text-sm text-slate-400 italic">No video submitted</div>
-        )}
         {actions}
       </div>
     </div>
