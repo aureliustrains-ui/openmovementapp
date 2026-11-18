@@ -342,9 +342,6 @@ export default function AdminPhaseBuilder() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [templateSaveTarget, setTemplateSaveTarget] = useState<TemplateSaveTarget | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
-  const [sharedEditDecisions, setSharedEditDecisions] = useState<Record<string, "week" | "all">>(
-    {},
-  );
   const [assignSessionTarget, setAssignSessionTarget] = useState<{
     day: string;
     slot: string;
@@ -603,70 +600,13 @@ export default function AdminPhaseBuilder() {
     if (selectedWeek > maxWeek) setSelectedWeek(maxWeek);
   }, [durationWeeks]);
 
+  // Edits always apply to the shared session (all weeks that use it).
+  // To give one week its own version, use the copy icon on that week's schedule chip.
   const updateLocalSession = useCallback(
     (sessionIdx: number, updater: (s: LocalSession) => LocalSession) => {
-      const sourceSession = localSessions[sessionIdx];
-      if (!sourceSession) return;
-
-      const sourceSessionId = sourceSession.dbId || sourceSession.id;
-      const usedThisWeek = localSchedule.some(
-        (entry) => entry.week === selectedWeek && entry.sessionId === sourceSessionId,
-      );
-      const usedInOtherWeeks = localSchedule.some(
-        (entry) => entry.week !== selectedWeek && entry.sessionId === sourceSessionId,
-      );
-
-      const decisionKey = `${selectedWeek}:${sourceSessionId}`;
-      const existingDecision = sharedEditDecisions[decisionKey];
-
-      if (!usedThisWeek || !usedInOtherWeeks || existingDecision === "all") {
-        setLocalSessions((prev) => prev.map((s, i) => (i === sessionIdx ? updater(s) : s)));
-        return;
-      }
-
-      const shouldFork =
-        existingDecision === "week" ||
-        window.confirm(
-          `This session is also used in other weeks.\n\nOK = make Week ${selectedWeek} separate before editing.\nCancel = edit all weeks that use this session.`,
-        );
-
-      setSharedEditDecisions((prev) => ({
-        ...prev,
-        [decisionKey]: shouldFork ? "week" : "all",
-      }));
-
-      if (!shouldFork) {
-        setLocalSessions((prev) => prev.map((s, i) => (i === sessionIdx ? updater(s) : s)));
-        return;
-      }
-
-      const weekSpecificCopy = cloneLocalSession({
-        ...sourceSession,
-        name: `${sourceSession.name || "Session"} W${selectedWeek}`,
-      });
-      const updatedCopy = updater(weekSpecificCopy);
-
-      setLocalSessions((prev) => {
-        const current = prev[sessionIdx];
-        if (!current || (current.dbId || current.id) !== sourceSessionId) return prev;
-        const next = [...prev];
-        next[sessionIdx] = updatedCopy;
-        next.splice(sessionIdx + 1, 0, sourceSession);
-        return next;
-      });
-      setLocalSchedule((prev) =>
-        prev.map((entry) =>
-          entry.week === selectedWeek && entry.sessionId === sourceSessionId
-            ? { ...entry, sessionId: updatedCopy.id }
-            : entry,
-        ),
-      );
-      toast({
-        title: `Week ${selectedWeek} is separate now`,
-        description: `${sourceSession.name || "Session"} was copied before applying your edit.`,
-      });
+      setLocalSessions((prev) => prev.map((s, i) => (i === sessionIdx ? updater(s) : s)));
     },
-    [localSchedule, localSessions, selectedWeek, sharedEditDecisions, toast],
+    [],
   );
 
   const addSession = () => {
@@ -1750,7 +1690,7 @@ export default function AdminPhaseBuilder() {
                                   <button
                                     onClick={() => makeScheduleEntryWeekSpecific(entry)}
                                     className="ml-0.5 rounded-full hover:bg-indigo-200 p-0.5 transition-colors"
-                                    title="Edit this week separately"
+                                    title="Make this week separate (creates a copy for this week only)"
                                   >
                                     <Copy className="h-3 w-3" />
                                   </button>
