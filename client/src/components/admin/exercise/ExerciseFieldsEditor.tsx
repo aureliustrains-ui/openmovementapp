@@ -20,6 +20,7 @@ export type ExerciseEditableFields = {
   additionalInstructions: string;
   repsMode: string;
   qualityPoints: string;
+  whereToStart: string;
   notes: string;
   requiresMovementCheck: boolean;
   enableStructuredLogging: boolean;
@@ -128,6 +129,19 @@ export function ExerciseFieldsEditor({
             </div>
           );
         })}
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-whereToStart`} className={labelClass}>
+          Where to start · for someone new to this · client sees this
+        </Label>
+        <Textarea
+          id={`${idPrefix}-whereToStart`}
+          value={value.whereToStart}
+          onChange={(event) => onChange("whereToStart", event.target.value)}
+          placeholder="e.g. Find the angle where you can do 8 clean reps"
+          className="min-h-[48px] resize-none bg-white text-sm"
+        />
       </div>
 
       <div className="space-y-1">

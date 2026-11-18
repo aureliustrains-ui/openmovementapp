@@ -7,8 +7,8 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 test("client exercise card shows the structured standard and always the Goal", () => {
   const card = read("client/src/components/client/ExerciseStandardDetails.tsx");
   assert.match(card, /data-testid="exercise-standard"/);
-  for (const label of ["Goal", "A rep counts", "A hold counts", "Additional Instructions"]) {
-    assert.ok(card.includes(`"${label}"`), `label ${label}`);
+  for (const label of ["Where to start", "Goal", "A rep counts", "A hold counts", "Additional Instructions"]) {
+    assert.ok(card.includes(label), `label ${label}`);
   }
   assert.doesNotMatch(card, /hasProgression/);
   assert.match(card, /repsMode === "hold" \? "Hold" : "Reps"/);
@@ -16,7 +16,7 @@ test("client exercise card shows the structured standard and always the Goal", (
 
 test("the shared exercise editor has the standard fields", () => {
   const editor = read("client/src/components/admin/exercise/ExerciseFieldsEditor.tsx");
-  for (const key of ["repsMode", "qualityPoints"]) {
+  for (const key of ["repsMode", "qualityPoints", "whereToStart"]) {
     assert.ok(editor.includes(key), key);
   }
 });

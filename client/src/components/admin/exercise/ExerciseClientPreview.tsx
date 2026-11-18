@@ -19,6 +19,7 @@ export function ExerciseClientPreview({
     additionalInstructions?: string;
     repsMode?: string | null;
     qualityPoints?: string | null;
+    whereToStart?: string | null;
     demoUrl?: string;
   };
 }) {

@@ -124,6 +124,7 @@ type Exercise = {
   additionalInstructions: string;
   repsMode: string;
   qualityPoints: string;
+  whereToStart: string;
   demoUrl: string;
   enableStructuredLogging: boolean;
   requiresMovementCheck: boolean;

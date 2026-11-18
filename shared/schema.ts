@@ -117,6 +117,7 @@ export const exerciseTemplates = pgTable("exercise_templates", {
   // Exercise standard shown to clients (what counts as a rep, reps or hold).
   repsMode: text("reps_mode"),
   qualityPoints: text("quality_points"),
+  whereToStart: text("where_to_start"),
   enableStructuredLogging: boolean("enable_structured_logging").notNull().default(false),
   requiresMovementCheck: boolean("requires_movement_check").notNull().default(false),
   // Coach-only library tags (see shared/exerciseFacets.ts). Never copied into client plans.

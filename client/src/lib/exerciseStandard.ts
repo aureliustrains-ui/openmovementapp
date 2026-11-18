@@ -6,6 +6,7 @@
 export const EXERCISE_STANDARD_KEYS = [
   "repsMode",
   "qualityPoints",
+  "whereToStart",
 ] as const;
 
 export type ExerciseStandardKey = (typeof EXERCISE_STANDARD_KEYS)[number];
@@ -14,11 +15,13 @@ export type ExerciseStandardFields = Record<ExerciseStandardKey, string>;
 export const EMPTY_EXERCISE_STANDARD: ExerciseStandardFields = {
   repsMode: "",
   qualityPoints: "",
+  whereToStart: "",
 };
 
 export const EMPTY_EXERCISE_STANDARD_NULL: Record<ExerciseStandardKey, null> = {
   repsMode: null,
   qualityPoints: null,
+  whereToStart: null,
 };
 
 /** Read the standard fields from anything (template, plan exercise, null), as strings. */

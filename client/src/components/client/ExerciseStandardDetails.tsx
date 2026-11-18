@@ -10,6 +10,7 @@ type ExerciseLike = {
   additionalInstructions?: string;
   repsMode?: string | null;
   qualityPoints?: string | null;
+  whereToStart?: string | null;
   demoUrl?: string;
 };
 
@@ -51,6 +52,7 @@ export function ExerciseStandardDetails({
   const clean = (value?: string | null) => (value && value.trim() ? value.trim() : "");
   const repStandardLabel = exercise.repsMode === "hold" ? "A hold counts" : "A rep counts";
   const repStandard = clean(exercise.qualityPoints);
+  const whereToStart = clean(exercise.whereToStart);
   const textBlocks = [
     { label: "Goal", value: clean(exercise.goal) },
     { label: "Additional Instructions", value: clean(exercise.additionalInstructions) },
@@ -89,6 +91,13 @@ export function ExerciseStandardDetails({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {whereToStart && (
+        <div className={`${offset}text-center`} data-testid="exercise-where-to-start">
+          <span className="text-xs font-semibold text-slate-500">Where to start: </span>
+          <span className="text-xs text-slate-600 whitespace-pre-wrap">{whereToStart}</span>
         </div>
       )}
 
