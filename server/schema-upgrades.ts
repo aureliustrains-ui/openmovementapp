@@ -31,6 +31,26 @@ export const ADDITIVE_SCHEMA_UPGRADES: ReadonlyArray<{ name: string; sql: string
     name: "exercise_templates.quality_points",
     sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS quality_points text`,
   },
+  {
+    name: "progress_reports.blocks_training",
+    sql: `ALTER TABLE progress_reports ADD COLUMN IF NOT EXISTS blocks_training boolean NOT NULL DEFAULT false`,
+  },
+  {
+    name: "progress_reports.stage",
+    sql: `ALTER TABLE progress_reports ADD COLUMN IF NOT EXISTS stage text`,
+  },
+  {
+    name: "progress_report_items.reported_load",
+    sql: `ALTER TABLE progress_report_items ADD COLUMN IF NOT EXISTS reported_load text`,
+  },
+  {
+    name: "progress_report_items.reported_reps",
+    sql: `ALTER TABLE progress_report_items ADD COLUMN IF NOT EXISTS reported_reps text`,
+  },
+  {
+    name: "progress_report_items.quality_rating",
+    sql: `ALTER TABLE progress_report_items ADD COLUMN IF NOT EXISTS quality_rating integer`,
+  },
 ];
 
 /** New tables, created only if missing. */

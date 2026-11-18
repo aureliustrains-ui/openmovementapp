@@ -10,6 +10,8 @@ import {
   sessionTemplatesQuery,
   phaseTemplatesQuery,
   useUpdatePhase,
+  useCreateClientProgressReport,
+  clientProgressReportsQuery,
   useCreatePhase,
   useCreateSession,
   useUpdateSession,
@@ -310,6 +312,7 @@ export default function AdminPhaseBuilder() {
   const { data: sessionTemplates = [] } = useQuery(sessionTemplatesQuery);
   const { data: phaseTemplates = [] } = useQuery(phaseTemplatesQuery);
   const updatePhase = useUpdatePhase();
+  const createClientProgressReport = useCreateClientProgressReport();
   const createPhase = useCreatePhase();
   const createSession = useCreateSession();
   const updateSession = useUpdateSession();
@@ -1139,7 +1142,52 @@ export default function AdminPhaseBuilder() {
 
       const checkedExercises = collectMovementCheckExercises(localSessions);
 
-      if (checkedExercises.length > 0) {
+      const hasLegacyMovementChecks = parseMovementChecks(existingPhase?.movementChecks).length > 0;
+
+      if (checkedExercises.length > 0 && !hasLegacyMovementChecks) {
+        // One system: exercises flagged "movement check" become a progress report that
+        // blocks training until you approve the videos.
+        await updatePhase.mutateAsync({ id: phaseId, status: "Active" });
+
+        const clientId = params?.clientId;
+        let requested = 0;
+        if (clientId) {
+          const existingReports = (await queryClient.fetchQuery({
+            ...clientProgressReportsQuery(clientId),
+            staleTime: 0,
+          })) as Array<{
+            phaseId: string;
+            blocksTraining?: boolean;
+            items?: Array<{ exerciseId: string }>;
+          }>;
+          const alreadyRequested = new Set(
+            existingReports
+              .filter((report) => report.phaseId === phaseId && report.blocksTraining)
+              .flatMap((report) => (report.items || []).map((item) => item.exerciseId)),
+          );
+          const toRequest = checkedExercises
+            .map((exercise) => exercise.id)
+            .filter((exerciseId) => !alreadyRequested.has(exerciseId));
+          if (toRequest.length > 0) {
+            await createClientProgressReport.mutateAsync({
+              clientId,
+              phaseId,
+              exerciseIds: toRequest,
+              blocksTraining: true,
+              stage: "start",
+            });
+            requested = toRequest.length;
+          }
+        }
+
+        toast({
+          title: "Phase Published",
+          description:
+            requested > 0
+              ? `Phase is live. The client must send ${requested} video(s) before training (see the Progress tab).`
+              : "Phase is now active and visible to the client.",
+        });
+      } else if (checkedExercises.length > 0) {
         const movementChecks = buildMovementChecksForPublish(
           checkedExercises,
           existingPhase?.movementChecks,

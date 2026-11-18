@@ -8,6 +8,7 @@ import {
   useCreateWeeklyCheckin,
   useCreateClientVideoUploadTarget,
   uploadClientVideoToObjectStorage,
+  myActivePhaseProgressReportsQuery,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Link } from "wouter";
@@ -44,7 +45,11 @@ import {
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { isScheduleEntryCompleted } from "@/lib/clientSchedule";
-import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
+import {
+  findBlockingProgressReport,
+  progressReportHref,
+  resolveClientSessionEntryDestination,
+} from "@/lib/sessionEntry";
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { VideoUploadField } from "@/components/client/VideoUploadField";
 
@@ -85,6 +90,11 @@ export default function ClientMyPhase() {
     ...weeklyCheckinsCurrentOrDueQuery,
     enabled: !!sessionUser && !isCheckinReadOnly,
   });
+  const { data: phaseProgressReports = [] } = useQuery({
+    ...myActivePhaseProgressReportsQuery,
+    enabled: !!sessionUser && !impersonating && isClientSession,
+  });
+  const blockingReport = findBlockingProgressReport(phaseProgressReports as any[]);
   const updatePhase = useUpdatePhase();
   const createWeeklyCheckin = useCreateWeeklyCheckin();
   const createClientVideoUploadTarget = useCreateClientVideoUploadTarget();
@@ -511,6 +521,7 @@ export default function ClientMyPhase() {
 
   const buildSessionUrl = (sessionId: string, day: string, slotVal: string) => {
     return resolveClientSessionEntryDestination({
+      blockingReportHref: blockingReport?.id ? progressReportHref(blockingReport.id) : null,
       phase: currentPhase as any,
       sessionId,
       week: selectedWeek,

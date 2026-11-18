@@ -598,14 +598,18 @@ export function useCreateClientProgressReport() {
       clientId,
       phaseId,
       exerciseIds,
+      blocksTraining,
+      stage,
     }: {
       clientId: string;
       phaseId?: string;
       exerciseIds: string[];
+      blocksTraining?: boolean;
+      stage?: "start" | "middle" | "end" | "other";
     }) =>
       fetchApi(`/api/clients/${clientId}/progress-reports`, {
         method: "POST",
-        body: JSON.stringify({ phaseId, exerciseIds }),
+        body: JSON.stringify({ phaseId, exerciseIds, blocksTraining, stage }),
       }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["clientProgressReports", vars.clientId] });
@@ -671,6 +675,8 @@ export function useSubmitProgressReport() {
         submissionMimeType?: string | null;
         submissionOriginalFilename?: string | null;
         submissionNote?: string | null;
+        reportedLoad?: string | null;
+        reportedReps?: string | null;
       }>;
     }) =>
       fetchApi(`/api/progress-reports/${reportId}/submit`, {
@@ -698,15 +704,21 @@ export function useReviewProgressReportItem() {
       itemId,
       decision,
       feedbackNote,
+      qualityRating,
     }: {
       reportId: string;
       itemId: string;
       decision: "approve" | "resubmit";
       feedbackNote?: string | null;
+      qualityRating?: number | null;
     }) =>
       fetchApi(`/api/progress-reports/${reportId}/items/${itemId}/review`, {
         method: "PATCH",
-        body: JSON.stringify({ decision, feedbackNote: feedbackNote ?? null }),
+        body: JSON.stringify({
+          decision,
+          feedbackNote: feedbackNote ?? null,
+          ...(qualityRating !== undefined ? { qualityRating } : {}),
+        }),
       }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["progressReport", vars.reportId] });

@@ -10,7 +10,11 @@ import {
 import { useAuth } from "@/lib/auth";
 import { pickDefaultVisiblePhase } from "@/lib/clientPhase";
 import { getWeekSchedulePreview } from "@/lib/clientSchedule";
-import { resolveClientSessionEntryDestination } from "@/lib/sessionEntry";
+import {
+  findBlockingProgressReport,
+  progressReportHref,
+  resolveClientSessionEntryDestination,
+} from "@/lib/sessionEntry";
 import { getTrainingWeekLifecycle, type TrainingScheduleEntry } from "@/lib/trainingWeek";
 import { resolveUserFirstName } from "@/lib/userDisplayName";
 import { ActionRequiredCard } from "@/components/client/ActionRequiredCard";
@@ -89,8 +93,11 @@ export default function ClientHome() {
   const weekProgressPercent =
     weekEntries.length > 0 ? Math.round((weekDoneCount / weekEntries.length) * 100) : 0;
   const nextItemKey = weekEntries.find((item) => !item.isCompleted)?.instanceKey ?? null;
+  const blockingReport = findBlockingProgressReport(activePhaseProgressReports as any[]);
+  const blockingReportHref = blockingReport?.id ? progressReportHref(blockingReport.id) : null;
   const destinationFor = (item: (typeof weekEntries)[number]) =>
     resolveClientSessionEntryDestination({
+      blockingReportHref,
       phase: progressPhase as any,
       sessionId: item.session.id,
       week: item.entry.week,
@@ -100,6 +107,7 @@ export default function ClientHome() {
 
   const nextSessionDestination = weekSchedulePreview.nextScheduleItem
     ? resolveClientSessionEntryDestination({
+        blockingReportHref,
         phase: progressPhase as any,
         sessionId: weekSchedulePreview.nextScheduleItem.session.id,
         week: weekSchedulePreview.nextScheduleItem.entry.week,

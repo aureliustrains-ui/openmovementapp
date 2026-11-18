@@ -187,6 +187,11 @@ export default function AdminClientProfile() {
     itemId: string;
   } | null>(null);
   const [progressApproveNote, setProgressApproveNote] = useState("");
+  const [progressQuality, setProgressQuality] = useState<number | null>(null);
+  const [progressBlocksTraining, setProgressBlocksTraining] = useState(false);
+  const [progressStage, setProgressStage] = useState<"start" | "middle" | "end" | "other">(
+    "other",
+  );
   const [progressResubmitFeedback, setProgressResubmitFeedback] = useState("");
   const [submittingProgressReview, setSubmittingProgressReview] = useState(false);
   const [phaseHomeVideoDrafts, setPhaseHomeVideoDrafts] = useState<Record<string, string>>({});
@@ -686,7 +691,11 @@ export default function AdminClientProfile() {
         clientId,
         phaseId: activePhaseForProgress.id,
         exerciseIds: selectedProgressExerciseIds,
+        blocksTraining: progressBlocksTraining,
+        stage: progressStage,
       });
+      setProgressBlocksTraining(false);
+      setProgressStage("other");
       toast({
         title: "Progress report requested",
         description: "The client will now see this request in their dashboard.",
@@ -706,6 +715,7 @@ export default function AdminClientProfile() {
   const handleOpenApproveProgressReportItem = (reportId: string, itemId: string) => {
     setSelectedProgressReview({ reportId, itemId });
     setProgressApproveNote("");
+    setProgressQuality(null);
     setIsProgressApproveOpen(true);
   };
 
@@ -724,6 +734,7 @@ export default function AdminClientProfile() {
         itemId: selectedProgressReview.itemId,
         decision: "approve",
         feedbackNote: progressApproveNote.trim() || null,
+        qualityRating: progressQuality,
       });
       toast({
         title: "Progress item approved",
@@ -1796,6 +1807,15 @@ export default function AdminClientProfile() {
                               videoSource={item.submissionSource}
                               note={reviewNote}
                               noteLabel={noteLabel}
+                              tags={[
+                                item.blocksTraining ? "Required before training" : null,
+                                item.stage && item.stage !== "other" ? `${item.stage}` : null,
+                                item.reportedLoad ? `Load ${item.reportedLoad}` : null,
+                                item.reportedReps ? `${item.reportedReps} reps` : null,
+                                typeof item.qualityRating === "number"
+                                  ? `Form ${item.qualityRating}/5`
+                                  : null,
+                              ].filter((tag): tag is string => Boolean(tag))}
                               actions={
                                 canReview ? (
                                   <div className="flex gap-2">
@@ -2637,6 +2657,43 @@ export default function AdminClientProfile() {
                 Active phase:{" "}
                 <span className="font-semibold text-slate-900">{activePhaseForProgress.name}</span>
               </div>
+              <div className="flex flex-wrap items-center gap-2" data-testid="progress-stage-picker">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  When
+                </span>
+                {(["start", "middle", "end", "other"] as const).map((stage) => (
+                  <button
+                    key={stage}
+                    type="button"
+                    onClick={() => setProgressStage(stage)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium capitalize ${
+                      progressStage === stage
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {stage}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={progressBlocksTraining}
+                  onChange={(event) => setProgressBlocksTraining(event.target.checked)}
+                  data-testid="checkbox-progress-blocks-training"
+                />
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Client must send this before training
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Sessions stay locked until you approve every video (this replaces the old
+                    movement check).
+                  </div>
+                </div>
+              </label>
               {selectableProgressExercises.length === 0 ? (
                 <div className="text-sm text-slate-500">
                   No exercises found in the active phase.
@@ -2805,6 +2862,26 @@ export default function AdminClientProfile() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Movement quality (optional)</Label>
+              <div className="flex gap-2" data-testid="progress-quality-picker">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setProgressQuality(progressQuality === value ? null : value)}
+                    className={`h-9 w-9 rounded-full border text-sm font-medium ${
+                      progressQuality === value
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">1 = poor form, 5 = excellent form.</p>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="progress-approve-note">Feedback Note (optional)</Label>
               <Textarea

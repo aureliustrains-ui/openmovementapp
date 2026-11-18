@@ -9,6 +9,7 @@ import {
   useCreateWorkoutLog,
   useCreateSessionCheckin,
   sessionCheckinsMeQuery,
+  myActivePhaseProgressReportsQuery,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,11 @@ import {
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { normalizeVideoSource } from "@/lib/video";
-import { requiresMovementCheckBeforeSession } from "@/lib/sessionEntry";
+import {
+  findBlockingProgressReport,
+  progressReportHref,
+  requiresMovementCheckBeforeSession,
+} from "@/lib/sessionEntry";
 import { formatReps, formatSets } from "@/lib/prescription";
 
 type SetLog = { weight: string; reps: string };
@@ -81,7 +86,13 @@ export default function ClientSessionView() {
 
   const session = allSessions.find((s: any) => s.id === sessionId);
   const phase = allPhases.find((p: any) => p.id === session?.phaseId);
-  const movementCheckBlocked = requiresMovementCheckBeforeSession(phase as any);
+  const { data: phaseProgressReports = [] } = useQuery({
+    ...myActivePhaseProgressReportsQuery,
+    enabled: sessionUser?.role === "Client" && !impersonating,
+  });
+  const blockingReport = findBlockingProgressReport(phaseProgressReports as any[]);
+  const movementCheckBlocked =
+    requiresMovementCheckBeforeSession(phase as any) || Boolean(blockingReport);
   const redirectedForMovementCheckRef = useRef(false);
 
   const { data: workoutLogs = [] } = useQuery({
@@ -121,11 +132,13 @@ export default function ClientSessionView() {
     }
     redirectedForMovementCheckRef.current = true;
     toast({
-      title: "Movement check required",
-      description: "Complete your movement check before starting this session.",
+      title: blockingReport ? "Progress report required" : "Movement check required",
+      description: blockingReport
+        ? "Send your videos first, then you can start this session."
+        : "Complete your movement check before starting this session.",
     });
-    setLocation("/app/client/my-phase");
-  }, [isLoading, movementCheckBlocked, phase, session, setLocation, toast]);
+    setLocation(blockingReport?.id ? progressReportHref(blockingReport.id) : "/app/client/my-phase");
+  }, [blockingReport, isLoading, movementCheckBlocked, phase, session, setLocation, toast]);
 
   if (isLoading) {
     return (

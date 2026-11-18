@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ChevronLeft, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +36,9 @@ type ProgressReportItem = {
   reviewStatus?: "requested" | "submitted" | "approved" | "resubmission_requested";
   feedbackNote?: string | null;
   reviewedAt?: string | null;
+  reportedLoad?: string | null;
+  reportedReps?: string | null;
+  qualityRating?: number | null;
 };
 
 type ProgressReport = {
@@ -44,10 +48,18 @@ type ProgressReport = {
   status: "requested" | "submitted" | "approved" | "resubmission_requested" | "reviewed";
   createdAt: string;
   submittedAt: string | null;
+  blocksTraining?: boolean;
+  stage?: string | null;
   items: ProgressReportItem[];
 };
 
-type DraftMap = Record<string, { submissionLink: string; submissionNote: string }>;
+type DraftEntry = {
+  submissionLink: string;
+  submissionNote: string;
+  reportedLoad: string;
+  reportedReps: string;
+};
+type DraftMap = Record<string, DraftEntry>;
 type FileDraftMap = Record<string, File | null>;
 
 const ALLOWED_CLIENT_VIDEO_TYPES = new Set([
@@ -95,6 +107,8 @@ export default function ClientProgressReport() {
       nextDraft[item.id] = {
         submissionLink: item.submissionLink || "",
         submissionNote: item.submissionNote || "",
+        reportedLoad: item.reportedLoad || "",
+        reportedReps: item.reportedReps || "",
       };
     }
     setDraft(nextDraft);
@@ -133,6 +147,16 @@ export default function ClientProgressReport() {
     return map;
   }, [typedReport?.phaseId, allSessions]);
 
+  const updateDraft = (itemId: string, patch: Partial<DraftEntry>) =>
+    setDraft((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...({ submissionLink: "", submissionNote: "", reportedLoad: "", reportedReps: "" } as DraftEntry),
+        ...prev[itemId],
+        ...patch,
+      },
+    }));
+
   const handleSubmit = async () => {
     if (!typedReport || !reportId || readOnly || submitProgressReport.isPending) return;
 
@@ -145,10 +169,14 @@ export default function ClientProgressReport() {
         submissionMimeType?: string | null;
         submissionOriginalFilename?: string | null;
         submissionNote?: string | null;
+        reportedLoad?: string | null;
+        reportedReps?: string | null;
       }> = [];
 
       for (const item of typedReport.items) {
         const submissionNote = (draft[item.id]?.submissionNote || "").trim() || null;
+        const reportedLoad = (draft[item.id]?.reportedLoad || "").trim() || null;
+        const reportedReps = (draft[item.id]?.reportedReps || "").trim() || null;
         const fallbackLink = (draft[item.id]?.submissionLink || "").trim();
         const selectedFile = draftFiles[item.id];
 
@@ -177,6 +205,8 @@ export default function ClientProgressReport() {
             submissionMimeType: selectedFile.type || null,
             submissionOriginalFilename: selectedFile.name || null,
             submissionNote,
+            reportedLoad,
+            reportedReps,
           });
           continue;
         }
@@ -189,6 +219,8 @@ export default function ClientProgressReport() {
           submissionSource: "link",
           submissionLink: fallbackLink,
           submissionNote,
+          reportedLoad,
+          reportedReps,
         });
       }
 
@@ -302,13 +334,7 @@ export default function ClientProgressReport() {
                           setDraftFiles((prev) => ({ ...prev, [item.id]: nextFile }))
                         }
                         onLinkChange={(nextLink) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            [item.id]: {
-                              submissionLink: nextLink,
-                              submissionNote: prev[item.id]?.submissionNote || "",
-                            },
-                          }))
+                          updateDraft(item.id, { submissionLink: nextLink })
                         }
                         disabled={readOnly}
                         fileTestId={`input-submission-video-file-${item.id}`}
@@ -316,6 +342,36 @@ export default function ClientProgressReport() {
                       />
                     </div>
 
+                    <p className="text-xs text-slate-500">
+                      3-4 clean reps are enough. Film from the side or at an angle where we can see
+                      your whole body.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor={`submission-load-${item.id}`}>Load (optional)</Label>
+                        <Input
+                          id={`submission-load-${item.id}`}
+                          placeholder="e.g. 10 kg, bodyweight"
+                          value={draft[item.id]?.reportedLoad || ""}
+                          onChange={(event) =>
+                            updateDraft(item.id, { reportedLoad: event.target.value })
+                          }
+                          disabled={readOnly}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`submission-reps-${item.id}`}>Reps done (optional)</Label>
+                        <Input
+                          id={`submission-reps-${item.id}`}
+                          placeholder="e.g. 8"
+                          value={draft[item.id]?.reportedReps || ""}
+                          onChange={(event) =>
+                            updateDraft(item.id, { reportedReps: event.target.value })
+                          }
+                          disabled={readOnly}
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <Label htmlFor={`submission-note-${item.id}`}>Achieved parameters</Label>
                       <Textarea
@@ -323,13 +379,7 @@ export default function ClientProgressReport() {
                         placeholder="e.g. 2 more reps at same load, cleaner form, better control"
                         value={draft[item.id]?.submissionNote || ""}
                         onChange={(event) =>
-                          setDraft((prev) => ({
-                            ...prev,
-                            [item.id]: {
-                              submissionLink: prev[item.id]?.submissionLink || "",
-                              submissionNote: event.target.value,
-                            },
-                          }))
+                          updateDraft(item.id, { submissionNote: event.target.value })
                         }
                         disabled={readOnly}
                       />

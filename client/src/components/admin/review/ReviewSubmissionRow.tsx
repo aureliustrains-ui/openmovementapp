@@ -15,6 +15,8 @@ type Props = {
   note?: string | null;
   actions?: ReactNode;
   testId?: string;
+  /** Short facts shown as small tags, e.g. "Must send before training", "10 kg", "8 reps", "Form 4/5". */
+  tags?: string[];
 };
 
 const statusStyles: Record<ReviewStatus, string> = {
@@ -36,6 +38,7 @@ export function ReviewSubmissionRow({
   note,
   actions,
   testId,
+  tags,
 }: Props) {
   const statusLabel = status === "resubmission_requested" ? "resubmission requested" : status;
 
@@ -53,6 +56,18 @@ export function ReviewSubmissionRow({
           ) : null}
         </div>
         <h4 className="font-semibold text-lg text-slate-900">{exerciseName}</h4>
+        {tags && tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {note ? (
           <div className="mt-2 text-sm bg-slate-50 text-slate-800 p-2 rounded-lg border border-slate-100">
             <span className="font-bold">{noteLabel || "Note"}:</span> {note}

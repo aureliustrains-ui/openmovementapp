@@ -275,6 +275,8 @@ export const createProgressReportSchema = z
   .object({
     phaseId: z.string().min(1).max(64).optional(),
     exerciseIds: z.array(z.string().min(1).max(120)).min(1).max(100),
+    blocksTraining: z.boolean().optional(),
+    stage: z.enum(["start", "middle", "end", "other"]).optional(),
   })
   .strict();
 
@@ -300,6 +302,8 @@ export const submitProgressReportSchema = z
             submissionMimeType: z.string().max(120).nullable().optional(),
             submissionOriginalFilename: z.string().max(255).nullable().optional(),
             submissionNote: z.string().max(2000).nullable().optional(),
+            reportedLoad: z.string().max(60).nullable().optional(),
+            reportedReps: z.string().max(60).nullable().optional(),
           })
           .strict()
           .refine(
@@ -320,6 +324,7 @@ export const reviewProgressReportItemSchema = z
   .object({
     decision: z.enum(["approve", "resubmit"]),
     feedbackNote: z.string().max(2000).nullable().optional(),
+    qualityRating: z.number().int().min(1).max(5).nullable().optional(),
   })
   .strict();
 

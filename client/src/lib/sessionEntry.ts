@@ -14,7 +14,26 @@ type SessionEntryInput = {
   day: string;
   slot: string;
   movementCheckHref?: string;
+  /** Set when a progress report that blocks training is still open. */
+  blockingReportHref?: string | null;
 };
+
+type ReportLike = { id?: string; status?: string | null; blocksTraining?: boolean | null };
+
+/** The first progress report that still blocks training (not yet approved), if any. */
+export function findBlockingProgressReport<T extends ReportLike>(
+  reports: T[] | null | undefined,
+): T | null {
+  if (!Array.isArray(reports)) return null;
+  return (
+    reports.find((report) => report?.blocksTraining === true && report.status !== "approved") ??
+    null
+  );
+}
+
+export function progressReportHref(reportId: string): string {
+  return `/app/client/progress-reports/${reportId}`;
+}
 
 function isApprovedMovementCheckStatus(value: unknown): boolean {
   return typeof value === "string" && value.trim().toLowerCase() === "approved";
@@ -47,6 +66,9 @@ export function buildClientSessionHref(input: {
 }
 
 export function resolveClientSessionEntryDestination(input: SessionEntryInput): SessionEntryDestination {
+  if (input.blockingReportHref) {
+    return { kind: "movement-check", href: input.blockingReportHref };
+  }
   if (requiresMovementCheckBeforeSession(input.phase)) {
     return {
       kind: "movement-check",

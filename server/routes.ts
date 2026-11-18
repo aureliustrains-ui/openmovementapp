@@ -2389,8 +2389,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             itemId: string;
             reportId: string;
             reportStatus: string;
+            blocksTraining: boolean;
+            stage: string | null;
             createdAt: string;
             submittedAt: string | null;
+            reportedLoad: string | null;
+            reportedReps: string | null;
+            qualityRating: number | null;
             exerciseId: string;
             exerciseName: string;
             submissionSource: string | null;
@@ -2423,8 +2428,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             itemId: item.id,
             reportId: report.id,
             reportStatus: report.status,
+            blocksTraining: report.blocksTraining === true,
+            stage: report.stage ?? null,
             createdAt: report.createdAt,
             submittedAt: report.submittedAt,
+            reportedLoad: item.reportedLoad ?? null,
+            reportedReps: item.reportedReps ?? null,
+            qualityRating: item.qualityRating ?? null,
             exerciseId: item.exerciseId,
             exerciseName: item.exerciseName,
             submissionSource: item.submissionSource || (hasObjectKey ? "upload" : "link"),
@@ -2503,6 +2513,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         createdBy: authUser.id,
         createdAt: new Date().toISOString(),
         submittedAt: null,
+        blocksTraining: parsed.data.blocksTraining === true,
+        stage: parsed.data.stage ?? null,
       });
 
       await Promise.all(
@@ -2520,6 +2532,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             reviewStatus: "requested",
             feedbackNote: null,
             reviewedAt: null,
+            reportedLoad: null,
+            reportedReps: null,
+            qualityRating: null,
           }),
         ),
       );
@@ -2722,9 +2737,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             : null,
           submissionLink: submissionLink || null,
           submissionNote: itemSubmission.submissionNote?.trim() || null,
+          reportedLoad: itemSubmission.reportedLoad?.trim() || null,
+          reportedReps: itemSubmission.reportedReps?.trim() || null,
           reviewStatus: "submitted",
           feedbackNote: null,
           reviewedAt: null,
+          qualityRating: null,
         });
       }
 
@@ -2780,6 +2798,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         reviewStatus,
         feedbackNote: feedback,
         reviewedAt: nowIso,
+        ...(parsed.data.qualityRating !== undefined
+          ? { qualityRating: parsed.data.qualityRating }
+          : {}),
       });
 
       const refreshedItems = await storage.getProgressReportItems(report.id);

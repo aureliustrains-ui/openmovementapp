@@ -227,6 +227,11 @@ export const progressReports = pgTable("progress_reports", {
   createdBy: varchar("created_by", { length: 64 }).notNull(),
   createdAt: text("created_at").notNull(),
   submittedAt: text("submitted_at"),
+  // When true the client cannot start sessions until every item is approved
+  // (this replaces the old separate "movement check").
+  blocksTraining: boolean("blocks_training").notNull().default(false),
+  // Where in the phase this report sits: "start" | "middle" | "end" | "other"
+  stage: text("stage"),
 });
 
 export const progressReportItems = pgTable(
@@ -247,6 +252,10 @@ export const progressReportItems = pgTable(
     reviewStatus: text("review_status").notNull().default("requested"),
     feedbackNote: text("feedback_note"),
     reviewedAt: text("reviewed_at"),
+    // Optional numbers, so form can be compared with strength over time.
+    reportedLoad: text("reported_load"),
+    reportedReps: text("reported_reps"),
+    qualityRating: integer("quality_rating"),
   },
   (table) => ({
     progressReportItemsReportExerciseUnique: uniqueIndex(
