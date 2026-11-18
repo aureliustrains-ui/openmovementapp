@@ -45,31 +45,21 @@ test("template category tabs remain clickable and preserve explicit tab context"
     "Active category should be passed into the shared library pane",
   );
   assert.ok(
-    paneSource.includes("categoryItems") && paneSource.includes("onSelectCategory"),
-    "Template library pane should render categories and tree in one sidebar surface",
-  );
-  assert.ok(
     source.includes("buildTemplatesUrl(activeTab, folderId)"),
     "Template navigation should preserve tab/folder location in URL state",
   );
 });
 
-test("template library sidebar uses category-as-root tree without Uncategorized", () => {
+test("folders are navigated from the content area and the exercise chip bar, not a sidebar", () => {
   const source = fs.readFileSync(libraryPanePath, "utf8");
+  const exerciseSource = fs.readFileSync(
+    path.resolve(serverDir, "../client/src/components/admin/exercise/ExerciseLibrary.tsx"),
+    "utf8",
+  );
 
-  assert.ok(source.includes("rootNodeLabel"));
-  assert.ok(
-    source.includes("const rootFolders = childrenByParent.get(folderParentKey(null)) || [];"),
-  );
-  assert.ok(source.includes("setRootExpanded((prev) => !prev)"));
-  assert.ok(source.includes("rootFolders.map((rootFolder) => renderFolderTree(rootFolder, 1))"));
-  assert.equal(source.includes('truncate font-medium">{allLabel}'), false);
+  assert.ok(exerciseSource.includes("<FolderChipBar"));
   assert.ok(source.includes("selectedFolderPath.map"));
-  assert.equal(
-    source.includes("Uncategorized"),
-    false,
-    "Uncategorized should not be rendered as a visible sidebar item/folder",
-  );
+  assert.equal(source.includes("Uncategorized"), false);
   assert.equal(source.includes("__uncategorized__"), false);
 });
 

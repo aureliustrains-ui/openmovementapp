@@ -32,6 +32,7 @@ import {
   ExerciseFacetFilterBar,
   isFacetFilterActive,
 } from "@/components/admin/ExerciseFacetFilterBar";
+import { FolderChipBar } from "@/components/admin/FolderChipBar";
 import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
 import {
   ExerciseFieldsEditor,
@@ -361,71 +362,9 @@ export function ExerciseLibrary({
 
   return (
     <div
-      className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(300px,1fr)_minmax(380px,1.15fr)]"
+      className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(300px,1fr)_minmax(380px,1fr)]"
       data-testid="exercise-library"
     >
-      {/* Left: folders by movement pattern (a dropdown on narrow windows) */}
-      <aside className="hidden space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-14 lg:max-h-[calc(100vh-5rem)] lg:block lg:self-start lg:overflow-y-auto">
-        <div className="space-y-1">
-          <button
-            type="button"
-            className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
-              selectedFolderId === null ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
-            }`}
-            onClick={() => onSelectFolder(null)}
-          >
-            <span className="flex items-center gap-2">
-              <Folder className="h-4 w-4" />
-              All exercises
-            </span>
-            <span className={`text-xs ${selectedFolderId === null ? "text-slate-300" : "text-slate-400"}`}>
-              {exercises.length}
-            </span>
-          </button>
-          {(childrenByParent.get("__root__") || []).map((folder) => renderFolder(folder, 0))}
-        </div>
-
-        <div className="flex flex-wrap gap-1 border-t border-slate-100 pt-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onCreateFolder("New folder", selectedFolderId)}
-          >
-            <FolderPlus className="mr-1 h-3.5 w-3.5" />
-            {selectedFolder ? "Subfolder" : "Folder"}
-          </Button>
-          {selectedFolder ? (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setRenamingFolderId(selectedFolder.id);
-                  setRenameDraft(selectedFolder.name);
-                }}
-              >
-                <Pencil className="mr-1 h-3.5 w-3.5" />
-                Rename
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700"
-                onClick={() => onDeleteFolder(selectedFolder.id)}
-              >
-                <Trash2 className="mr-1 h-3.5 w-3.5" />
-                Delete
-              </Button>
-            </>
-          ) : null}
-        </div>
-      </aside>
-
       {/* Middle: search, filters, list */}
       <section className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex items-center gap-2">
@@ -449,24 +388,16 @@ export function ExerciseLibrary({
             New
           </Button>
         </div>
-        <div className="lg:hidden">
-          <Select
-            value={selectedFolderId ?? "__all__"}
-            onValueChange={(value) => onSelectFolder(value === "__all__" ? null : value)}
-          >
-            <SelectTrigger className="h-9 text-sm" aria-label="Folder">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All exercises ({exercises.length})</SelectItem>
-              {sortedFolders.map((folder) => (
-                <SelectItem key={folder.id} value={folder.id}>
-                  {folderPath(folder.id)} ({countInFolder(folder.id)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <FolderChipBar
+          folders={sortedFolders}
+          selectedFolderId={selectedFolderId}
+          onSelect={onSelectFolder}
+          countFor={(folderId) => (folderId ? countInFolder(folderId) : exercises.length)}
+          allLabel="All"
+          onCreate={onCreateFolder}
+          onRename={onRenameFolder}
+          onDelete={onDeleteFolder}
+        />
         <ExerciseFacetFilterBar value={facetFilter} onChange={setFacetFilter} />
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>

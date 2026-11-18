@@ -514,73 +514,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[290px_minmax(0,1fr)]">
-      <Card className="rounded-2xl border-slate-200 shadow-sm">
-        <CardContent className="space-y-3 p-4">
-          {categoryItems && categoryItems.length > 0 && onSelectCategory ? (
-            <div className="space-y-2">
-              {categoryItems.map((category) => {
-                const Icon = category.icon;
-                const isActiveCategory = category.id === activeCategoryId;
-                const rootFolders = childrenByParent.get(folderParentKey(null)) || [];
-                return (
-                  <div key={category.id} className="space-y-1">
-                    <button
-                      type="button"
-                      className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm",
-                        isActiveCategory
-                          ? "bg-slate-900 text-white"
-                          : "text-slate-700 hover:bg-slate-100",
-                      )}
-                      onClick={() => {
-                        if (isActiveCategory) {
-                          setRootExpanded((prev) => !prev);
-                          onSelectFolder(null);
-                          return;
-                        }
-                        onSelectCategory(category.id);
-                        onSelectFolder(null);
-                        setRootExpanded(true);
-                      }}
-                      onDragOver={(event) => {
-                        if (!isActiveCategory) return;
-                        event.preventDefault();
-                      }}
-                      onDrop={(event) => {
-                        if (!isActiveCategory) return;
-                        event.preventDefault();
-                        handleDropToFolder(null);
-                      }}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="inline-flex h-4 w-4 items-center justify-center text-slate-300">
-                          {isActiveCategory && rootFolders.length > 0 ? (
-                            rootExpanded ? (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronRight className="h-3.5 w-3.5" />
-                            )
-                          ) : (
-                            <span className="block h-3.5 w-3.5" />
-                          )}
-                        </span>
-                        {Icon ? <Icon className="h-4 w-4" /> : null}
-                        <span className="font-medium">{category.label}</span>
-                      </span>
-                      <span className="text-xs opacity-80">{category.count}</span>
-                    </button>
-                    {isActiveCategory ? renderFolderNavigator(true) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            renderFolderNavigator(false)
-          )}
-        </CardContent>
-      </Card>
-
+    <div className="grid grid-cols-1 gap-4">
       <Card className="rounded-2xl border-slate-200 shadow-sm">
         <CardContent className="space-y-4 p-4 md:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
