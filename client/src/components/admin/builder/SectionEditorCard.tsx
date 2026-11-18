@@ -256,7 +256,15 @@ export function SectionEditorCard({
                 onDropExerciseFromSection?.(payload.sectionId, payload.exerciseId, exIdx);
               }}
             >
-              <div className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-1.5 px-2 py-1.5">
+              <div
+                className="grid cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-1.5 px-2 py-1.5 hover:bg-slate-50/70"
+                onClick={(event) => {
+                  // Clicking anywhere on the row opens it, except on its own controls.
+                  const target = event.target as HTMLElement;
+                  if (target.closest("input, button, select, [role='combobox'], [role='checkbox'], label, [draggable='true']")) return;
+                  toggleExercise(ex.id);
+                }}
+              >
                 <span
                   className="cursor-grab rounded p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-500 active:cursor-grabbing"
                   draggable

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
   ArrowUp,
@@ -16,6 +15,7 @@ import {
   VideoOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -54,14 +54,9 @@ type ExerciseItem = {
   [key: string]: any;
 };
 
-type CategoryNavItem = { id: string; label: string; count: number; icon?: LucideIcon };
-
 type Props = {
   exercises: ExerciseItem[];
   folders: TemplateFolder[];
-  categories: CategoryNavItem[];
-  activeCategoryId: string;
-  onSelectCategory: (id: string) => void;
   selectedFolderId: string | null;
   onSelectFolder: (folderId: string | null) => void;
   isLoading?: boolean;
@@ -99,9 +94,6 @@ function prescriptionSummary(item: ExerciseItem): string {
 export function ExerciseLibrary({
   exercises,
   folders,
-  categories,
-  activeCategoryId,
-  onSelectCategory,
   selectedFolderId,
   onSelectFolder,
   isLoading = false,
@@ -127,8 +119,20 @@ export function ExerciseLibrary({
     }
   });
 
+  const [wide, setWide] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px)");
+    const onChange = () => setWide(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const selectExercise = (id: string | null) => {
     setSelectedId(id);
+    setSheetOpen(Boolean(id));
     try {
       if (id) window.localStorage.setItem(SELECTED_KEY, id);
       else window.localStorage.removeItem(SELECTED_KEY);
@@ -332,37 +336,37 @@ export function ExerciseLibrary({
 
   const selectedFolder = selectedFolderId ? foldersById.get(selectedFolderId) : undefined;
 
+  const renderDetail = (item: ExerciseItem) => (
+    <ExerciseDetailPane
+      key={item.id}
+      item={item}
+      folders={sortedFolders}
+      folderPath={folderPath}
+      onMove={(folderId) => onMoveExercise(item.id, folderId)}
+      onDuplicate={async () => {
+        const createdId = await onDuplicateExercise(item);
+        if (typeof createdId === "string") selectExercise(createdId);
+      }}
+      onDelete={async () => {
+        const deleted = await onDeleteExercise(item);
+        if (deleted !== false) selectExercise(null);
+      }}
+    />
+  );
+  const emptyDetail = (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+      Pick an exercise to see it the way your client does and to edit it.
+    </div>
+  );
+
   return (
     <div
       className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(300px,1fr)_minmax(380px,1.15fr)]"
       data-testid="exercise-library"
     >
-      {/* Left: template types + folders by movement pattern */}
-      <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-14 lg:max-h-[calc(100vh-5rem)] lg:self-start lg:overflow-y-auto">
-        <nav className="space-y-0.5">
-          {categories.map((category) => {
-            const Icon = category.icon;
-            const active = category.id === activeCategoryId;
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => onSelectCategory(category.id)}
-                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
-                  active ? "bg-slate-100 font-semibold text-slate-900" : "text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  {Icon ? <Icon className="h-4 w-4" /> : null}
-                  {category.label}
-                </span>
-                <span className="text-xs text-slate-400">{category.count}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="space-y-1 border-t border-slate-100 pt-3">
+      {/* Left: folders by movement pattern (a dropdown on narrow windows) */}
+      <aside className="hidden space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-14 lg:max-h-[calc(100vh-5rem)] lg:block lg:self-start lg:overflow-y-auto">
+        <div className="space-y-1">
           <button
             type="button"
             className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
@@ -444,6 +448,24 @@ export function ExerciseLibrary({
             <Plus className="mr-1 h-4 w-4" />
             New
           </Button>
+        </div>
+        <div className="lg:hidden">
+          <Select
+            value={selectedFolderId ?? "__all__"}
+            onValueChange={(value) => onSelectFolder(value === "__all__" ? null : value)}
+          >
+            <SelectTrigger className="h-9 text-sm" aria-label="Folder">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All exercises ({exercises.length})</SelectItem>
+              {sortedFolders.map((folder) => (
+                <SelectItem key={folder.id} value={folder.id}>
+                  {folderPath(folder.id)} ({countInFolder(folder.id)})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <ExerciseFacetFilterBar value={facetFilter} onChange={setFacetFilter} />
         <div className="flex items-center justify-between text-xs text-slate-500">
@@ -527,30 +549,18 @@ export function ExerciseLibrary({
         )}
       </section>
 
-      {/* Right: the selected exercise, as the client sees it, plus its editor */}
-      <section className="min-w-0 lg:col-span-2 xl:col-span-1">
-        {selected ? (
-          <ExerciseDetailPane
-            key={selected.id}
-            item={selected}
-            folders={sortedFolders}
-            folderPath={folderPath}
-            onMove={(folderId) => onMoveExercise(selected.id, folderId)}
-            onDuplicate={async () => {
-              const createdId = await onDuplicateExercise(selected);
-              if (typeof createdId === "string") selectExercise(createdId);
-            }}
-            onDelete={async () => {
-              const deleted = await onDeleteExercise(selected);
-              if (deleted !== false) selectExercise(null);
-            }}
-          />
-        ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            Pick an exercise to see it the way your client does and to edit it.
-          </div>
-        )}
-      </section>
+      {/* Right: the selected exercise, as the client sees it, plus its editor.
+          Inline on wide windows, in a slide-in panel on narrower ones. */}
+      {wide ? (
+        <section className="min-w-0">{selected ? renderDetail(selected) : emptyDetail}</section>
+      ) : (
+        <Sheet open={sheetOpen && Boolean(selected)} onOpenChange={setSheetOpen}>
+          <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-xl">
+            <SheetTitle className="sr-only">Exercise</SheetTitle>
+            {selected ? <div className="pt-6">{renderDetail(selected)}</div> : null}
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

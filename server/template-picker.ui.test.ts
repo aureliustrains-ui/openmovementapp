@@ -51,7 +51,7 @@ test("shared exercise editor renders compact rows with expandable details", () =
   assert.ok(source.includes("expandedExerciseIds"));
   assert.ok(source.includes("button-expand-exercise-"));
   assert.ok(source.includes("data-testid={`exercise-details-${ex.id}`}"));
-  assert.ok(source.includes("grid grid-cols-[auto_auto_minmax(0,1fr)_auto]"));
+  assert.ok(source.includes("grid-cols-[auto_auto_minmax(0,1fr)_auto]"));
   assert.ok(source.includes("Move to section"));
   assert.ok(source.includes("Duplicate exercise"));
   assert.ok(source.includes("application/openmovement-builder"));
@@ -165,7 +165,6 @@ test("exercise templates can be created from the top action without opening the 
   assert.ok(librarySource.includes("renderTemplateHeader"));
   assert.equal(librarySource.includes("window.prompt"), false);
   assert.equal(librarySource.includes("All folders"), false);
-  assert.equal(librarySource.includes("cursor-pointer"), false);
   // Exercises: created from the library's "New" button and opened in the detail pane right away.
   const exerciseLibrarySource = fs.readFileSync(
     path.resolve(serverDir, "../client/src/components/admin/exercise/ExerciseLibrary.tsx"),

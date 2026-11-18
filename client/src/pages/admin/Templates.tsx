@@ -699,15 +699,45 @@ export default function AdminTemplatesPage() {
         </div>
       ) : null}
 
+      <nav
+        className="flex gap-1 overflow-x-auto border-b border-slate-200"
+        aria-label="Template types"
+        data-testid="templates-tabbar"
+      >
+        {categories.map((category) => {
+          const Icon = category.icon;
+          const active = category.tab === activeTab;
+          return (
+            <button
+              key={category.tab}
+              type="button"
+              onClick={() => setActiveTabWithPersistence(category.tab, { resetFolder: true })}
+              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm ${
+                active
+                  ? "border-slate-900 font-semibold text-slate-900"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+              data-testid={`templates-tab-${category.tab}`}
+            >
+              <Icon className="h-4 w-4" />
+              {category.label}
+              <span className="text-xs font-normal text-slate-400">{category.count}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       {activeTab === "phases" ? (
         <TemplateLibraryPane
           rootLabel="Phases"
-          categoryItems={categories.map((category) => ({
-            id: category.tab,
-            label: category.label,
-            count: category.count,
-            icon: category.icon,
-          }))}
+          categoryItems={categories
+            .filter((category) => category.tab === activeTab)
+            .map((category) => ({
+              id: category.tab,
+              label: category.label,
+              count: category.count,
+              icon: category.icon,
+            }))}
           activeCategoryId={activeTab}
           onSelectCategory={(categoryId) => {
             if (isTemplateTab(categoryId))
@@ -742,12 +772,14 @@ export default function AdminTemplatesPage() {
       {activeTab === "sessions" ? (
         <TemplateLibraryPane
           rootLabel="Sessions"
-          categoryItems={categories.map((category) => ({
-            id: category.tab,
-            label: category.label,
-            count: category.count,
-            icon: category.icon,
-          }))}
+          categoryItems={categories
+            .filter((category) => category.tab === activeTab)
+            .map((category) => ({
+              id: category.tab,
+              label: category.label,
+              count: category.count,
+              icon: category.icon,
+            }))}
           activeCategoryId={activeTab}
           onSelectCategory={(categoryId) => {
             if (isTemplateTab(categoryId))
@@ -782,12 +814,14 @@ export default function AdminTemplatesPage() {
       {activeTab === "sections" ? (
         <TemplateLibraryPane
           rootLabel="Sections"
-          categoryItems={categories.map((category) => ({
-            id: category.tab,
-            label: category.label,
-            count: category.count,
-            icon: category.icon,
-          }))}
+          categoryItems={categories
+            .filter((category) => category.tab === activeTab)
+            .map((category) => ({
+              id: category.tab,
+              label: category.label,
+              count: category.count,
+              icon: category.icon,
+            }))}
           activeCategoryId={activeTab}
           onSelectCategory={(categoryId) => {
             if (isTemplateTab(categoryId))
@@ -830,17 +864,6 @@ export default function AdminTemplatesPage() {
         <ExerciseLibrary
           exercises={exerciseTemplates as any[]}
           folders={exerciseFolders}
-          categories={categories.map((category) => ({
-            id: category.tab,
-            label: category.label,
-            count: category.count,
-            icon: category.icon,
-          }))}
-          activeCategoryId={activeTab}
-          onSelectCategory={(categoryId) => {
-            if (isTemplateTab(categoryId))
-              setActiveTabWithPersistence(categoryId, { resetFolder: true });
-          }}
           selectedFolderId={selectedFolderId}
           onSelectFolder={setSelectedFolderForActiveTab}
           isLoading={pageLoading}

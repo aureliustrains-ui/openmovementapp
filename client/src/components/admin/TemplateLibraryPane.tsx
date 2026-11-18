@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ArrowDown,
   ArrowUp,
@@ -214,6 +214,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
   filtersActive = false,
   filterItem,
 }: TemplateLibraryPaneProps<TItem>) {
+  const [, setLocation] = useLocation();
   const rootNodeLabel = rootLabel ?? allLabel;
   const [search, setSearch] = useState("");
   const [rootExpanded, setRootExpanded] = useState(true);
@@ -738,7 +739,13 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                             onClick={
                               rowMode && renderTemplateDetails
                                 ? () => toggleTemplateExpanded(item.id)
-                                : undefined
+                                : !rowMode
+                                  ? (event) => {
+                                      // The whole card opens the template, not just the small button.
+                                      if ((event.target as HTMLElement).closest("button, a, input")) return;
+                                      setLocation(getTemplateOpenHref(item));
+                                    }
+                                  : undefined
                             }
                             className={
                               rowMode
@@ -748,7 +755,7 @@ export function TemplateLibraryPane<TItem extends TemplateListItem>({
                                       ? "grid-cols-[minmax(0,1fr)_auto]"
                                       : "grid-cols-[minmax(0,1fr)_auto]",
                                   )
-                                : "space-y-3"
+                                : "cursor-pointer space-y-3"
                             }
                           >
                             <div className="min-w-0">
