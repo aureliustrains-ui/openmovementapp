@@ -32,19 +32,13 @@ export function CoachNoteBox({ clientId, disabled }: { clientId: string; disable
   return (
     <Card className="rounded-2xl border-slate-200 shadow-sm" data-testid="coach-note-box">
       <CardContent className="space-y-3 p-5">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">What's on your mind?</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            A question, something that felt off, a win. I read everything and get back to you on
-            WhatsApp.
-          </p>
-        </div>
+        <h2 className="text-base font-semibold text-slate-900">What's on your mind?</h2>
         {sent ? (
           <div
             className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700"
             data-testid="coach-note-sent"
           >
-            Got it, thank you. It's saved on your page and I'll get back to you on WhatsApp.
+            Sent, thank you.
             <button
               type="button"
               onClick={() => setSent(false)}
@@ -58,7 +52,7 @@ export function CoachNoteBox({ clientId, disabled }: { clientId: string; disable
             <Textarea
               value={text}
               onChange={(event) => setText(event.target.value.slice(0, 2000))}
-              placeholder="Write here…"
+              placeholder="A question about the schedule, an exercise or the plan? Something too hard or too easy?"
               className="min-h-[84px] resize-none"
               disabled={disabled}
               data-testid="input-coach-note"
