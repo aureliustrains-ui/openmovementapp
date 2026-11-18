@@ -230,7 +230,7 @@ export function ExerciseLibrary({
   // ---- list ------------------------------------------------------------------------------
   const normalizedSearch = search.trim().toLowerCase();
   const filtersActive = isFacetFilterActive(facetFilter);
-  const searchingAll = normalizedSearch.length > 0 || filtersActive;
+  const searchingAll = normalizedSearch.length > 0 || filtersActive || authorFilter !== "all";
 
   // One chip per other person who has added exercises: first name, or the full name when two
   // people share a first name.
