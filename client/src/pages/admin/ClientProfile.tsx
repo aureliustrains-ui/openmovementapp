@@ -52,6 +52,7 @@ import {
   Activity,
   ShieldCheck,
   MoreHorizontal,
+  ChevronDown,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Link } from "wouter";
@@ -63,6 +64,14 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -196,7 +205,7 @@ export default function AdminClientProfile() {
   const [phaseHomeVideoDrafts, setPhaseHomeVideoDrafts] = useState<Record<string, string>>({});
   const [phaseGuideVideoDrafts, setPhaseGuideVideoDrafts] = useState<Record<string, string>>({});
   const [savingPhaseVideoId, setSavingPhaseVideoId] = useState<string | null>(null);
-  const [expandedPhaseIds, setExpandedPhaseIds] = useState<Set<string>>(new Set());
+  const [viewPhaseId, setViewPhaseId] = useState<string | null>(null);
 
   const { data: chatMessages = [], isLoading: isChatLoading } = useQuery({
     ...messagesQuery(clientId || ""),
@@ -230,7 +239,7 @@ export default function AdminClientProfile() {
     ...(clientId
       ? clientProgressReportsGroupedQuery(clientId)
       : clientProgressReportsGroupedQuery("")),
-    enabled: !!clientId && activeTab === "progress-report",
+    enabled: !!clientId && (activeTab === "progress-report" || activeTab === "checkins"),
   });
   const { data: notificationSummary } = useQuery({
     ...(clientId
@@ -276,6 +285,14 @@ export default function AdminClientProfile() {
   const draftPhases = clientPhases.filter((p: any) => p.status === "Draft");
   const completedPhases = clientPhases.filter((p: any) => p.status === "Completed");
   const activePhaseForProgress = activePhases[0];
+  const orderedPhases = [
+    ...activePhases,
+    ...pendingPhases,
+    ...draftPhases,
+    ...[...completedPhases].reverse(),
+  ];
+  const viewPhase =
+    orderedPhases.find((p: any) => p.id === viewPhaseId) ?? orderedPhases[0] ?? null;
   const progressPhaseSessions = allSessions.filter(
     (session: any) => session.phaseId === activePhaseForProgress?.id,
   );
@@ -931,29 +948,88 @@ export default function AdminClientProfile() {
     };
   }, [notificationSummary]);
 
-  const togglePhaseDetails = (phaseId: string) => {
-    setExpandedPhaseIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(phaseId)) next.delete(phaseId);
-      else next.add(phaseId);
-      return next;
-    });
-  };
-
   const switchableClients = (allUsers as any[])
     .filter((u) => u.role === "Client" && u.status === "Active")
     .sort((a, b) => resolveUserFullName(a).localeCompare(resolveUserFullName(b)));
+
+  const clientSummary = useMemo(() => {
+    if (!client) return "";
+    const first = String(resolveUserFullName(client)).split(" ")[0] || "This client";
+    const parts: string[] = [];
+    const phase = activePhaseForProgress;
+    const logs = (workoutLogs as any[]).filter((l: any) => !phase || l.phaseId === phase.id);
+    const instances = new Set(logs.map((l: any) => String(l.instanceId || "")).filter(Boolean));
+    const dates = logs.map((l: any) => String(l.date || "")).filter(Boolean).sort();
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+    const lastLog = lastDate ? logs.find((l: any) => l.date === lastDate) : null;
+    const weekMatch = /^w(\d+)_/.exec(String(lastLog?.instanceId || ""));
+    if (phase) {
+      const week = weekMatch ? `week ${weekMatch[1]} of ${phase.durationWeeks}` : `${phase.durationWeeks} weeks`;
+      parts.push(
+        `${first} is on ${phase.name} (${week}) and has logged ${instances.size} session${instances.size === 1 ? "" : "s"}${lastDate ? `, the latest on ${lastDate}` : ""}.`,
+      );
+    } else {
+      parts.push(`${first} has no active phase right now.`);
+    }
+    const byKey = Object.fromEntries(readinessSummaryCards.map((c) => [c.key, c]));
+    const readiness = [
+      byKey.effort ? `effort ${byKey.effort.primary}` : null,
+      byKey.recovery ? `recovery ${byKey.recovery.primary}` : null,
+      byKey.stress ? `stress ${byKey.stress.primary}` : null,
+    ].filter((v) => v && !String(v).includes("—"));
+    if (readiness.length > 0) {
+      parts.push(`Latest check-in: ${readiness.join(", ")}.`);
+    } else {
+      parts.push("No check-ins to show yet.");
+    }
+    const items = (progressReportGroupsData as any[]).flatMap((g: any) => g.items || []);
+    if (items.length > 0) {
+      const waiting = items.filter((i: any) => i.reviewStatus === "submitted").length;
+      const open = items.filter(
+        (i: any) => !i.reviewStatus || i.reviewStatus === "requested" || i.reviewStatus === "pending",
+      ).length;
+      const bits = [
+        waiting > 0 ? `${waiting} waiting for your review` : null,
+        open > 0 ? `${open} not sent yet` : null,
+      ].filter(Boolean);
+      parts.push(
+        `${items.length} progress update item${items.length === 1 ? "" : "s"} in total${bits.length ? `: ${bits.join(", ")}` : ", all reviewed"}.`,
+      );
+    }
+    if (adminNotificationSummary.unreadChatCount > 0) {
+      parts.push(
+        `${adminNotificationSummary.unreadChatCount} unread message${adminNotificationSummary.unreadChatCount === 1 ? "" : "s"} from ${first}.`,
+      );
+    }
+    return parts.join(" ");
+  }, [
+    client,
+    activePhaseForProgress,
+    workoutLogs,
+    readinessSummaryCards,
+    progressReportGroupsData,
+    adminNotificationSummary.unreadChatCount,
+  ]);
+
+  const hasLegacyMovementData =
+    adminNotificationSummary.movementAttentionCount > 0 ||
+    pendingPhases.length > 0 ||
+    clientPhases.some((p: any) => Array.isArray(p.movementChecks) && p.movementChecks.length > 0);
 
   const navItems = [
     { value: "programming", label: "Plan", icon: Dumbbell, count: 0 },
     { value: "checkins", label: "Recaps", icon: ClipboardList, count: 0 },
     { value: "structured-logs", label: "Notes & Logs", icon: BarChart, count: 0 },
-    {
-      value: "movement",
-      label: "Movement (old)",
-      icon: Activity,
-      count: adminNotificationSummary.movementAttentionCount,
-    },
+    ...(hasLegacyMovementData
+      ? [
+          {
+            value: "movement",
+            label: "Old movement checks",
+            icon: Activity,
+            count: adminNotificationSummary.movementAttentionCount,
+          },
+        ]
+      : []),
     {
       value: "progress-report",
       label: "Progress",
@@ -1000,7 +1076,6 @@ export default function AdminClientProfile() {
       ? guideVideoDraftTrimmed
       : storedGuideVideoUrl;
     const isSavingHomeVideo = savingPhaseVideoId === phase.id;
-    const isExpanded = expandedPhaseIds.has(phase.id);
 
     return (
       <Card
@@ -1010,102 +1085,37 @@ export default function AdminClientProfile() {
         }`}
         data-testid={`card-phase-${phase.id}`}
       >
-        <div className="flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <div className="mb-1.5 flex flex-wrap items-center gap-2">
-              <Badge
-                variant="outline"
-                className={`h-6 rounded-md px-2 text-[11px] font-semibold ${statusColor}`}
-                data-testid={`badge-status-${phase.id}`}
-              >
-                {displayStatus}
-              </Badge>
-              <span className="text-xs text-slate-500">{phase.durationWeeks} weeks</span>
-              <span className="text-xs text-slate-500">{getSessionCount(phase.id)} sessions</span>
-              {pendingChecks && checksInfo.length > 0 && (
-                <span className="text-xs font-medium text-slate-700">
-                  {approvedCount}/{checksInfo.length} checks approved
-                </span>
-              )}
-            </div>
-            <h3
-              className="truncate text-lg font-semibold text-slate-900"
-              data-testid={`text-phase-name-${phase.id}`}
-            >
-              {phase.name}
-            </h3>
-            {phase.goal && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{phase.goal}</p>}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-md px-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              onClick={() => togglePhaseDetails(phase.id)}
-              data-testid={`button-phase-details-${phase.id}`}
-            >
-              <MoreHorizontal className="mr-1.5 h-4 w-4" />
-              Details
-            </Button>
-            <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 rounded-md bg-white"
-                data-testid={`button-edit-${phase.id}`}
-              >
-                <Pencil className="mr-1.5 h-4 w-4" /> Edit
-              </Button>
-            </Link>
-            {ready && (
-              <Button
-                size="sm"
-                className="h-8 rounded-md bg-slate-900 text-white hover:bg-slate-800"
-                onClick={() => setActivateTargetPhase(phase)}
-                data-testid={`button-activate-${phase.id}`}
-              >
-                <Zap className="mr-1.5 h-4 w-4" /> Activate
-              </Button>
-            )}
-            {pendingChecks && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 cursor-not-allowed rounded-md border-slate-200 text-slate-400 opacity-70"
-                disabled
-                data-testid={`button-activate-disabled-${phase.id}`}
-                title="All movement checks must be approved before activating"
-              >
-                <Zap className="mr-1.5 h-4 w-4" /> Activate
-              </Button>
-            )}
-            {phase.status === "Active" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 rounded-md border-slate-200 text-slate-600 hover:bg-slate-50"
-                onClick={() => setFinishTargetPhase(phase)}
-                data-testid={`button-finish-${phase.id}`}
-              >
-                <Archive className="mr-1.5 h-4 w-4" /> Finish
-              </Button>
-            )}
-            <Button
+        <div className="flex flex-col gap-1 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <Badge
               variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-md border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-              onClick={() => setDeleteTargetPhase(phase)}
-              data-testid={`button-delete-${phase.id}`}
+              className={`h-5 rounded-md px-2 text-[11px] font-semibold ${statusColor}`}
+              data-testid={`badge-status-${phase.id}`}
             >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+              {displayStatus}
+            </Badge>
+            <span>
+              {phase.durationWeeks} weeks · {getSessionCount(phase.id)} sessions
+            </span>
+            {pendingChecks && checksInfo.length > 0 && (
+              <span>
+                · {approvedCount}/{checksInfo.length} old movement checks approved
+              </span>
+            )}
           </div>
+          <h3
+            className="truncate text-lg font-semibold text-slate-900"
+            data-testid={`text-phase-name-${phase.id}`}
+          >
+            {phase.name}
+          </h3>
+          {phase.goal && <p className="line-clamp-3 text-sm text-slate-500">{phase.goal}</p>}
         </div>
 
-        {isExpanded ? (
+        {(
           <CardContent className="border-t border-slate-100 bg-slate-50/60 p-4">
             <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <CalendarDays className="h-4 w-4" /> Week 1 Schedule
+              <CalendarDays className="h-4 w-4" /> Weekly schedule (week 1)
             </h4>
             {(() => {
               const schedule = (phase.schedule as any[]) || [];
@@ -1178,10 +1188,16 @@ export default function AdminClientProfile() {
             })()}
 
             <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 xl:grid-cols-2">
-              <div className="space-y-3">
-                <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Home video
-                </h5>
+              <div className="order-2 space-y-3">
+                <div>
+                  <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Starting page video 2
+                  </h5>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Shown on the client's starting page, below video 1. Good for a short welcome or
+                    the focus of this phase.
+                  </p>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={homeVideoDraft}
@@ -1226,16 +1242,22 @@ export default function AdminClientProfile() {
                     <InlineVideoPlayer
                       url={previewVideoUrl}
                       testId={`preview-home-video-${phase.id}`}
-                      openLinkLabel="Open intro video"
+                      openLinkLabel="Open starting page video 2"
                     />
                   </div>
                 ) : null}
               </div>
 
-              <div className="space-y-3">
-                <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Guide video
-                </h5>
+              <div className="order-1 space-y-3">
+                <div>
+                  <h5 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Starting page video 1
+                  </h5>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Shown at the top of the client's starting page. Good for the general guide on how
+                    the app works.
+                  </p>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={guideVideoDraft}
@@ -1280,136 +1302,175 @@ export default function AdminClientProfile() {
                     <InlineVideoPlayer
                       url={previewGuideVideoUrl}
                       testId={`preview-guide-video-${phase.id}`}
-                      openLinkLabel="Open guide video"
+                      openLinkLabel="Open starting page video 1"
                     />
                   </div>
                 ) : null}
               </div>
             </div>
           </CardContent>
-        ) : null}
+        )}
       </Card>
     );
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in">
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <Link href="/app/admin/clients">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 rounded-full border border-slate-200 bg-white"
-                data-testid="button-back-clients"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
+    <div className="flex items-start gap-6 animate-in fade-in">
+      <aside
+        className="sticky top-4 hidden max-h-[calc(100vh-2rem)] w-52 shrink-0 overflow-y-auto lg:block"
+        data-testid="client-rail"
+      >
+        <div className="mb-2 flex items-center justify-between px-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Clients
+          </span>
+          <Link
+            href="/app/admin/clients"
+            className="text-xs text-slate-500 hover:text-slate-900"
+            data-testid="link-all-clients"
+          >
+            All
+          </Link>
+        </div>
+        <nav className="space-y-0.5">
+          {switchableClients.map((other: any) => (
+            <Link
+              key={other.id}
+              href={`/app/admin/clients/${other.id}`}
+              className={`block truncate rounded-md px-2 py-1.5 text-sm ${
+                other.id === clientId
+                  ? "bg-slate-900 font-medium text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+              data-testid={`rail-client-${other.id}`}
+            >
+              {resolveUserFullName(other)}
             </Link>
-            <div className="flex min-w-0 items-center gap-4">
-              <Avatar className="h-12 w-12 border border-slate-200">
-                <AvatarImage src={client.avatar} />
-                <AvatarFallback className="bg-slate-100 text-lg text-slate-700">
-                  {(clientDisplayName || "U").charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <h1
-                  className="truncate text-xl font-semibold tracking-tight text-slate-900"
-                  data-testid="text-client-profile-name"
-                >
-                  {clientDisplayName}
-                </h1>
-                <p className="mt-0.5 truncate text-sm text-slate-500">{client.email}</p>
-              </div>
-            </div>
-            {switchableClients.length > 1 ? (
-              <Select value={clientId} onValueChange={(id) => setLocation(`/app/admin/clients/${id}`)}>
-                <SelectTrigger
-                  className="h-9 w-[150px] shrink-0 border-slate-200 bg-white text-sm"
-                  aria-label="Switch client"
-                  data-testid="select-switch-client"
-                >
-                  <SelectValue placeholder="Switch client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {switchableClients.map((other: any) => (
-                    <SelectItem key={other.id} value={other.id}>
-                      {resolveUserFullName(other)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-          </div>
+          ))}
+        </nav>
+      </aside>
+      <div className="min-w-0 flex-1 space-y-4">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-3">
+        <Link href="/app/admin/clients" className="lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            data-testid="button-back-clients"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <Avatar className="h-9 w-9 border border-slate-200">
+          <AvatarImage src={client.avatar} />
+          <AvatarFallback className="bg-slate-100 text-sm text-slate-700">
+            {(clientDisplayName || "U").charAt(0)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <h1
+            className="truncate text-lg font-semibold leading-tight tracking-tight text-slate-900"
+            data-testid="text-client-profile-name"
+          >
+            {clientDisplayName}
+          </h1>
+          <p className="truncate text-xs text-slate-500">
+            {client.email}
+            {client.status !== "Active" ? ` · ${client.status}` : ""}
+          </p>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <Badge
-              variant="outline"
-              className={
-                client.status === "Active"
-                  ? "border-green-200 bg-green-50 text-green-700"
-                  : "border-slate-200 bg-slate-50 text-slate-600"
-              }
-            >
-              {client.status}
-            </Badge>
-            <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
-              {clientPhases.length} phases
-            </Badge>
-            {draftPhases.length > 0 ? (
-              <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                {draftPhases.length} draft{draftPhases.length === 1 ? "" : "s"}
-              </Badge>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 rounded-md border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={() => {
-                if (client) {
-                  impersonate(client);
-                  setLocation("/app/client/home");
-                }
-              }}
-              data-testid="button-impersonate"
-              disabled={client.status !== "Active"}
-            >
-              <Repeat className="mr-2 h-4 w-4" /> Impersonate
-            </Button>
-          </div>
+        <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-9 max-w-[280px] justify-between gap-2 border-slate-200 bg-white"
+                data-testid="button-phase-menu"
+              >
+                <span className="truncate text-sm">
+                  {viewPhase ? viewPhase.name : "No phase yet"}
+                </span>
+                {viewPhase ? (
+                  <span className="shrink-0 text-xs text-slate-400">
+                    {getPhaseDisplayStatus(viewPhase)}
+                  </span>
+                ) : null}
+                <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {orderedPhases.length > 0 ? (
+                <>
+                  <DropdownMenuLabel className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Phases
+                  </DropdownMenuLabel>
+                  {orderedPhases.map((phase: any) => (
+                    <DropdownMenuItem
+                      key={phase.id}
+                      onSelect={() => {
+                        setViewPhaseId(phase.id);
+                        setActiveTab("programming");
+                      }}
+                      className="flex items-center justify-between gap-3"
+                      data-testid={`menu-phase-${phase.id}`}
+                    >
+                      <span className="truncate">{phase.name}</span>
+                      <span className="shrink-0 text-xs text-slate-400">
+                        {getPhaseDisplayStatus(phase)}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+              {viewPhase ? (
+                <>
+                  <DropdownMenuItem asChild data-testid={`button-edit-${viewPhase.id}`}>
+                    <Link href={`/app/admin/clients/${clientId}/builder/${viewPhase.id}`}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      {viewPhase.status === "Completed" ? "View phase" : "Edit phase"}
+                    </Link>
+                  </DropdownMenuItem>
+                  {viewPhase.status === "Waiting for Movement Check" &&
+                  isPhaseReadyToActivate(viewPhase) ? (
+                    <DropdownMenuItem
+                      onSelect={() => setActivateTargetPhase(viewPhase)}
+                      data-testid={`button-activate-${viewPhase.id}`}
+                    >
+                      <Zap className="mr-2 h-4 w-4" /> Activate
+                    </DropdownMenuItem>
+                  ) : null}
+                  {viewPhase.status === "Active" ? (
+                    <DropdownMenuItem
+                      onSelect={() => setFinishTargetPhase(viewPhase)}
+                      data-testid={`button-finish-${viewPhase.id}`}
+                    >
+                      <Archive className="mr-2 h-4 w-4" /> Finish phase
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem
+                    onSelect={() => setDeleteTargetPhase(viewPhase)}
+                    className="text-red-600 focus:text-red-700"
+                    data-testid={`button-delete-${viewPhase.id}`}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete phase
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+              <DropdownMenuItem asChild data-testid="button-create-phase">
+                <Link href={`/app/admin/clients/${clientId}/builder/new`}>
+                  <Plus className="mr-2 h-4 w-4" /> New phase
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {adminNotificationSummary.totalAttentionCount > 0 ? (
-        <Card className="rounded-xl border-slate-200 bg-white shadow-sm">
-          <CardContent className="flex flex-wrap items-center gap-2 p-3">
-            <span className="text-sm font-semibold text-slate-900">Needs review</span>
-            <Badge className="border-none bg-slate-900 text-white">
-              {adminNotificationSummary.totalAttentionCount}
-            </Badge>
-            {adminNotificationSummary.unreadChatCount > 0 ? (
-              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                Chat {adminNotificationSummary.unreadChatCount}
-              </Badge>
-            ) : null}
-            {adminNotificationSummary.movementAttentionCount > 0 ? (
-              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                Movement {adminNotificationSummary.movementAttentionCount}
-              </Badge>
-            ) : null}
-            {adminNotificationSummary.progressAttentionCount > 0 ? (
-              <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-700">
-                Progress {adminNotificationSummary.progressAttentionCount}
-              </Badge>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-5 rounded-none border-b border-slate-200 bg-transparent p-0">
           {navItems.map((item) => {
             const Icon = item.icon;
             const testId =
@@ -1424,13 +1485,12 @@ export default function AdminClientProfile() {
               <TabsTrigger
                 key={item.value}
                 value={item.value}
-                className="h-9 rounded-lg px-3 text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                className="-mb-px h-10 rounded-none border-b-2 border-transparent bg-transparent px-0.5 text-slate-500 shadow-none data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:shadow-none"
                 data-testid={testId}
               >
-                <Icon className="mr-1.5 h-4 w-4" />
                 {item.label}
                 {item.count > 0 ? (
-                  <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-slate-700 px-1.5 py-0.5 text-[11px] font-semibold text-white data-[state=active]:bg-white data-[state=active]:text-slate-900">
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
                     {item.count}
                   </span>
                 ) : null}
@@ -1440,171 +1500,24 @@ export default function AdminClientProfile() {
         </TabsList>
 
         <div className="mt-5">
-          <TabsContent value="programming" className="m-0 space-y-5 outline-none">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold text-slate-900">Phases</h2>
-              <Link href={`/app/admin/clients/${clientId}/builder/new`}>
-                <Button
-                  className="bg-slate-900 hover:bg-slate-800 text-white rounded-full"
-                  data-testid="button-create-phase"
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Create Phase
-                </Button>
-              </Link>
-            </div>
-
-            {activePhases.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Active Phase{activePhases.length > 1 ? "s" : ""}
-                </h3>
-                <div className="space-y-4">
-                  {activePhases.map((phase: any) => renderPhaseCard(phase))}
-                </div>
-              </div>
-            )}
-
-            {pendingPhases.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Pending Phases
-                </h3>
-                <div className="space-y-4">
-                  {pendingPhases.map((phase: any) => renderPhaseCard(phase))}
-                </div>
-              </div>
-            )}
-
-            {draftPhases.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Drafts
-                </h3>
-                <div className="space-y-3">
-                  {draftPhases.map((phase: any) => (
-                    <Card
-                      key={phase.id}
-                      className="overflow-hidden rounded-xl border-slate-200 bg-white shadow-sm transition-colors hover:bg-slate-50"
-                      data-testid={`card-draft-${phase.id}`}
-                    >
-                      <CardContent className="flex items-center justify-between gap-4 p-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="mb-1 flex items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="h-6 rounded-md border-slate-200 bg-slate-100 px-2 text-[11px] text-slate-600"
-                            >
-                              Draft
-                            </Badge>
-                            <span className="text-xs text-slate-400">
-                              {getSessionCount(phase.id)} session(s) &middot; {phase.durationWeeks}{" "}
-                              weeks
-                            </span>
-                          </div>
-                          <h4 className="truncate text-base font-semibold text-slate-900">
-                            {phase.name}
-                          </h4>
-                          {phase.goal && (
-                            <p className="mt-0.5 truncate text-sm text-slate-500">{phase.goal}</p>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-md bg-white"
-                              data-testid={`button-edit-draft-${phase.id}`}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 rounded-md border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                            onClick={() => setDeleteTargetPhase(phase)}
-                            data-testid={`button-delete-draft-${phase.id}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {clientPhases.length === 0 && (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
-                <Dumbbell className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">No Phases Yet</h3>
-                <p className="text-slate-500 mt-1 mb-6 max-w-sm mx-auto">
-                  This client doesn't have any training phases. Build one from scratch or use a
-                  template.
+          <TabsContent value="programming" className="m-0 space-y-4 outline-none">
+            {viewPhase ? (
+              renderPhaseCard(viewPhase)
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
+                <Dumbbell className="mx-auto mb-4 h-12 w-12 text-slate-300" />
+                <h3 className="text-lg font-medium text-slate-900">No phases yet</h3>
+                <p className="mx-auto mb-6 mt-1 max-w-sm text-slate-500">
+                  Build one from scratch or start from a template.
                 </p>
                 <Link href={`/app/admin/clients/${clientId}/builder/new`}>
                   <Button
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full"
+                    className="rounded-full bg-slate-900 text-white hover:bg-slate-800"
                     data-testid="button-build-phase"
                   >
-                    Build Phase
+                    Build phase
                   </Button>
                 </Link>
-              </div>
-            )}
-
-            {completedPhases.length > 0 && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Phase History
-                </h3>
-                <div className="space-y-3">
-                  {completedPhases.map((phase: any) => (
-                    <Card
-                      key={phase.id}
-                      className="rounded-xl border-slate-200 shadow-none transition-colors hover:bg-slate-50"
-                      data-testid={`card-completed-${phase.id}`}
-                    >
-                      <CardContent className="flex items-center justify-between p-4">
-                        <div>
-                          <div className="mb-1 flex items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className="h-6 rounded-md border-slate-200 bg-slate-100 px-2 text-[11px] text-slate-500"
-                            >
-                              Completed
-                            </Badge>
-                          </div>
-                          <div className="font-medium text-slate-900">{phase.name}</div>
-                          <div className="text-sm text-slate-500">{phase.durationWeeks} Weeks</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Link href={`/app/admin/clients/${clientId}/builder/${phase.id}`}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-slate-500"
-                              data-testid={`button-view-completed-${phase.id}`}
-                            >
-                              <Pencil className="mr-1 h-4 w-4" /> View
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => setDeleteTargetPhase(phase)}
-                            data-testid={`button-delete-completed-${phase.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
               </div>
             )}
           </TabsContent>
@@ -2180,6 +2093,12 @@ export default function AdminClientProfile() {
           </TabsContent>
 
           <TabsContent value="checkins" className="m-0 outline-none space-y-6">
+            <p
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700"
+              data-testid="text-client-summary"
+            >
+              {clientSummary}
+            </p>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {readinessSummaryCards.map((card) => (
                 <Card key={card.key} className="border-slate-200 shadow-sm rounded-2xl bg-white">
@@ -3054,6 +2973,7 @@ export default function AdminClientProfile() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
