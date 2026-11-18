@@ -7,6 +7,22 @@ import { getRecommendedTrainingWeek, getTrainingWeekStatuses } from "@/lib/train
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+function sectionLetter(index: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return index < alphabet.length ? alphabet[index] : `S${index + 1}`;
+}
+
+function prescription(exercise: any): string {
+  return [
+    formatSets(exercise.sets),
+    formatReps(exercise.reps, exercise.repsMode),
+    exercise.load && exercise.load !== "Auto" ? exercise.load : null,
+    exercise.tempo || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function formatDate(value: unknown): string {
   if (typeof value !== "string" || !value) return "";
   const date = new Date(value);
@@ -375,6 +391,71 @@ export function ClientPlanOverview({
               </ul>
             </div>
           ) : null}
+          {phaseSessions.length > 0 ? (
+            <div className="border-t border-slate-100 px-5 py-4" data-testid="plan-session-overview">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Sessions
+              </div>
+              <div
+                className="grid gap-3"
+                style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
+              >
+                {phaseSessions.map((session: any) => {
+                  const sections: any[] = Array.isArray(session.sections) ? session.sections : [];
+                  return (
+                    <div
+                      key={session.id}
+                      className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/60"
+                      data-testid={`overview-session-${session.id}`}
+                    >
+                      <div className="border-b border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                        {session.name}
+                      </div>
+                      <div className="divide-y divide-slate-200">
+                        {sections.map((section: any, i: number) => {
+                          const exercises: any[] = Array.isArray(section.exercises)
+                            ? section.exercises
+                            : [];
+                          if (exercises.length === 0) return null;
+                          const letter = sectionLetter(i);
+                          const rounds = Number(section.rounds) > 1 ? Number(section.rounds) : null;
+                          return (
+                            <div key={section.id || i} className="px-3 py-2">
+                              <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-900 text-[10px] text-white">
+                                  {letter}
+                                </span>
+                                <span className="truncate">{section.name || `Section ${letter}`}</span>
+                                {rounds ? (
+                                  <span className="font-normal text-slate-400">· {rounds} rounds</span>
+                                ) : null}
+                              </div>
+                              <ul className="space-y-1">
+                                {exercises.map((ex: any, j: number) => (
+                                  <li key={ex.id || j} className="flex items-baseline gap-2 text-sm">
+                                    <span className="w-7 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-center text-[10px] font-semibold text-slate-600">
+                                      {letter}
+                                      {j + 1}
+                                    </span>
+                                    <span className="min-w-0 flex-1 truncate text-slate-800">
+                                      {ex.name}
+                                    </span>
+                                    <span className="shrink-0 text-xs text-slate-400">
+                                      {prescription(ex)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : (
         <section className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-8 text-center">
@@ -384,67 +465,6 @@ export function ClientPlanOverview({
           </p>
         </section>
       )}
-
-      {activePhase && phaseSessions.length > 0 ? (
-        <section data-testid="plan-session-overview">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Sessions in this phase
-          </h3>
-          <div
-            className="grid gap-3"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}
-          >
-            {phaseSessions.map((session: any) => {
-              const sections: any[] = Array.isArray(session.sections) ? session.sections : [];
-              return (
-                <div
-                  key={session.id}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
-                  data-testid={`overview-session-${session.id}`}
-                >
-                  <div className="mb-2 text-sm font-semibold text-slate-900">{session.name}</div>
-                  <div className="space-y-3">
-                    {sections.map((section: any, i: number) => {
-                      const exercises: any[] = Array.isArray(section.exercises)
-                        ? section.exercises
-                        : [];
-                      if (exercises.length === 0) return null;
-                      const rounds = Number(section.rounds) > 1 ? Number(section.rounds) : null;
-                      return (
-                        <div key={section.id || i}>
-                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                            {section.name || `Section ${i + 1}`}
-                            {rounds ? ` · ${rounds} rounds` : ""}
-                          </div>
-                          <ol className="space-y-0.5">
-                            {exercises.map((ex: any, j: number) => {
-                              const detail = [formatSets(ex.sets), formatReps(ex.reps)]
-                                .filter(Boolean)
-                                .join(" × ");
-                              return (
-                                <li
-                                  key={ex.id || j}
-                                  className="flex items-baseline gap-2 text-sm text-slate-700"
-                                >
-                                  <span className="w-4 shrink-0 text-xs text-slate-300">{j + 1}</span>
-                                  <span className="min-w-0 flex-1 truncate">{ex.name}</span>
-                                  {detail ? (
-                                    <span className="shrink-0 text-xs text-slate-400">{detail}</span>
-                                  ) : null}
-                                </li>
-                              );
-                            })}
-                          </ol>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between px-4 py-3">
