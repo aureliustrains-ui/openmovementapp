@@ -592,6 +592,20 @@ export default function ClientMyPhase() {
     return groups;
   }, []);
 
+  // The whole week, Monday to Sunday: days without a session show as rest days.
+  const scheduleWithRestDays = [
+    ...WEEKDAYS.map(
+      (day, dayIndex) =>
+        groupedSchedule.find((group) => group.day === day) ?? {
+          day,
+          dayIndex,
+          dayNumber: dayIndex + 1,
+          entries: [] as typeof scheduleRows,
+        },
+    ),
+    ...groupedSchedule.filter((group) => !WEEKDAYS.includes(group.day)),
+  ];
+
   return (
     <div className="max-w-4xl mx-auto space-y-5 md:space-y-6 animate-in fade-in">
       {isCheckinReadOnly && (
@@ -862,14 +876,26 @@ export default function ClientMyPhase() {
               <p className="text-sm text-slate-500 px-3 py-2">No scheduled sessions</p>
             ) : (
               <div className="space-y-2" data-testid="card-schedule-grid">
-                {groupedSchedule.map((group) => (
+                {scheduleWithRestDays.map((group) =>
+                  group.entries.length === 0 ? (
+                    <div
+                      key={group.day}
+                      className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 last:border-b-0"
+                      data-testid={`rest-day-${group.day}`}
+                    >
+                      <p className="text-[13px] font-semibold uppercase tracking-wide text-slate-400">
+                        {group.day.slice(0, 3)}
+                      </p>
+                      <p className="text-xs text-slate-400">Rest</p>
+                    </div>
+                  ) : (
                   <div
                     key={group.day}
                     className="pb-2 border-b border-slate-100 last:border-b-0 last:pb-0"
                   >
                     <div className="px-3 py-1.5">
                       <p className="text-[13px] font-semibold uppercase tracking-wide text-slate-800">
-                        {group.dayNumber !== null ? `Day ${group.dayNumber}` : group.day}
+                        {group.dayNumber !== null ? group.day.slice(0, 3) : group.day}
                       </p>
                     </div>
                     <div className="space-y-1.5">

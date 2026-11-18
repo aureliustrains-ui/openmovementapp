@@ -19,6 +19,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { Loader2, ChevronRight, CheckCircle2, Circle } from "lucide-react";
 
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
 export default function ClientHome() {
   const { viewedUser, sessionUser, impersonating } = useAuth();
   const isClientSession = sessionUser?.role === "Client";
@@ -266,6 +268,7 @@ export default function ClientHome() {
             ) : null}
 
             {weekEntries.length > 0 ? (
+              <>
               <ul className="divide-y divide-slate-100" data-testid="list-home-week-sessions">
                 {weekEntries.map((item) => {
                   const isNext = item.instanceKey === nextItemKey;
@@ -287,7 +290,7 @@ export default function ClientHome() {
                           />
                         )}
                         <span className="w-12 shrink-0 text-xs uppercase tracking-wider text-slate-400">
-                          Day {item.dayIndex + 1}
+                          {WEEKDAY_NAMES[item.dayIndex]?.slice(0, 3) ?? `Day ${item.dayIndex + 1}`}
                         </span>
                         <span
                           className={`min-w-0 flex-1 truncate ${
@@ -302,6 +305,18 @@ export default function ClientHome() {
                   );
                 })}
               </ul>
+              {(() => {
+                const trainingDays = new Set(weekEntries.map((entry) => entry.dayIndex));
+                const restDays = WEEKDAY_NAMES.filter((_, index) => !trainingDays.has(index)).map(
+                  (name) => name.slice(0, 3),
+                );
+                return restDays.length > 0 ? (
+                  <p className="pt-2 text-xs text-slate-400" data-testid="text-rest-days">
+                    Rest: {restDays.join(" · ")}
+                  </p>
+                ) : null;
+              })()}
+              </>
             ) : null}
 
             {weekSchedulePreview.nextScheduleItem && nextSessionDestination && nextItemKey ? (

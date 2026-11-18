@@ -108,7 +108,7 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 const SLOTS = ["AM", "PM"];
 const getScheduleDayLabel = (day: string) => {
   const index = WEEKDAYS.indexOf(day);
-  return index >= 0 ? `Day ${index + 1}` : day;
+  return index >= 0 ? day.slice(0, 3) : day;
 };
 
 type Exercise = {
@@ -1501,7 +1501,7 @@ export default function AdminPhaseBuilder() {
                 onSelect={() => setInsertTemplateOpen(true)}
                 data-testid="button-insert-template"
               >
-                <Copy className="mr-2 h-4 w-4" /> Add from templates…
+                <Copy className="mr-2 h-4 w-4" /> Start from a phase template…
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={savingTemplate || !phaseName.trim()}
@@ -1877,15 +1877,15 @@ export default function AdminPhaseBuilder() {
       <Dialog open={insertTemplateOpen} onOpenChange={setInsertTemplateOpen}>
         <DialogContent className="sm:max-w-[700px]">
           <DialogHeader>
-            <DialogTitle>Insert From Templates</DialogTitle>
+            <DialogTitle>Start from a phase template</DialogTitle>
             <DialogDescription>
-              Apply a full phase template, or insert a session/section into the current phase
-              builder.
+              Replaces this phase's sessions and schedule with the template. To add one session or
+              section, use "Add Session" or "Add Section" in the builder.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Phase Template</Label>
+              <Label>Phase template</Label>
               <TemplatePickerPanel
                 templates={phaseTemplates as any[]}
                 folderType="phase"
@@ -1903,7 +1903,7 @@ export default function AdminPhaseBuilder() {
             <div className="border rounded-lg p-3 bg-slate-50">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="font-medium text-slate-900">Apply whole phase template</p>
+                  <p className="font-medium text-slate-900">Apply this template</p>
                   <p className="text-xs text-slate-500">Replaces current sessions and schedule.</p>
                 </div>
                 <Button onClick={applyWholeTemplate} disabled={!selectedTemplateId}>
@@ -1912,86 +1912,6 @@ export default function AdminPhaseBuilder() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="border rounded-lg p-3 space-y-2">
-                <p className="font-medium text-slate-900">Insert session</p>
-                <Select
-                  value={selectedTemplateSessionId}
-                  onValueChange={setSelectedTemplateSessionId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose template session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedTemplateSessions.map((session: any) => (
-                      <SelectItem key={session.id} value={session.id}>
-                        {session.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  className="w-full"
-                  onClick={insertSessionFromTemplate}
-                  disabled={!selectedTemplateSessionId}
-                >
-                  Insert Session
-                </Button>
-              </div>
-
-              <div className="border rounded-lg p-3 space-y-2">
-                <p className="font-medium text-slate-900">Insert section</p>
-                <Select
-                  value={selectedTemplateSessionId}
-                  onValueChange={setSelectedTemplateSessionId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Template session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedTemplateSessions.map((session: any) => (
-                      <SelectItem key={session.id} value={session.id}>
-                        {session.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={selectedTemplateSectionId}
-                  onValueChange={setSelectedTemplateSectionId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Template section" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedTemplateSections.map((section: any) => (
-                      <SelectItem key={section.id} value={section.id}>
-                        {section.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={selectedTargetSessionId} onValueChange={setSelectedTargetSessionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Target current session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localSessions.map((session, idx) => (
-                      <SelectItem key={session.id} value={session.dbId || session.id}>
-                        S{idx + 1}: {session.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  className="w-full"
-                  onClick={insertSectionFromTemplate}
-                  disabled={!selectedTemplateSectionId || !selectedTargetSessionId}
-                >
-                  Insert Section
-                </Button>
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>

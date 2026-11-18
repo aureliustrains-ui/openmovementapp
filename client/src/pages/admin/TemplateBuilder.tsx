@@ -49,7 +49,7 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 const SLOTS = ["AM", "PM"];
 const getScheduleDayLabel = (day: string) => {
   const index = WEEKDAYS.indexOf(day);
-  return index >= 0 ? `Day ${index + 1}` : day;
+  return index >= 0 ? day.slice(0, 3) : day;
 };
 
 function makeSection(name = "New Section"): BlueprintSection {

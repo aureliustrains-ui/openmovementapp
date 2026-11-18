@@ -150,7 +150,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       className={`${isClientChatRoute ? "h-[100dvh] min-h-0" : "min-h-screen"} bg-white flex flex-col`}
     >
       <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10">
-        <div className="flex items-center gap-8">
+        <div className="flex h-full items-center gap-8">
           <Link
             href={sessionUser.role === "Admin" ? "/app/admin/clients" : "/app/client/home"}
             className="flex items-center gap-2.5 shrink-0"
@@ -159,7 +159,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </Link>
 
           <nav
-            className={`items-center gap-1 ${sessionUser.role === "Client" ? "hidden sm:flex" : "flex"}`}
+            className={`h-full items-stretch gap-1 ${sessionUser.role === "Client" ? "hidden sm:flex" : "flex"}`}
           >
             {navItems.map((item) => {
               const isActive =
@@ -183,12 +183,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`relative flex items-center rounded-lg text-sm font-medium transition-colors ${
+                  className={`relative -mb-px flex items-center border-b-2 text-sm transition-colors ${
                     spacingClassName
                   } ${
                     isActive
-                      ? "border-b-2 border-slate-900 text-slate-900"
-                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                      ? "border-slate-900 font-semibold text-slate-900"
+                      : "border-transparent font-medium text-slate-500 hover:text-slate-900"
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
