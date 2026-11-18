@@ -932,6 +932,10 @@ export default function AdminClientProfile() {
     });
   };
 
+  const switchableClients = (allUsers as any[])
+    .filter((u) => u.role === "Client" && u.status === "Active")
+    .sort((a, b) => resolveUserFullName(a).localeCompare(resolveUserFullName(b)));
+
   const navItems = [
     { value: "programming", label: "Plan", icon: Dumbbell, count: 0 },
     { value: "checkins", label: "Recaps", icon: ClipboardList, count: 0 },
@@ -947,12 +951,6 @@ export default function AdminClientProfile() {
       label: "Progress",
       icon: CheckCircle2,
       count: adminNotificationSummary.progressAttentionCount,
-    },
-    {
-      value: "chat",
-      label: "Chat",
-      icon: MessageCircle,
-      count: adminNotificationSummary.unreadChatCount,
     },
     { value: "specifics", label: "Specifics", icon: Pencil, count: 0 },
     { value: "access", label: "Access", icon: ShieldCheck, count: 0 },
@@ -1319,6 +1317,24 @@ export default function AdminClientProfile() {
                 <p className="mt-0.5 truncate text-sm text-slate-500">{client.email}</p>
               </div>
             </div>
+            {switchableClients.length > 1 ? (
+              <Select value={clientId} onValueChange={(id) => setLocation(`/app/admin/clients/${id}`)}>
+                <SelectTrigger
+                  className="h-9 w-[150px] shrink-0 border-slate-200 bg-white text-sm"
+                  aria-label="Switch client"
+                  data-testid="select-switch-client"
+                >
+                  <SelectValue placeholder="Switch client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {switchableClients.map((other: any) => (
+                    <SelectItem key={other.id} value={other.id}>
+                      {resolveUserFullName(other)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
@@ -2079,12 +2095,29 @@ export default function AdminClientProfile() {
                             {new Date(log.date).toLocaleDateString()}
                           </div>
                         </div>
-                        <div className="text-xs text-slate-600">
-                          Exercise entry: {log.instanceId}
-                        </div>
-                        <div className="text-xs text-slate-600">
-                          Sets logged: {(log.sets || []).length}
-                        </div>
+                        {(() => {
+                          // Entry ids look like "w1_Monday_AM_<id>": show them as "Week 1 · Day 1 · AM".
+                          const match = /^w(\d+)_([A-Za-z]+)_([A-Za-z]+)/.exec(String(log.instanceId || ""));
+                          const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+                          const dayIndex = match ? days.indexOf(match[2]) : -1;
+                          const where = match
+                            ? `Week ${match[1]}${dayIndex >= 0 ? ` · Day ${dayIndex + 1}` : ""} · ${match[3]}`
+                            : null;
+                          const sets = (log.sets || []) as Array<{ weight?: string; reps?: string }>;
+                          const filled = sets.filter((entry) => entry.weight || entry.reps);
+                          return (
+                            <>
+                              {where ? <div className="text-xs text-slate-500">{where}</div> : null}
+                              <div className="text-xs text-slate-600">
+                                {filled.length > 0
+                                  ? filled
+                                      .map((entry) => `${entry.weight || "–"} kg × ${entry.reps || "–"}`)
+                                      .join("  ·  ")
+                                  : "No sets logged"}
+                              </div>
+                            </>
+                          );
+                        })()}
                         {log.clientNotes && (
                           <div className="text-sm bg-blue-50 text-blue-900 border border-blue-100 rounded-md p-2 whitespace-pre-wrap">
                             <span className="font-semibold">

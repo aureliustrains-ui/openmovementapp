@@ -30,11 +30,20 @@ import {
   toBlueprintExercise,
 } from "@/lib/blueprintClone";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
+  MoreHorizontal,
+  ChevronDown as DetailsChevron,
   Plus,
   Trash2,
   ArrowLeft,
@@ -309,6 +318,7 @@ export default function AdminPhaseBuilder() {
 
   const [phaseName, setPhaseName] = useState("New Phase");
   const [goal, setGoal] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [homeIntroVideoUrl, setHomeIntroVideoUrl] = useState("");
   const [homeGuideVideoUrl, setHomeGuideVideoUrl] = useState("");
   const [durationWeeks, setDurationWeeks] = useState("4");
@@ -1416,87 +1426,39 @@ export default function AdminPhaseBuilder() {
               <ArrowLeft className="h-4 w-4" />
             )}
           </Button>
-          <div className="truncate font-semibold text-slate-900">Phase Builder</div>
-          {isDirty ? (
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 border-amber-200 bg-amber-50 text-amber-700"
-            >
-              <AlertCircle className="h-3 w-3" />
-              Unsaved
-            </Badge>
-          ) : lastSavedAt ? (
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 border-green-200 bg-green-50 text-green-700"
-              data-testid="badge-saved"
-            >
-              <CheckCircle2 className="h-3 w-3" />
-              {formatSavedTime(lastSavedAt)}
-            </Badge>
-          ) : null}
-          {autosaveLabel ? (
-            <Badge
-              variant="outline"
-              className={`hidden items-center gap-1 sm:flex ${autosaveBadgeClass[autosave.status]}`}
-              data-testid="badge-builder-autosave"
-            >
-              {autosave.status === "saving" ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+          <div className="min-w-0">
+            <div className="truncate font-semibold text-slate-900">
+              {phaseName.trim() || "Phase builder"}
+            </div>
+            <div className="flex items-center gap-2 text-xs" data-testid="badge-builder-autosave">
+              {saving || autosave.status === "saving" ? (
+                <span className="flex items-center gap-1 text-blue-600">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                </span>
               ) : autosave.status === "error" ? (
-                <AlertCircle className="h-3 w-3" />
+                <span className="flex items-center gap-1 text-red-600">
+                  <AlertCircle className="h-3 w-3" /> Autosave failed
+                </span>
+              ) : isDirty || autosave.status === "dirty" ? (
+                <span className="flex items-center gap-1 text-amber-600">
+                  <AlertCircle className="h-3 w-3" /> Unsaved changes
+                </span>
+              ) : lastSavedAt ? (
+                <span className="flex items-center gap-1 text-green-600" data-testid="badge-saved">
+                  <CheckCircle2 className="h-3 w-3" /> Saved {formatSavedTime(lastSavedAt)}
+                </span>
+              ) : null}
+              {isPublished ? (
+                <span className="text-slate-400">
+                  · {phaseStatus === "Active" ? "Live for the client" : phaseStatus}
+                </span>
               ) : (
-                <CheckCircle2 className="h-3 w-3" />
+                <span className="text-slate-400">· Not published yet</span>
               )}
-              {autosaveLabel}
-            </Badge>
-          ) : null}
-          {isPublished && (
-            <Badge
-              className={
-                phaseStatus === "Active"
-                  ? "bg-green-100 text-green-700 border-green-200"
-                  : "bg-amber-100 text-amber-700 border-amber-200"
-              }
-            >
-              {phaseStatus}
-            </Badge>
-          )}
+            </div>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-full px-3"
-            onClick={() => setInsertTemplateOpen(true)}
-            data-testid="button-insert-template"
-          >
-            <Copy className="mr-1.5 h-4 w-4" /> Templates
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 rounded-full text-slate-600 hover:text-indigo-600"
-            onClick={() => setTemplateSaveTarget({ type: "phase" })}
-            disabled={savingTemplate || !phaseName.trim()}
-            title="Save phase as template"
-            data-testid="button-save-phase-template"
-          >
-            <Library className="h-4 w-4" />
-          </Button>
-          {!isNew && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-9 w-9 rounded-full border-red-200 text-red-600 hover:bg-red-50"
-              onClick={() => setDeleteDialogOpen(true)}
-              disabled={saving || publishing || deleting}
-              data-testid="button-delete-phase"
-              title="Delete phase"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
           <Button
             variant="outline"
             size="sm"
@@ -1522,12 +1484,54 @@ export default function AdminPhaseBuilder() {
             <Send className="mr-1.5 h-4 w-4" />
             {isPublished ? "Republish" : "Publish"}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 rounded-full"
+                aria-label="More actions"
+                data-testid="button-builder-menu"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => setInsertTemplateOpen(true)}
+                data-testid="button-insert-template"
+              >
+                <Copy className="mr-2 h-4 w-4" /> Add from templates…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={savingTemplate || !phaseName.trim()}
+                onSelect={() => setTemplateSaveTarget({ type: "phase" })}
+                data-testid="button-save-phase-template"
+              >
+                <Library className="mr-2 h-4 w-4" /> Save phase as template
+              </DropdownMenuItem>
+              {!isNew ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-rose-600 focus:text-rose-600"
+                    disabled={saving || publishing || deleting}
+                    onSelect={() => setDeleteDialogOpen(true)}
+                    data-testid="button-delete-phase"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete phase
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <Card className="overflow-hidden rounded-xl border-slate-200 bg-white shadow-sm">
           <CardContent className="space-y-4 p-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_120px] items-end gap-3">
             <div className="space-y-1">
               <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Phase
@@ -1540,18 +1544,6 @@ export default function AdminPhaseBuilder() {
                 data-testid="input-phase-name"
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Goal
-              </Label>
-              <Textarea
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                className="min-h-[72px] border-slate-200 bg-slate-50 text-sm"
-                data-testid="input-phase-goal"
-              />
-            </div>
-            <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Weeks
@@ -1572,6 +1564,39 @@ export default function AdminPhaseBuilder() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
+              onClick={() => setDetailsOpen((open) => !open)}
+              aria-expanded={detailsOpen}
+              data-testid="button-phase-details"
+            >
+              <span>
+                <span className="font-medium text-slate-800">Details</span>
+                <span className="ml-2 text-xs text-slate-500">
+                  Goal {goal.trim() ? "set" : "empty"} · Movement check{" "}
+                  {movementCheckEnabled ? "on" : "off"} ·{" "}
+                  {[homeIntroVideoUrl, homeGuideVideoUrl].filter((v) => v.trim()).length} of 2 videos
+                </span>
+              </span>
+              <DetailsChevron
+                className={`h-4 w-4 text-slate-400 transition-transform ${detailsOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {detailsOpen ? (
+              <div className="space-y-4">
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Goal
+              </Label>
+              <Textarea
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                className="min-h-[72px] border-slate-200 bg-slate-50 text-sm"
+                data-testid="input-phase-goal"
+              />
+            </div>
               <div className="space-y-1">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Movement check
@@ -1603,7 +1628,6 @@ export default function AdminPhaseBuilder() {
                   </span>
                 </div>
               </div>
-            </div>
             <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -1630,6 +1654,8 @@ export default function AdminPhaseBuilder() {
                 />
               </div>
             </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

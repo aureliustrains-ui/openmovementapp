@@ -1,5 +1,15 @@
 import type { BlueprintExercise, BlueprintSection } from "@/lib/blueprintClone";
 import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -18,6 +28,7 @@ import {
   Library,
   Plus,
   Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 import { type DragEvent, useState } from "react";
 import { formatReps, formatSets } from "@/lib/prescription";
@@ -192,39 +203,41 @@ export function SectionEditorCard({
           className="h-8 max-w-[260px] border-none bg-transparent px-1 text-sm font-semibold text-slate-800 shadow-none focus-visible:ring-1 focus-visible:ring-slate-300"
         />
         <div className="flex-1" />
-        {onSaveSectionToTemplate ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-slate-400 hover:text-indigo-600"
-            onClick={onSaveSectionToTemplate}
-            title="Save section as template"
-          >
-            <Library className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
-        {onDuplicateSection ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-slate-400 hover:text-indigo-600"
-            onClick={onDuplicateSection}
-            title="Duplicate section"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
-        {sectionCount > 1 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-slate-400 hover:text-rose-600"
-            onClick={onRemoveSection}
-            title="Remove section"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-slate-400 hover:text-slate-700"
+              aria-label="Section actions"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {onSaveSectionToTemplate ? (
+              <DropdownMenuItem onSelect={onSaveSectionToTemplate}>
+                <Library className="mr-2 h-4 w-4" /> Save section as template
+              </DropdownMenuItem>
+            ) : null}
+            {onDuplicateSection ? (
+              <DropdownMenuItem onSelect={onDuplicateSection}>
+                <Copy className="mr-2 h-4 w-4" /> Duplicate section
+              </DropdownMenuItem>
+            ) : null}
+            {sectionCount > 1 ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-600"
+                  onSelect={onRemoveSection}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Remove section
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="space-y-1.5">
@@ -327,55 +340,52 @@ export function SectionEditorCard({
                       </span>
                     </div>
                   )}
-                  {moveTargetSections.length > 0 && onMoveExerciseToSection ? (
-                    <Select
-                      onValueChange={(targetSectionId) =>
-                        onMoveExerciseToSection(exIdx, targetSectionId)
-                      }
-                    >
-                      <SelectTrigger className="h-7 w-[104px] text-xs" aria-label="Move to section">
-                        <SelectValue placeholder="Move" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {moveTargetSections.map((candidate) => (
-                          <SelectItem key={candidate.id} value={candidate.id}>
-                            {candidate.name || "Untitled section"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : null}
-                  {onDuplicateExercise ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-indigo-600"
-                      onClick={() => onDuplicateExercise(exIdx)}
-                      title="Duplicate exercise"
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                  {onSaveExerciseToTemplate ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-indigo-600"
-                      onClick={() => onSaveExerciseToTemplate(exIdx)}
-                      title="Save exercise as template"
-                    >
-                      <Library className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-rose-600 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                    onClick={() => onRemoveExercise(exIdx)}
-                    title="Remove exercise"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-400 hover:text-slate-700"
+                        aria-label="Exercise actions"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {onDuplicateExercise ? (
+                        <DropdownMenuItem onSelect={() => onDuplicateExercise(exIdx)}>
+                          <Copy className="mr-2 h-4 w-4" /> Duplicate exercise
+                        </DropdownMenuItem>
+                      ) : null}
+                      {onSaveExerciseToTemplate ? (
+                        <DropdownMenuItem onSelect={() => onSaveExerciseToTemplate(exIdx)}>
+                          <Library className="mr-2 h-4 w-4" /> Save exercise as template
+                        </DropdownMenuItem>
+                      ) : null}
+                      {moveTargetSections.length > 0 && onMoveExerciseToSection ? (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>Move to section</DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {moveTargetSections.map((candidate) => (
+                              <DropdownMenuItem
+                                key={candidate.id}
+                                onSelect={() => onMoveExerciseToSection(exIdx, candidate.id)}
+                              >
+                                {candidate.name || "Untitled section"}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      ) : null}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-rose-600 focus:text-rose-600"
+                        onSelect={() => onRemoveExercise(exIdx)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Remove exercise
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 

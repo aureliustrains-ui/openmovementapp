@@ -11,9 +11,9 @@ type Props = {
   /** Number of items in the folder (including subfolders); null = all items. */
   countFor: (folderId: string | null) => number;
   allLabel: string;
-  onCreate: (name: string, parentId: string | null) => void;
-  onRename: (folderId: string, name: string) => void;
-  onDelete: (folderId: string) => void;
+  onCreate?: (name: string, parentId: string | null) => void;
+  onRename?: (folderId: string, name: string) => void;
+  onDelete?: (folderId: string) => void;
 };
 
 /** Folders as a slim strip of chips: top level first, then the level below the open folder. */
@@ -63,8 +63,8 @@ export function FolderChipBar({
     if (!editing) return;
     const name = editing.draft.trim();
     if (name) {
-      if (editing.mode === "create") onCreate(name, selectedFolderId);
-      else if (selected && name !== selected.name) onRename(selected.id, name);
+      if (editing.mode === "create") onCreate?.(name, selectedFolderId);
+      else if (selected && name !== selected.name) onRename?.(selected.id, name);
     }
     setEditing(null);
   };
@@ -95,7 +95,7 @@ export function FolderChipBar({
               <span className="text-xs opacity-60">{countFor(folder.id)}</span>
             </button>
           ))}
-          {rowIndex === rows.length - 1 ? (
+          {rowIndex === rows.length - 1 && onCreate && onRename && onDelete ? (
             <div className="ml-auto flex items-center gap-1">
               {editing ? (
                 <Input
@@ -140,7 +140,7 @@ export function FolderChipBar({
                         size="icon"
                         className="h-8 w-8 text-slate-400 hover:text-rose-600"
                         title="Delete folder"
-                        onClick={() => onDelete(selected.id)}
+                        onClick={() => onDelete?.(selected.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

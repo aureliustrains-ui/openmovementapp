@@ -123,7 +123,7 @@ test("shared add-from-template modal is folder-aware and uses picker panel", () 
   assert.ok(source.includes("getTemplateFolderId={getTemplateFolderId}"));
 });
 
-test("template picker panel uses simplified category-root tree with nested folder filtering", () => {
+test("template picker panel uses a folder chip strip with nested folder filtering", () => {
   const source = fs.readFileSync(templatePickerPanelPath, "utf8");
 
   assert.ok(source.includes("rootLabel?: string;"));
@@ -131,7 +131,7 @@ test("template picker panel uses simplified category-root tree with nested folde
   assert.ok(source.includes("allLabel: string;"));
   assert.ok(source.includes("templateFoldersQuery(folderType)"));
   assert.ok(source.includes("selectedFolderId"));
-  assert.ok(source.includes("rootFolders.map((folder) => renderFolderTree(folder, 1))"));
+  assert.ok(source.includes("<FolderChipBar"));
   assert.equal(source.includes(">Folders<"), false);
   assert.ok(source.includes("No templates found."));
 });

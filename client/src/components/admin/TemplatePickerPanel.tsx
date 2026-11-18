@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { FolderChipBar } from "@/components/admin/FolderChipBar";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -281,48 +282,7 @@ export function TemplatePickerPanel<T>({
   const rootFolders = childrenByParent.get(folderParentKey(null)) || [];
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="min-h-0 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/50 p-2">
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm",
-            selectedFolderId === null ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-white",
-          )}
-          onClick={() => {
-            setSelectedFolderId(null);
-            setRootExpanded((prev) => (selectedFolderId === null ? !prev : true));
-          }}
-        >
-          <span className="flex items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex h-4 w-4 items-center justify-center",
-                selectedFolderId === null ? "text-slate-200" : "text-slate-500",
-              )}
-            >
-              {rootFolders.length > 0 ? (
-                rootExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )
-              ) : (
-                <span className="block h-3.5 w-3.5" />
-              )}
-            </span>
-            <span className="font-medium">{rootNodeLabel}</span>
-          </span>
-          <span className="text-xs opacity-80">{templates.length}</span>
-        </button>
-
-        {rootExpanded && rootFolders.length > 0 ? (
-          <div className="space-y-0.5">
-            {rootFolders.map((folder) => renderFolderTree(folder, 1))}
-          </div>
-        ) : null}
-      </div>
-
+    <div className="grid h-full min-h-0 grid-cols-1 gap-3">
       <div className="flex min-h-0 min-w-0 flex-col space-y-3">
         <div className="sticky top-0 z-10 bg-white pb-2">
           <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3">
@@ -333,6 +293,17 @@ export function TemplatePickerPanel<T>({
               placeholder={searchPlaceholder}
               className="h-10 border-none px-0 shadow-none focus-visible:ring-0"
               autoFocus
+            />
+          </div>
+          <div className="mt-2">
+            <FolderChipBar
+              folders={sortedFolders}
+              selectedFolderId={selectedFolderId}
+              onSelect={setSelectedFolderId}
+              countFor={(folderId) =>
+                folderId ? totalTemplatesByFolder.get(folderId) || 0 : templates.length
+              }
+              allLabel="All"
             />
           </div>
           {isExercisePicker ? (

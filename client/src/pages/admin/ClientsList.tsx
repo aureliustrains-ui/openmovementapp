@@ -80,7 +80,15 @@ export default function AdminClientsList() {
     const q = search.toLowerCase();
     return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
   });
-  const activeClients = clients.filter((client: any) => client.status === "Active");
+  // Clients that need you come first.
+  const activeClients = clients
+    .filter((client: any) => client.status === "Active")
+    .sort(
+      (a: any, b: any) =>
+        (notificationByClientId.get(b.id)?.totalAttentionCount || 0) -
+          (notificationByClientId.get(a.id)?.totalAttentionCount || 0) ||
+        String(a.name).localeCompare(String(b.name)),
+    );
   const inactiveClients = clients.filter((client: any) => client.status !== "Active");
 
   const getClientStatus = (client: any) => {

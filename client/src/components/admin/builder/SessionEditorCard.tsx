@@ -1,6 +1,16 @@
 import type { BlueprintExercise, BlueprintSection } from "@/lib/blueprintClone";
 import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +26,7 @@ import {
   Plus,
   Settings2,
   Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 import { type DragEvent, useMemo, useState } from "react";
 import { SectionEditorCard } from "./SectionEditorCard";
@@ -254,77 +265,58 @@ export function SessionEditorCard<TSession extends SessionLike>({
             {session.sections.length} section{session.sections.length !== 1 ? "s" : ""} /{" "}
             {exerciseCount} exercise{exerciseCount !== 1 ? "s" : ""}
           </span>
-          {onMoveSessionToIndex ? (
-            <div className="flex items-center gap-0.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-indigo-600"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMoveSessionToIndex(sessionIdx - 1);
-                }}
-                disabled={sessionIdx === 0}
-                title="Move session up"
+                className="h-8 w-8 text-slate-500 hover:text-slate-800"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Session actions"
               >
-                <ArrowUp className="h-4 w-4" />
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-indigo-600"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMoveSessionToIndex(sessionIdx + 1);
-                }}
-                disabled={sessionIdx >= totalSessions - 1}
-                title="Move session down"
-              >
-                <ArrowDown className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : null}
-          {onSaveSessionToTemplate ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-400 hover:text-indigo-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSaveSessionToTemplate();
-              }}
-              title="Save session as template"
-            >
-              <Library className="h-4 w-4" />
-            </Button>
-          ) : null}
-          {onDuplicateSession ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-400 hover:text-indigo-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDuplicateSession();
-              }}
-              title="Duplicate session"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          ) : null}
-          {totalSessions > 1 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-slate-400 hover:text-rose-600"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveSession();
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              {onMoveSessionToIndex ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={sessionIdx === 0}
+                    onSelect={() => onMoveSessionToIndex(sessionIdx - 1)}
+                  >
+                    <ArrowUp className="mr-2 h-4 w-4" /> Move session up
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={sessionIdx >= totalSessions - 1}
+                    onSelect={() => onMoveSessionToIndex(sessionIdx + 1)}
+                  >
+                    <ArrowDown className="mr-2 h-4 w-4" /> Move session down
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+              {onSaveSessionToTemplate ? (
+                <DropdownMenuItem onSelect={() => onSaveSessionToTemplate()}>
+                  <Library className="mr-2 h-4 w-4" /> Save session as template
+                </DropdownMenuItem>
+              ) : null}
+              {onDuplicateSession ? (
+                <DropdownMenuItem onSelect={() => onDuplicateSession()}>
+                  <Copy className="mr-2 h-4 w-4" /> Duplicate session
+                </DropdownMenuItem>
+              ) : null}
+              {totalSessions > 1 ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-rose-600 focus:text-rose-600"
+                    onSelect={() => onRemoveSession()}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Remove session
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
