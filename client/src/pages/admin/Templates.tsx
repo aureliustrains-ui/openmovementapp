@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Library, Shapes, Spline, Video } from "lucide-react";
+import { Layers, Library, Shapes, Spline } from "lucide-react";
 import {
   exerciseTemplatesQuery,
   phaseTemplatesQuery,
@@ -20,7 +20,6 @@ import {
   useDeleteTemplateFolder,
   useMoveTemplateToFolder,
   useReorderTemplates,
-  useUpdateExerciseTemplate,
   useUpdateTemplateFolder,
   type TemplateFolderType,
 } from "@/lib/api";
@@ -29,48 +28,10 @@ import {
   cloneSectionFromTemplate,
   cloneSessionFromTemplate,
 } from "@/lib/blueprintClone";
-import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { TemplateLibraryPane } from "@/components/admin/TemplateLibraryPane";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { formatReps, formatSets } from "@/lib/prescription";
-import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
-import {
-  ExerciseFacetFilterBar,
-  isFacetFilterActive,
-} from "@/components/admin/ExerciseFacetFilterBar";
-import {
-  facetLabel,
-  matchesFacetFilter,
-  readExerciseFacets,
-  type ExerciseFacetFilter,
-} from "@shared/exerciseFacets";
-
-function DemoVideoPreview({
-  url,
-  size = "tiny",
-}: {
-  url?: string | null;
-  size?: "tiny" | "inline";
-}) {
-  if (!url) return null;
-
-  return (
-    <div
-      className={
-        size === "tiny"
-          ? "w-72 max-w-[44vw] shrink-0 self-stretch overflow-hidden rounded-md [&_.aspect-video]:h-full [&_.aspect-video]:rounded-md"
-          : "w-60 max-w-full shrink-0 overflow-hidden rounded-md [&_.aspect-video]:rounded-md"
-      }
-    >
-      <InlineVideoPlayer url={url} sourceType="link" openLinkLabel="Open demo" flush />
-    </div>
-  );
-}
+import { ExerciseLibrary } from "@/components/admin/exercise/ExerciseLibrary";
 
 function makeDefaultPhaseTemplatePayload() {
   return {
@@ -209,22 +170,6 @@ function getNextSortOrder(
   return next + 1;
 }
 
-function exerciseTagSummary(exercise: any): string {
-  const facets = readExerciseFacets(exercise?.facets);
-  const parts = [...facets.pattern, ...facets.material].map(facetLabel);
-  if (exercise?.needsVideo) parts.push("needs video");
-  return parts.length > 0 ? parts.join(" · ") : "No tags yet";
-}
-
-function exerciseTagSearchText(exercise: any): string {
-  const facets = readExerciseFacets(exercise?.facets);
-  const keywords = Array.isArray(exercise?.keywords) ? exercise.keywords.join(" ") : "";
-  return [...facets.pattern, ...facets.material, ...facets.loadType, ...facets.position]
-    .map(facetLabel)
-    .concat(keywords)
-    .join(" ");
-}
-
 function exercisePrescription(exercise: any) {
   return [
     formatSets(exercise?.sets),
@@ -265,305 +210,6 @@ function renderSectionTemplatePreview(item: any) {
   );
 }
 
-function renderExerciseTemplatePreview(item: any) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1">
-      <div className="flex min-w-0 flex-1 flex-col justify-center">
-        <div className="truncate text-xs text-slate-500">{exercisePrescription(item)}</div>
-      </div>
-    </div>
-  );
-}
-
-function ExerciseTemplateInlineHeader({ item, isExpanded }: { item: any; isExpanded: boolean }) {
-  const { toast } = useToast();
-  const updateExerciseTemplate = useUpdateExerciseTemplate();
-  const [draft, setDraft] = useState({
-    name: item.name || "",
-    targetMuscle: item.targetMuscle || "",
-  });
-  const draftRef = useRef(draft);
-  const dirtyRef = useRef(false);
-
-  useEffect(() => {
-    const nextDraft = {
-      name: item.name || "",
-      targetMuscle: item.targetMuscle || "",
-    };
-    setDraft(nextDraft);
-    draftRef.current = nextDraft;
-    dirtyRef.current = false;
-  }, [item.id, item.name, item.targetMuscle]);
-
-  const updateDraft = (field: keyof typeof draft, value: string) => {
-    setDraft((previous) => {
-      const next = { ...previous, [field]: value };
-      draftRef.current = next;
-      dirtyRef.current = true;
-      return next;
-    });
-  };
-
-  const saveDraft = useCallback(async () => {
-    if (!dirtyRef.current) return;
-    const latest = draftRef.current;
-    const nextName = latest.name.trim();
-    if (!nextName) return;
-    dirtyRef.current = false;
-    try {
-      await updateExerciseTemplate.mutateAsync({
-        id: item.id,
-        name: nextName,
-      });
-    } catch {
-      dirtyRef.current = true;
-      toast({ title: "Could not save exercise template", variant: "destructive" });
-    }
-  }, [item.id, toast, updateExerciseTemplate]);
-
-  useEffect(() => {
-    if (!dirtyRef.current) return;
-    const timeout = window.setTimeout(() => {
-      void saveDraft();
-    }, 5_000);
-    return () => window.clearTimeout(timeout);
-  }, [draft, saveDraft]);
-
-  useEffect(() => {
-    return () => {
-      void saveDraft();
-    };
-  }, [saveDraft]);
-
-  if (!isExpanded) {
-    return (
-      <>
-        <h3 className="truncate text-sm font-semibold text-slate-900">
-          {item.name || "Untitled exercise"}
-        </h3>
-        <div className="mt-0.5 truncate text-xs text-slate-500">{exerciseTagSummary(item)}</div>
-      </>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <Input
-        value={draft.name}
-        onChange={(event) => updateDraft("name", event.target.value)}
-        onBlur={() => void saveDraft()}
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        className="h-7 border-transparent bg-transparent px-0 py-0 text-sm font-semibold text-slate-900 shadow-none focus-visible:border-slate-300 focus-visible:bg-white focus-visible:px-2 focus-visible:ring-1 focus-visible:ring-slate-200"
-      />
-      <div className="truncate text-xs text-slate-500">{exerciseTagSummary(item)}</div>
-    </div>
-  );
-}
-
-function ExerciseTemplateInlineDetails({ item }: { item: any }) {
-  const { toast } = useToast();
-  const updateExerciseTemplate = useUpdateExerciseTemplate();
-  const stopTemplateToggle = (event: React.SyntheticEvent) => {
-    event.stopPropagation();
-  };
-  const [draft, setDraft] = useState({
-    sets: item.sets || "",
-    reps: item.reps || "",
-    load: item.load || "",
-    tempo: item.tempo || "",
-    goal: item.goal || "",
-    notes: item.notes || "",
-    additionalInstructions: item.additionalInstructions || "",
-    demoUrl: item.demoUrl || "",
-    requiresMovementCheck: Boolean(item.requiresMovementCheck),
-    enableStructuredLogging: Boolean(item.enableStructuredLogging),
-  });
-  const draftRef = useRef(draft);
-  const dirtyRef = useRef(false);
-
-  useEffect(() => {
-    const nextDraft = {
-      sets: item.sets || "",
-      reps: item.reps || "",
-      load: item.load || "",
-      tempo: item.tempo || "",
-      goal: item.goal || "",
-      notes: item.notes || "",
-      additionalInstructions: item.additionalInstructions || "",
-      demoUrl: item.demoUrl || "",
-      requiresMovementCheck: Boolean(item.requiresMovementCheck),
-      enableStructuredLogging: Boolean(item.enableStructuredLogging),
-    };
-    setDraft(nextDraft);
-    draftRef.current = nextDraft;
-    dirtyRef.current = false;
-  }, [item]);
-
-  const updateDraft = (field: keyof typeof draft, value: string | boolean) => {
-    setDraft((previous) => {
-      const next = { ...previous, [field]: value };
-      draftRef.current = next;
-      dirtyRef.current = true;
-      return next;
-    });
-  };
-
-  const saveDraft = useCallback(async () => {
-    if (!dirtyRef.current) return;
-    const latest = draftRef.current;
-    dirtyRef.current = false;
-    try {
-      await updateExerciseTemplate.mutateAsync({
-        id: item.id,
-        sets: latest.sets.trim() || null,
-        reps: latest.reps.trim() || null,
-        load: latest.load.trim() || null,
-        tempo: latest.tempo.trim() || null,
-        goal: latest.goal.trim() || null,
-        notes: latest.notes.trim() || null,
-        additionalInstructions: latest.additionalInstructions.trim() || null,
-        demoUrl: latest.demoUrl.trim() || null,
-        requiresMovementCheck: latest.requiresMovementCheck,
-        enableStructuredLogging: latest.enableStructuredLogging,
-        // A demo video was added: it no longer needs filming.
-        ...(latest.demoUrl.trim() && item.needsVideo ? { needsVideo: false } : {}),
-      });
-    } catch {
-      dirtyRef.current = true;
-      toast({ title: "Could not save exercise template", variant: "destructive" });
-    }
-  }, [item.id, item.needsVideo, toast, updateExerciseTemplate]);
-
-  useEffect(() => {
-    if (!dirtyRef.current) return;
-    const timeout = window.setTimeout(() => {
-      void saveDraft();
-    }, 5_000);
-    return () => window.clearTimeout(timeout);
-  }, [draft, saveDraft]);
-
-  useEffect(() => {
-    return () => {
-      void saveDraft();
-    };
-  }, [saveDraft]);
-
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.15fr)]">
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Demo video URL
-          </Label>
-          <div className="flex min-w-0 items-center gap-2">
-            <Video className="h-4 w-4 shrink-0 text-slate-400" />
-            <Input
-              value={draft.demoUrl}
-              onChange={(event) => updateDraft("demoUrl", event.target.value)}
-              onClick={stopTemplateToggle}
-              onPointerDown={stopTemplateToggle}
-              placeholder="Paste video link"
-              className="h-8 bg-white"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {(
-          [
-            ["sets", "Sets"],
-            ["reps", "Reps"],
-            ["tempo", "Tempo"],
-          ] as const
-        ).map(([field, label]) => (
-          <div key={field} className="space-y-1">
-            <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              {label}
-            </Label>
-            <Input
-              value={draft[field]}
-              onChange={(event) => updateDraft(field, event.target.value)}
-              onClick={stopTemplateToggle}
-              onPointerDown={stopTemplateToggle}
-              className="h-8 bg-white"
-            />
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Goal
-          </Label>
-          <Textarea
-            value={draft.goal}
-            onChange={(event) => updateDraft("goal", event.target.value)}
-            onClick={stopTemplateToggle}
-            onPointerDown={stopTemplateToggle}
-            className="min-h-[56px] resize-none bg-white"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-            Coach notes · only you
-          </Label>
-          <Textarea
-            value={draft.notes}
-            onChange={(event) => updateDraft("notes", event.target.value)}
-            onClick={stopTemplateToggle}
-            onPointerDown={stopTemplateToggle}
-            className="min-h-[56px] resize-none bg-white"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Instructions
-        </Label>
-        <Textarea
-          value={draft.additionalInstructions}
-          onChange={(event) => updateDraft("additionalInstructions", event.target.value)}
-          onClick={stopTemplateToggle}
-          onPointerDown={stopTemplateToggle}
-          className="min-h-[56px] resize-none bg-white"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div
-            className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
-            onClick={stopTemplateToggle}
-            onPointerDown={stopTemplateToggle}
-          >
-            <Label className="text-xs text-slate-500">Movement check</Label>
-            <Switch
-              checked={draft.requiresMovementCheck}
-              onCheckedChange={(checked) => updateDraft("requiresMovementCheck", checked)}
-            />
-          </div>
-        </div>
-      </div>
-
-      {draft.demoUrl.trim() ? (
-        <div
-          className="rounded-md border border-slate-200 bg-white p-2"
-          onClick={stopTemplateToggle}
-          onPointerDown={stopTemplateToggle}
-        >
-          <DemoVideoPreview url={draft.demoUrl.trim()} size="inline" />
-        </div>
-      ) : null}
-
-      <ExerciseLibraryTags item={item} />
-    </div>
-  );
-}
-
 export default function AdminTemplatesPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -572,7 +218,6 @@ export default function AdminTemplatesPage() {
   const [selectedFolderByTab, setSelectedFolderByTab] = useState<FolderStateByTab>(
     initialState.folders,
   );
-  const [exerciseFacetFilter, setExerciseFacetFilter] = useState<ExerciseFacetFilter>({});
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -938,7 +583,7 @@ export default function AdminTemplatesPage() {
     }
   };
 
-  const duplicateExercise = async (item: any) => {
+  const duplicateExercise = async (item: any): Promise<string | void> => {
     try {
       const created = await createExerciseTemplate.mutateAsync({
         name: `${item.name} (Copy)`,
@@ -955,8 +600,12 @@ export default function AdminTemplatesPage() {
         additionalInstructions: item.additionalInstructions || null,
         requiresMovementCheck: Boolean(item.requiresMovementCheck),
         enableStructuredLogging: Boolean(item.enableStructuredLogging),
-      });
-      setLocation(`/app/admin/templates/exercises/${created.id}?tab=exercises`);
+        facets: item.facets ?? {},
+        keywords: Array.isArray(item.keywords) ? item.keywords : [],
+        needsVideo: Boolean(item.needsVideo),
+      } as any);
+      toast({ title: "Exercise duplicated" });
+      return created.id as string;
     } catch (error) {
       toast({
         title: "Could not duplicate exercise template",
@@ -966,17 +615,24 @@ export default function AdminTemplatesPage() {
     }
   };
 
-  const removeExercise = async (item: any) => {
-    if (!window.confirm("Delete this exercise template?")) return;
+  const removeExercise = async (item: any): Promise<boolean> => {
+    if (
+      !window.confirm(
+        `Delete "${item.name}" from the library? Plans that already use it keep their copy.`,
+      )
+    )
+      return false;
     try {
       await deleteExerciseTemplate.mutateAsync(item.id);
-      toast({ title: "Exercise template deleted" });
+      toast({ title: "Exercise deleted" });
+      return true;
     } catch (error) {
       toast({
         title: "Could not delete exercise template",
         description: getErrorMessage(error, "Unknown error"),
         variant: "destructive",
       });
+      return false;
     }
   };
 
@@ -1171,9 +827,10 @@ export default function AdminTemplatesPage() {
       ) : null}
 
       {activeTab === "exercises" ? (
-        <TemplateLibraryPane
-          rootLabel="Exercises"
-          categoryItems={categories.map((category) => ({
+        <ExerciseLibrary
+          exercises={exerciseTemplates as any[]}
+          folders={exerciseFolders}
+          categories={categories.map((category) => ({
             id: category.tab,
             label: category.label,
             count: category.count,
@@ -1184,41 +841,19 @@ export default function AdminTemplatesPage() {
             if (isTemplateTab(categoryId))
               setActiveTabWithPersistence(categoryId, { resetFolder: true });
           }}
-          allLabel="All Exercises"
-          searchPlaceholder="Search exercise templates..."
-          createButtonLabel="New exercise"
-          items={exerciseTemplates as any[]}
-          folders={exerciseFolders}
           selectedFolderId={selectedFolderId}
-          isLoading={pageLoading}
           onSelectFolder={setSelectedFolderForActiveTab}
-          onCreateTemplate={(folderId) => void createExercise(folderId)}
-          onDuplicateTemplate={(item) => void duplicateExercise(item)}
-          onDeleteTemplate={(item) => void removeExercise(item)}
+          isLoading={pageLoading}
+          onCreateExercise={createExercise}
+          onDuplicateExercise={duplicateExercise}
+          onDeleteExercise={removeExercise}
           onCreateFolder={(name, parentId) => void handleCreateFolder("exercise", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("exercise", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("exercise", folderId)}
-          onMoveFolder={(folderId, parentId) =>
-            void handleMoveFolder("exercise", folderId, parentId)
-          }
-          onMoveTemplate={(templateId, folderId) =>
+          onMoveExercise={(templateId, folderId) =>
             void handleMoveTemplate("exercise", templateId, folderId)
           }
-          onReorderTemplates={(items) => void handleReorderTemplates("exercise", items)}
-          getTemplateSummary={(item) => exerciseTagSummary(item)}
-          getTemplateSearchText={(item) => exerciseTagSearchText(item)}
-          renderFilters={() => (
-            <ExerciseFacetFilterBar value={exerciseFacetFilter} onChange={setExerciseFacetFilter} />
-          )}
-          filtersActive={isFacetFilterActive(exerciseFacetFilter)}
-          filterItem={(item) => matchesFacetFilter(item as any, exerciseFacetFilter)}
-          renderTemplateHeader={(item, isExpanded) => (
-            <ExerciseTemplateInlineHeader item={item} isExpanded={isExpanded} />
-          )}
-          renderTemplatePreview={(item) => renderExerciseTemplatePreview(item)}
-          renderTemplateDetails={(item) => <ExerciseTemplateInlineDetails item={item} />}
-          getTemplateOpenHref={(item) => `/app/admin/templates/exercises/${item.id}?tab=exercises`}
-          layout="rows"
+          onReorderExercises={(items) => void handleReorderTemplates("exercise", items)}
         />
       ) : null}
     </div>

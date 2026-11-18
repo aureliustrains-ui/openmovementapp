@@ -9,28 +9,20 @@ import {
   useUpdateExerciseTemplate,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { TemplateEditorHeader } from "@/components/admin/TemplateEditorHeader";
 import { useAutosave } from "@/hooks/useAutosave";
+import {
+  ExerciseFieldsEditor,
+  toExerciseEditableFields,
+  type ExerciseEditableFields,
+} from "@/components/admin/exercise/ExerciseFieldsEditor";
+import { ExerciseClientPreview } from "@/components/admin/exercise/ExerciseClientPreview";
+import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
 
-type ExerciseTemplateModel = {
+type ExerciseTemplateModel = ExerciseEditableFields & {
   id: string;
   name: string;
-  targetMuscle: string;
-  demoUrl: string;
-  sets: string;
-  reps: string;
-  load: string;
-  tempo: string;
-  notes: string;
-  goal: string;
-  additionalInstructions: string;
-  requiresMovementCheck: boolean;
-  enableStructuredLogging: boolean;
 };
 
 export default function ExerciseTemplateEditor() {
@@ -55,17 +47,7 @@ export default function ExerciseTemplateEditor() {
     setModel({
       id: template.id,
       name: template.name || "",
-      targetMuscle: template.targetMuscle || "",
-      demoUrl: template.demoUrl || "",
-      sets: template.sets || "",
-      reps: template.reps || "",
-      load: template.load || "",
-      tempo: template.tempo || "",
-      notes: template.notes || "",
-      goal: template.goal || "",
-      additionalInstructions: template.additionalInstructions || "",
-      requiresMovementCheck: Boolean(template.requiresMovementCheck),
-      enableStructuredLogging: Boolean(template.enableStructuredLogging),
+      ...toExerciseEditableFields(template),
     });
   }, [template]);
 
@@ -79,7 +61,6 @@ export default function ExerciseTemplateEditor() {
         await updateTemplate.mutateAsync({
           id: model.id,
           name: model.name.trim(),
-          targetMuscle: model.targetMuscle.trim() || null,
           demoUrl: model.demoUrl.trim() || null,
           sets: model.sets.trim() || null,
           reps: model.reps.trim() || null,
@@ -90,6 +71,7 @@ export default function ExerciseTemplateEditor() {
           additionalInstructions: model.additionalInstructions.trim() || null,
           requiresMovementCheck: model.requiresMovementCheck,
           enableStructuredLogging: model.enableStructuredLogging,
+          ...(model.demoUrl.trim() && template?.needsVideo ? { needsVideo: false } : {}),
         });
         if (!options?.silent) toast({ title: "Exercise template saved" });
       } catch {
@@ -99,7 +81,7 @@ export default function ExerciseTemplateEditor() {
         setSaving(false);
       }
     },
-    [model, toast, updateTemplate],
+    [model, template?.needsVideo, toast, updateTemplate],
   );
 
   const autosave = useAutosave({
@@ -125,7 +107,10 @@ export default function ExerciseTemplateEditor() {
     try {
       const created = await createTemplate.mutateAsync({
         name: `${model.name} (Copy)`,
-        targetMuscle: model.targetMuscle.trim() || null,
+        folderId: template?.folderId ?? null,
+        facets: template?.facets ?? {},
+        keywords: Array.isArray(template?.keywords) ? template.keywords : [],
+        needsVideo: Boolean(template?.needsVideo),
         demoUrl: model.demoUrl.trim() || null,
         sets: model.sets.trim() || null,
         reps: model.reps.trim() || null,
@@ -163,119 +148,25 @@ export default function ExerciseTemplateEditor() {
         onDuplicate={duplicate}
       />
 
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>Tags</Label>
-              <Input
-                value={model.targetMuscle}
-                placeholder="one-arm chin-up, bent arm, vertical pull..."
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, targetMuscle: e.target.value } : prev))
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-5">
+              <ExerciseFieldsEditor
+                idPrefix={`exercise-template-${model.id}`}
+                value={model}
+                onChange={(field, value) =>
+                  setModel((prev) => (prev ? { ...prev, [field]: value } : prev))
                 }
               />
-            </div>
-            <div>
-              <Label>Demo URL</Label>
-              <Input
-                value={model.demoUrl}
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, demoUrl: e.target.value } : prev))
-                }
-              />
-            </div>
-            <div>
-              <Label>Sets</Label>
-              <Input
-                value={model.sets}
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, sets: e.target.value } : prev))
-                }
-              />
-            </div>
-            <div>
-              <Label>Reps</Label>
-              <Input
-                value={model.reps}
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, reps: e.target.value } : prev))
-                }
-              />
-            </div>
-            <div>
-              <Label>Load</Label>
-              <Input
-                value={model.load}
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, load: e.target.value } : prev))
-                }
-              />
-            </div>
-            <div>
-              <Label>Tempo</Label>
-              <Input
-                value={model.tempo}
-                onChange={(e) =>
-                  setModel((prev) => (prev ? { ...prev, tempo: e.target.value } : prev))
-                }
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>Goal</Label>
-            <Input
-              value={model.goal}
-              onChange={(e) =>
-                setModel((prev) => (prev ? { ...prev, goal: e.target.value } : prev))
-              }
-            />
-          </div>
-
-          <div>
-            <Label>Notes</Label>
-            <Input
-              value={model.notes}
-              onChange={(e) =>
-                setModel((prev) => (prev ? { ...prev, notes: e.target.value } : prev))
-              }
-            />
-          </div>
-
-          <div>
-            <Label>Additional Instructions</Label>
-            <Textarea
-              value={model.additionalInstructions}
-              onChange={(e) =>
-                setModel((prev) =>
-                  prev ? { ...prev, additionalInstructions: e.target.value } : prev,
-                )
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between border rounded-md px-3 py-2">
-            <Label>Requires movement check</Label>
-            <Switch
-              checked={model.requiresMovementCheck}
-              onCheckedChange={(checked) =>
-                setModel((prev) => (prev ? { ...prev, requiresMovementCheck: checked } : prev))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between border rounded-md px-3 py-2">
-            <Label>Enable structured logging</Label>
-            <Switch
-              checked={model.enableStructuredLogging}
-              onCheckedChange={(checked) =>
-                setModel((prev) => (prev ? { ...prev, enableStructuredLogging: checked } : prev))
-              }
-            />
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+          {template ? <ExerciseLibraryTags item={template} /> : null}
+        </div>
+        <div className="xl:sticky xl:top-24 xl:self-start">
+          <ExerciseClientPreview exercise={model} />
+        </div>
+      </div>
     </div>
   );
 }

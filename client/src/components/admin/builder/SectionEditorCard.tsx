@@ -3,7 +3,6 @@ import { AddFromTemplatesModal } from "@/components/admin/AddFromTemplatesModal"
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,8 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ChevronDown,
   ChevronRight,
@@ -21,10 +18,13 @@ import {
   Library,
   Plus,
   Trash2,
-  Video,
 } from "lucide-react";
 import { type DragEvent, useState } from "react";
 import { formatReps, formatSets } from "@/lib/prescription";
+import {
+  ExerciseFieldsEditor,
+  toExerciseEditableFields,
+} from "@/components/admin/exercise/ExerciseFieldsEditor";
 
 type SectionEditorCardProps = {
   section: BlueprintSection;
@@ -373,90 +373,15 @@ export function SectionEditorCard({
 
               {isExpanded ? (
                 <div
-                  className="border-t border-slate-100 bg-slate-50/60 p-3 space-y-3"
+                  className="border-t border-slate-100 bg-slate-50/60 p-3"
                   data-testid={`exercise-details-${ex.id}`}
                 >
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {(
-                      [
-                        { key: "sets", label: "Sets" },
-                        { key: "reps", label: "Reps" },
-                        { key: "load", label: "Load" },
-                        { key: "tempo", label: "Tempo" },
-                      ] as const
-                    ).map(({ key, label }) => (
-                      <div key={key} className="space-y-1">
-                        <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                          {label}
-                        </Label>
-                        <Input
-                          value={ex[key]}
-                          onChange={(e) => onExerciseFieldChange(exIdx, key, e.target.value)}
-                          className="h-8 bg-white border-slate-200 font-medium"
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                        Goal
-                      </Label>
-                      <Input
-                        value={ex.goal}
-                        onChange={(e) => onExerciseFieldChange(exIdx, "goal", e.target.value)}
-                        placeholder="Target or progression"
-                        className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                        Coaching notes
-                      </Label>
-                      <Input
-                        value={ex.notes}
-                        onChange={(e) => onExerciseFieldChange(exIdx, "notes", e.target.value)}
-                        placeholder="Internal notes"
-                        className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                      Instructions
-                    </Label>
-                    <Textarea
-                      value={ex.additionalInstructions}
-                      onChange={(e) =>
-                        onExerciseFieldChange(exIdx, "additionalInstructions", e.target.value)
-                      }
-                      placeholder="Cues, form tips, modifications..."
-                      className="min-h-[56px] text-sm bg-white border-slate-200 text-slate-600 resize-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <div className="flex items-center gap-2">
-                      <Video className="h-4 w-4 text-slate-400 shrink-0" />
-                      <Input
-                        value={ex.demoUrl || ""}
-                        onChange={(e) => onExerciseFieldChange(exIdx, "demoUrl", e.target.value)}
-                        placeholder="Demo video URL"
-                        className="h-8 text-sm bg-white border-slate-200 text-slate-600"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
-                      <Label className="text-xs text-slate-500">Structured logging</Label>
-                      <Switch
-                        checked={ex.enableStructuredLogging}
-                        onCheckedChange={(checked) =>
-                          onExerciseFieldChange(exIdx, "enableStructuredLogging", checked)
-                        }
-                      />
-                    </div>
-                  </div>
+                  <ExerciseFieldsEditor
+                    idPrefix={`builder-${ex.id}`}
+                    value={toExerciseEditableFields(ex)}
+                    onChange={(field, value) => onExerciseFieldChange(exIdx, field, value)}
+                    showMovementCheck={movementCheckEnabled}
+                  />
                 </div>
               ) : null}
             </div>

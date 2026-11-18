@@ -35,7 +35,7 @@ test("template category tabs remain clickable and preserve explicit tab context"
   assert.ok(source.includes('rootLabel="Phases"'));
   assert.ok(source.includes('rootLabel="Sessions"'));
   assert.ok(source.includes('rootLabel="Sections"'));
-  assert.ok(source.includes('rootLabel="Exercises"'));
+  assert.ok(source.includes("<ExerciseLibrary"));
   assert.ok(
     source.includes("setActiveTabWithPersistence(categoryId, { resetFolder: true })"),
     "Category click should set active template category and reset to root view",

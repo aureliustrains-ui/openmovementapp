@@ -1,0 +1,712 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Folder,
+  FolderPlus,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Video,
+  VideoOff,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useUpdateExerciseTemplate, type TemplateFolder } from "@/lib/api";
+import { formatReps, formatSets } from "@/lib/prescription";
+import {
+  ExerciseFacetFilterBar,
+  isFacetFilterActive,
+} from "@/components/admin/ExerciseFacetFilterBar";
+import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
+import {
+  ExerciseFieldsEditor,
+  toExerciseEditableFields,
+  type ExerciseEditableFields,
+} from "@/components/admin/exercise/ExerciseFieldsEditor";
+import { ExerciseClientPreview } from "@/components/admin/exercise/ExerciseClientPreview";
+import {
+  facetLabel,
+  matchesFacetFilter,
+  readExerciseFacets,
+  type ExerciseFacetFilter,
+} from "@shared/exerciseFacets";
+
+type ExerciseItem = {
+  id: string;
+  name: string;
+  folderId: string | null;
+  sortOrder?: number;
+  [key: string]: any;
+};
+
+type CategoryNavItem = { id: string; label: string; count: number; icon?: LucideIcon };
+
+type Props = {
+  exercises: ExerciseItem[];
+  folders: TemplateFolder[];
+  categories: CategoryNavItem[];
+  activeCategoryId: string;
+  onSelectCategory: (id: string) => void;
+  selectedFolderId: string | null;
+  onSelectFolder: (folderId: string | null) => void;
+  isLoading?: boolean;
+  onCreateExercise: (folderId: string | null) => Promise<string | void>;
+  onDuplicateExercise: (item: ExerciseItem) => Promise<string | void>;
+  onDeleteExercise: (item: ExerciseItem) => Promise<boolean | void>;
+  onCreateFolder: (name: string, parentId: string | null) => void;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDeleteFolder: (folderId: string) => void;
+  onMoveExercise: (exerciseId: string, folderId: string | null) => void;
+  onReorderExercises: (
+    items: Array<{ id: string; sortOrder: number; folderId: string | null }>,
+  ) => void;
+};
+
+const SELECTED_KEY = "admin.exerciseLibrary.selectedId";
+
+function sortBySortOrder<T extends { sortOrder?: number; name: string }>(items: T[]): T[] {
+  return [...items].sort(
+    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name),
+  );
+}
+
+function tagSummary(item: ExerciseItem): string {
+  const facets = readExerciseFacets(item.facets);
+  return [...facets.pattern, ...facets.material].map(facetLabel).join(" · ");
+}
+
+function prescriptionSummary(item: ExerciseItem): string {
+  return [formatSets(item.sets), formatReps(item.reps), item.tempo?.trim() || null]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+export function ExerciseLibrary({
+  exercises,
+  folders,
+  categories,
+  activeCategoryId,
+  onSelectCategory,
+  selectedFolderId,
+  onSelectFolder,
+  isLoading = false,
+  onCreateExercise,
+  onDuplicateExercise,
+  onDeleteExercise,
+  onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onMoveExercise,
+  onReorderExercises,
+}: Props) {
+  const [search, setSearch] = useState("");
+  const [facetFilter, setFacetFilter] = useState<ExerciseFacetFilter>({});
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(SELECTED_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const selectExercise = (id: string | null) => {
+    setSelectedId(id);
+    try {
+      if (id) window.localStorage.setItem(SELECTED_KEY, id);
+      else window.localStorage.removeItem(SELECTED_KEY);
+    } catch {
+      // Remembering the selection is only a convenience.
+    }
+  };
+
+  // ---- folders ---------------------------------------------------------------------------
+  const sortedFolders = useMemo(
+    () =>
+      [...folders].sort(
+        (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name),
+      ),
+    [folders],
+  );
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, TemplateFolder[]>();
+    for (const folder of sortedFolders) {
+      const key = folder.parentId ?? "__root__";
+      map.set(key, [...(map.get(key) || []), folder]);
+    }
+    return map;
+  }, [sortedFolders]);
+  const foldersById = useMemo(
+    () => new Map(sortedFolders.map((folder) => [folder.id, folder])),
+    [sortedFolders],
+  );
+  const descendantIds = useCallback(
+    (folderId: string): Set<string> => {
+      const result = new Set<string>([folderId]);
+      const queue = [folderId];
+      while (queue.length) {
+        const current = queue.shift() as string;
+        for (const child of childrenByParent.get(current) || []) {
+          result.add(child.id);
+          queue.push(child.id);
+        }
+      }
+      return result;
+    },
+    [childrenByParent],
+  );
+  const folderPath = useCallback(
+    (folderId: string | null): string => {
+      const names: string[] = [];
+      let current = folderId ? foldersById.get(folderId) : undefined;
+      while (current) {
+        names.unshift(current.name);
+        current = current.parentId ? foldersById.get(current.parentId) : undefined;
+      }
+      return names.join(" / ");
+    },
+    [foldersById],
+  );
+  const countInFolder = useCallback(
+    (folderId: string) => {
+      const ids = descendantIds(folderId);
+      return exercises.filter((item) => item.folderId && ids.has(item.folderId)).length;
+    },
+    [descendantIds, exercises],
+  );
+
+  // Keep the selected folder's ancestors open.
+  useEffect(() => {
+    if (!selectedFolderId) return;
+    setExpandedFolderIds((previous) => {
+      const next = new Set(previous);
+      let current = foldersById.get(selectedFolderId);
+      while (current?.parentId) {
+        next.add(current.parentId);
+        current = foldersById.get(current.parentId);
+      }
+      return next;
+    });
+  }, [foldersById, selectedFolderId]);
+
+  // ---- list ------------------------------------------------------------------------------
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtersActive = isFacetFilterActive(facetFilter);
+  const searchingAll = normalizedSearch.length > 0 || filtersActive;
+
+  const visibleExercises = useMemo(() => {
+    let items = exercises;
+    if (!searchingAll && selectedFolderId) {
+      const ids = descendantIds(selectedFolderId);
+      items = items.filter((item) => item.folderId && ids.has(item.folderId));
+    }
+    if (filtersActive) items = items.filter((item) =>
+        matchesFacetFilter(item as { facets?: unknown; needsVideo?: boolean }, facetFilter),
+      );
+    if (normalizedSearch) {
+      items = items.filter((item) => {
+        const keywords = Array.isArray(item.keywords) ? item.keywords.join(" ") : "";
+        const haystack = `${item.name} ${tagSummary(item)} ${keywords}`.toLowerCase();
+        return haystack.includes(normalizedSearch);
+      });
+      return [...items].sort((a, b) => {
+        const aStarts = a.name.toLowerCase().startsWith(normalizedSearch) ? 0 : 1;
+        const bStarts = b.name.toLowerCase().startsWith(normalizedSearch) ? 0 : 1;
+        return aStarts - bStarts || a.name.localeCompare(b.name);
+      });
+    }
+    return sortBySortOrder(items);
+  }, [
+    descendantIds,
+    exercises,
+    facetFilter,
+    filtersActive,
+    normalizedSearch,
+    searchingAll,
+    selectedFolderId,
+  ]);
+
+  // Manual order only makes sense inside one folder without search or filters.
+  const directFolderItems = useMemo(
+    () =>
+      sortBySortOrder(exercises.filter((item) => (item.folderId ?? null) === selectedFolderId)),
+    [exercises, selectedFolderId],
+  );
+  const canReorder = !searchingAll && selectedFolderId !== null;
+  const move = (itemId: string, offset: -1 | 1) => {
+    const index = directFolderItems.findIndex((item) => item.id === itemId);
+    const target = index + offset;
+    if (index < 0 || target < 0 || target >= directFolderItems.length) return;
+    const next = [...directFolderItems];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    onReorderExercises(
+      next.map((item, sortOrder) => ({ id: item.id, sortOrder, folderId: item.folderId ?? null })),
+    );
+  };
+
+  const selected = exercises.find((item) => item.id === selectedId) || null;
+
+  // ---- render helpers --------------------------------------------------------------------
+  const renderFolder = (folder: TemplateFolder, depth: number) => {
+    const children = childrenByParent.get(folder.id) || [];
+    const expanded = expandedFolderIds.has(folder.id);
+    const isSelected = selectedFolderId === folder.id;
+    return (
+      <div key={folder.id}>
+        <div
+          className={`group flex items-center gap-1 rounded-md pr-1 text-sm ${
+            isSelected ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+          }`}
+          style={{ paddingLeft: 4 + depth * 12 }}
+        >
+          <button
+            type="button"
+            className={`h-6 w-5 shrink-0 ${children.length ? "" : "invisible"}`}
+            onClick={() =>
+              setExpandedFolderIds((previous) => {
+                const next = new Set(previous);
+                if (next.has(folder.id)) next.delete(folder.id);
+                else next.add(folder.id);
+                return next;
+              })
+            }
+            aria-label={expanded ? "Collapse folder" : "Expand folder"}
+          >
+            {expanded ? (
+              <ChevronDown className="mx-auto h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="mx-auto h-3.5 w-3.5" />
+            )}
+          </button>
+          {renamingFolderId === folder.id ? (
+            <Input
+              autoFocus
+              value={renameDraft}
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onBlur={() => {
+                const name = renameDraft.trim();
+                if (name && name !== folder.name) onRenameFolder(folder.id, name);
+                setRenamingFolderId(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+                if (event.key === "Escape") setRenamingFolderId(null);
+              }}
+              className="h-7 text-sm text-slate-900"
+            />
+          ) : (
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 text-left"
+              onClick={() => onSelectFolder(folder.id)}
+            >
+              <span className="truncate">{folder.name}</span>
+              <span className={`text-xs ${isSelected ? "text-slate-300" : "text-slate-400"}`}>
+                {countInFolder(folder.id)}
+              </span>
+            </button>
+          )}
+        </div>
+        {expanded ? children.map((child) => renderFolder(child, depth + 1)) : null}
+      </div>
+    );
+  };
+
+  const selectedFolder = selectedFolderId ? foldersById.get(selectedFolderId) : undefined;
+
+  return (
+    <div
+      className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(300px,1fr)_minmax(380px,1.15fr)]"
+      data-testid="exercise-library"
+    >
+      {/* Left: template types + folders by movement pattern */}
+      <aside className="space-y-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
+        <nav className="space-y-0.5">
+          {categories.map((category) => {
+            const Icon = category.icon;
+            const active = category.id === activeCategoryId;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => onSelectCategory(category.id)}
+                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
+                  active ? "bg-slate-100 font-semibold text-slate-900" : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  {Icon ? <Icon className="h-4 w-4" /> : null}
+                  {category.label}
+                </span>
+                <span className="text-xs text-slate-400">{category.count}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="space-y-1 border-t border-slate-100 pt-3">
+          <button
+            type="button"
+            className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm ${
+              selectedFolderId === null ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+            }`}
+            onClick={() => onSelectFolder(null)}
+          >
+            <span className="flex items-center gap-2">
+              <Folder className="h-4 w-4" />
+              All exercises
+            </span>
+            <span className={`text-xs ${selectedFolderId === null ? "text-slate-300" : "text-slate-400"}`}>
+              {exercises.length}
+            </span>
+          </button>
+          {(childrenByParent.get("__root__") || []).map((folder) => renderFolder(folder, 0))}
+        </div>
+
+        <div className="flex flex-wrap gap-1 border-t border-slate-100 pt-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onCreateFolder("New folder", selectedFolderId)}
+          >
+            <FolderPlus className="mr-1 h-3.5 w-3.5" />
+            {selectedFolder ? "Subfolder" : "Folder"}
+          </Button>
+          {selectedFolder ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setRenamingFolderId(selectedFolder.id);
+                  setRenameDraft(selectedFolder.name);
+                }}
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" />
+                Rename
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700"
+                onClick={() => onDeleteFolder(selectedFolder.id)}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </aside>
+
+      {/* Middle: search, filters, list */}
+      <section className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 px-3">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, tags, keywords"
+              className="h-9 border-none px-0 shadow-none focus-visible:ring-0"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={async () => {
+              const createdId = await onCreateExercise(selectedFolderId);
+              if (typeof createdId === "string") selectExercise(createdId);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            New
+          </Button>
+        </div>
+        <ExerciseFacetFilterBar value={facetFilter} onChange={setFacetFilter} />
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {searchingAll
+              ? "Searching all folders"
+              : selectedFolder
+                ? folderPath(selectedFolder.id)
+                : "All exercises"}
+          </span>
+          <span>
+            {visibleExercises.length} exercise{visibleExercises.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {isLoading ? (
+          <p className="py-6 text-center text-sm text-slate-500">Loading exercises…</p>
+        ) : visibleExercises.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-500">No exercises found.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100" data-testid="exercise-library-list">
+            {visibleExercises.map((item) => {
+              const isSelected = item.id === selectedId;
+              const tags = tagSummary(item);
+              const prescription = prescriptionSummary(item);
+              const hasVideo = Boolean(item.demoUrl);
+              const isDirect = canReorder && (item.folderId ?? null) === selectedFolderId;
+              return (
+                <li key={item.id}>
+                  <div
+                    className={`group flex items-center gap-2 rounded-md px-2 py-2 ${
+                      isSelected ? "bg-slate-100" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => selectExercise(item.id)}
+                      data-testid={`exercise-library-item-${item.id}`}
+                    >
+                      <div className="truncate text-sm font-semibold text-slate-900">{item.name}</div>
+                      <div className="truncate text-xs text-slate-500">
+                        {[prescription, tags].filter(Boolean).join(" · ") || "No tags yet"}
+                      </div>
+                    </button>
+                    {item.needsVideo ? (
+                      <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                        needs video
+                      </span>
+                    ) : null}
+                    {hasVideo ? (
+                      <Video className="h-4 w-4 shrink-0 text-slate-400" aria-label="Has video" />
+                    ) : (
+                      <VideoOff className="h-4 w-4 shrink-0 text-slate-300" aria-label="No video" />
+                    )}
+                    {isDirect ? (
+                      <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                          onClick={() => move(item.id, -1)}
+                          aria-label="Move up"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                          onClick={() => move(item.id, 1)}
+                          aria-label="Move down"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Right: the selected exercise, as the client sees it, plus its editor */}
+      <section className="min-w-0 lg:col-span-2 xl:col-span-1">
+        {selected ? (
+          <ExerciseDetailPane
+            key={selected.id}
+            item={selected}
+            folders={sortedFolders}
+            folderPath={folderPath}
+            onMove={(folderId) => onMoveExercise(selected.id, folderId)}
+            onDuplicate={async () => {
+              const createdId = await onDuplicateExercise(selected);
+              if (typeof createdId === "string") selectExercise(createdId);
+            }}
+            onDelete={async () => {
+              const deleted = await onDeleteExercise(selected);
+              if (deleted !== false) selectExercise(null);
+            }}
+          />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+            Pick an exercise to see it the way your client does and to edit it.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+type DetailDraft = ExerciseEditableFields & { name: string };
+
+function ExerciseDetailPane({
+  item,
+  folders,
+  folderPath,
+  onMove,
+  onDuplicate,
+  onDelete,
+}: {
+  item: ExerciseItem;
+  folders: TemplateFolder[];
+  folderPath: (folderId: string | null) => string;
+  onMove: (folderId: string | null) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const { toast } = useToast();
+  const updateExerciseTemplate = useUpdateExerciseTemplate();
+  const [draft, setDraft] = useState<DetailDraft>(() => ({
+    name: item.name || "",
+    ...toExerciseEditableFields(item),
+  }));
+  const [status, setStatus] = useState<"saved" | "pending" | "saving" | "error">("saved");
+  const draftRef = useRef(draft);
+  const dirtyRef = useRef(false);
+  const needsVideoRef = useRef(Boolean(item.needsVideo));
+  needsVideoRef.current = Boolean(item.needsVideo);
+
+  const save = useCallback(async () => {
+    if (!dirtyRef.current) return;
+    const latest = draftRef.current;
+    if (!latest.name.trim()) return;
+    dirtyRef.current = false;
+    setStatus("saving");
+    try {
+      await updateExerciseTemplate.mutateAsync({
+        id: item.id,
+        name: latest.name.trim(),
+        demoUrl: latest.demoUrl.trim() || null,
+        sets: latest.sets.trim() || null,
+        reps: latest.reps.trim() || null,
+        load: latest.load.trim() || null,
+        tempo: latest.tempo.trim() || null,
+        goal: latest.goal.trim() || null,
+        additionalInstructions: latest.additionalInstructions.trim() || null,
+        notes: latest.notes.trim() || null,
+        requiresMovementCheck: latest.requiresMovementCheck,
+        enableStructuredLogging: latest.enableStructuredLogging,
+        // A demo video was added: it no longer needs filming.
+        ...(latest.demoUrl.trim() && needsVideoRef.current ? { needsVideo: false } : {}),
+      } as any);
+      setStatus(dirtyRef.current ? "pending" : "saved");
+    } catch {
+      dirtyRef.current = true;
+      setStatus("error");
+      toast({ title: "Could not save exercise", variant: "destructive" });
+    }
+  }, [item.id, toast, updateExerciseTemplate]);
+
+  // Save shortly after typing stops.
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    const timeout = window.setTimeout(() => void save(), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [draft, save]);
+
+  // Save whatever is left when switching to another exercise or leaving the page.
+  useEffect(() => () => void save(), [save]);
+
+  const update = <K extends keyof DetailDraft>(field: K, value: DetailDraft[K]) => {
+    setDraft((previous) => {
+      const next = { ...previous, [field]: value };
+      draftRef.current = next;
+      dirtyRef.current = true;
+      return next;
+    });
+    setStatus("pending");
+  };
+
+  const statusLabel =
+    status === "saving"
+      ? "Saving…"
+      : status === "pending"
+        ? "Unsaved changes"
+        : status === "error"
+          ? "Not saved"
+          : "Saved";
+
+  return (
+    <div className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto">
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <Input
+            value={draft.name}
+            onChange={(event) => update("name", event.target.value)}
+            className="h-9 border-transparent px-1 text-lg font-semibold shadow-none focus-visible:border-slate-300"
+            aria-label="Exercise name"
+          />
+          <div className="flex shrink-0 items-center gap-1">
+            <span
+              className={`mr-1 text-xs ${status === "error" ? "text-rose-600" : "text-slate-400"}`}
+            >
+              {statusLabel}
+            </span>
+            <Button type="button" variant="ghost" size="icon" onClick={onDuplicate} title="Duplicate">
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-slate-400 hover:text-rose-600"
+              onClick={onDelete}
+              title="Delete exercise"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="shrink-0 text-xs text-slate-500">Folder</Label>
+          <Select
+            value={item.folderId ?? "__none__"}
+            onValueChange={(value) => onMove(value === "__none__" ? null : value)}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No folder</SelectItem>
+              {folders.map((folder) => (
+                <SelectItem key={folder.id} value={folder.id}>
+                  {folderPath(folder.id)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <ExerciseClientPreview exercise={draft} />
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <ExerciseFieldsEditor
+          idPrefix={`library-${item.id}`}
+          value={draft}
+          onChange={(field, value) => update(field, value as any)}
+        />
+      </div>
+
+      <ExerciseLibraryTags item={item} />
+    </div>
+  );
+}

@@ -148,16 +148,10 @@ test("template search is global and ranked by name before tags", () => {
   assert.ok(librarySource.includes("getTemplateSearchText"));
   assert.ok(librarySource.includes("name.startsWith(normalizedSearch)"));
   assert.ok(templatesSource.includes("renderSectionTemplatePreview"));
-  assert.ok(templatesSource.includes("renderExerciseTemplatePreview"));
-  assert.ok(templatesSource.includes("ExerciseTemplateInlineDetails"));
-  assert.ok(
-    templatesSource.includes(
-      "renderTemplateDetails={(item) => <ExerciseTemplateInlineDetails item={item} />}",
-    ),
-  );
+  assert.ok(templatesSource.includes("<ExerciseLibrary"), "Exercises use the three-pane library");
   assert.ok(templatesSource.includes('layout="rows"'));
-  assert.ok(templatesSource.includes("No tags"));
-  assert.ok(exerciseEditorSource.includes("<Label>Tags</Label>"));
+  assert.ok(exerciseEditorSource.includes("<ExerciseFieldsEditor"));
+  assert.ok(exerciseEditorSource.includes("<ExerciseLibraryTags"));
 });
 
 test("exercise templates can be created from the top action without opening the full editor", () => {
@@ -172,9 +166,13 @@ test("exercise templates can be created from the top action without opening the 
   assert.equal(librarySource.includes("window.prompt"), false);
   assert.equal(librarySource.includes("All folders"), false);
   assert.equal(librarySource.includes("cursor-pointer"), false);
-  assert.ok(templatesSource.includes('createButtonLabel="New exercise"'));
-  assert.ok(templatesSource.includes("ExerciseTemplateInlineHeader"));
-  assert.ok(templatesSource.includes("5_000"));
+  // Exercises: created from the library's "New" button and opened in the detail pane right away.
+  const exerciseLibrarySource = fs.readFileSync(
+    path.resolve(serverDir, "../client/src/components/admin/exercise/ExerciseLibrary.tsx"),
+    "utf8",
+  );
+  assert.ok(exerciseLibrarySource.includes("onCreateExercise(selectedFolderId)"));
+  assert.ok(exerciseLibrarySource.includes("selectExercise(createdId)"));
   assert.ok(templatesSource.includes('toast({ title: "Exercise template added" })'));
   assert.ok(templatesSource.includes("return created.id"));
 });
