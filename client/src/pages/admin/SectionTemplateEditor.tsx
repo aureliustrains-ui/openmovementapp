@@ -25,10 +25,21 @@ type SectionTemplateModel = {
 
 export default function SectionTemplateEditor() {
   const [, params] = useRoute("/app/admin/templates/sections/:sectionTemplateId");
+  return <SectionTemplateEditorBody templateId={params?.sectionTemplateId || ""} />;
+}
+
+/** The section editor; `embedded` shows it inside a side panel (closes instead of navigating). */
+export function SectionTemplateEditorBody({
+  templateId,
+  embedded = false,
+  onClose,
+}: {
+  templateId: string;
+  embedded?: boolean;
+  onClose?: () => void;
+}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-
-  const templateId = params?.sectionTemplateId || "";
 
   const { data: allTemplates = [] } = useQuery(sectionTemplatesQuery);
   const { data: exerciseTemplates = [] } = useQuery(exerciseTemplatesQuery);
@@ -79,7 +90,7 @@ export default function SectionTemplateEditor() {
   const autosave = useAutosave({
     snapshot: autosaveSnapshot,
     enabled: Boolean(model?.id && model.name.trim()),
-    delayMs: 30_000,
+    delayMs: embedded ? 1_500 : 30_000,
     onSave: () => save({ silent: true }),
   });
 
@@ -88,7 +99,8 @@ export default function SectionTemplateEditor() {
     if (!window.confirm(`Delete "${model.name}"?`)) return;
     try {
       await deleteTemplate.mutateAsync(model.id);
-      setLocation("/app/admin/templates?tab=sections");
+      if (embedded) onClose?.();
+      else setLocation("/app/admin/templates?tab=sections");
     } catch {
       toast({ title: "Could not delete section template", variant: "destructive" });
     }
@@ -103,7 +115,8 @@ export default function SectionTemplateEditor() {
         exercises: model.exercises,
       });
       toast({ title: "Section template duplicated" });
-      setLocation(`/app/admin/templates/sections/${created.id}?tab=sections`);
+      if (embedded) onClose?.();
+      else setLocation(`/app/admin/templates/sections/${created.id}?tab=sections`);
     } catch {
       toast({ title: "Could not duplicate section template", variant: "destructive" });
     }
@@ -120,9 +133,14 @@ export default function SectionTemplateEditor() {
   };
 
   return (
-    <div className="space-y-6 w-full pb-20">
+    <div className={embedded ? "w-full space-y-6 pb-10 pt-6" : "w-full space-y-6 pb-20"}>
       <TemplateEditorHeader
         backHref="/app/admin/templates?tab=sections"
+        onClose={
+          embedded
+            ? () => void save({ silent: true }).catch(() => undefined).finally(() => onClose?.())
+            : undefined
+        }
         title="Section Templates"
         name={model.name}
         onNameChange={(value) => setModel((prev) => (prev ? { ...prev, name: value } : prev))}

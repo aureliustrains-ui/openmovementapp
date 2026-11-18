@@ -407,7 +407,18 @@ export default function TemplateBuilder() {
                           );
                           return (
                             <Badge key={`${entry.sessionId}-${day}-${slot}`} variant="outline">
-                              {session?.name || "Session"}
+                              <button
+                                type="button"
+                                className="hover:underline"
+                                title="Jump to this session below"
+                                onClick={() =>
+                                  document
+                                    .getElementById(`session-card-${entry.sessionId}`)
+                                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                                }
+                              >
+                                {session?.name || "Session"}
+                              </button>
                               {sharedAcrossWeeks ? (
                                 <button
                                   className="ml-1"

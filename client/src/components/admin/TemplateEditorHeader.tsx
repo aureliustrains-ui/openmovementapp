@@ -1,11 +1,20 @@
 import { Link } from "wouter";
-import { ArrowLeft, Copy, Loader2, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Loader2, MoreHorizontal, Save, Trash2, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AutosaveStatus } from "@/hooks/useAutosave";
 
 type TemplateEditorHeaderProps = {
   backHref: string;
+  /** Embedded (side panel) mode: close instead of navigating back. */
+  onClose?: () => void;
   title: string;
   name: string;
   onNameChange: (value: string) => void;
@@ -19,6 +28,7 @@ type TemplateEditorHeaderProps = {
 
 export function TemplateEditorHeader({
   backHref,
+  onClose,
   title,
   name,
   onNameChange,
@@ -41,17 +51,36 @@ export function TemplateEditorHeader({
             : "";
 
   return (
-    <div className="sticky top-0 z-20 -mx-6 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur-xl md:-mx-8 md:px-8">
+    <div
+      className={
+        onClose
+          ? "flex items-center justify-between gap-3 border-b border-slate-200 pb-3 pr-8"
+          : "sticky top-0 z-20 -mx-6 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur-xl md:-mx-8 md:px-8"
+      }
+    >
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <Link href={backHref}>
+        {onClose ? (
           <Button
             variant="ghost"
             size="icon"
             className="rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            onClick={onClose}
+            aria-label="Close"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </Button>
-        </Link>
+        ) : (
+          <Link href={backHref}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+        )}
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
             {title}
@@ -73,20 +102,6 @@ export function TemplateEditorHeader({
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {onDuplicate && (
-          <Button variant="outline" className="border-slate-200 bg-white" onClick={onDuplicate}>
-            <Copy className="h-4 w-4 mr-2" /> Duplicate
-          </Button>
-        )}
-        {onDelete && (
-          <Button
-            variant="outline"
-            className="border-red-200 bg-white text-red-600 hover:bg-red-50"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-2" /> Delete
-          </Button>
-        )}
         <Button
           className="bg-indigo-600 hover:bg-indigo-700 text-white"
           onClick={onSave}
@@ -99,6 +114,31 @@ export function TemplateEditorHeader({
           )}
           Save
         </Button>
+        {onDuplicate || onDelete ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="border-slate-200 bg-white" aria-label="More actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {onDuplicate ? (
+                <DropdownMenuItem onSelect={onDuplicate}>
+                  <Copy className="mr-2 h-4 w-4" /> Duplicate
+                </DropdownMenuItem>
+              ) : null}
+              {onDuplicate && onDelete ? <DropdownMenuSeparator /> : null}
+              {onDelete ? (
+                <DropdownMenuItem
+                  className="text-rose-600 focus:text-rose-600"
+                  onSelect={onDelete}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
     </div>
   );

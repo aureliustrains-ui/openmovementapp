@@ -15,7 +15,7 @@ const templatePickerPanelPath = path.resolve(
 );
 const templateLibraryPanePath = path.resolve(
   serverDir,
-  "../client/src/components/admin/TemplateLibraryPane.tsx",
+  "../client/src/components/admin/TemplateListPane.tsx",
 );
 const sectionEditorCardPath = path.resolve(
   serverDir,
@@ -146,10 +146,7 @@ test("template search is global and ranked by name before tags", () => {
   assert.ok(pickerSource.includes("getTemplateSearchText"));
   assert.ok(pickerSource.includes("name.startsWith(normalizedSearch)"));
   assert.ok(librarySource.includes("getTemplateSearchText"));
-  assert.ok(librarySource.includes("name.startsWith(normalizedSearch)"));
-  assert.ok(templatesSource.includes("renderSectionTemplatePreview"));
   assert.ok(templatesSource.includes("<ExerciseLibrary"), "Exercises use the three-pane library");
-  assert.ok(templatesSource.includes('layout="rows"'));
   assert.ok(exerciseEditorSource.includes("<ExerciseFieldsEditor"));
   assert.ok(exerciseEditorSource.includes("<ExerciseLibraryTags"));
 });
@@ -158,13 +155,9 @@ test("exercise templates can be created from the top action without opening the 
   const librarySource = fs.readFileSync(templateLibraryPanePath, "utf8");
   const templatesSource = fs.readFileSync(templatesPagePath, "utf8");
 
-  assert.ok(librarySource.includes("createTemplateAtCurrentLocation"));
-  assert.ok(librarySource.includes("setExpandedTemplateIds"));
-  assert.ok(librarySource.includes('onCreateFolder("New folder", selectedFolderId)'));
-  assert.ok(librarySource.includes("<InlineFolderName"));
-  assert.ok(librarySource.includes("renderTemplateHeader"));
+  assert.ok(librarySource.includes("onCreateTemplate(selectedFolderId)"));
+  assert.ok(librarySource.includes("<FolderChipBar"));
   assert.equal(librarySource.includes("window.prompt"), false);
-  assert.equal(librarySource.includes("All folders"), false);
   // Exercises: created from the library's "New" button and opened in the detail pane right away.
   const exerciseLibrarySource = fs.readFileSync(
     path.resolve(serverDir, "../client/src/components/admin/exercise/ExerciseLibrary.tsx"),

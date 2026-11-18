@@ -8,7 +8,7 @@ const serverDir = path.dirname(fileURLToPath(import.meta.url));
 const templatesPagePath = path.resolve(serverDir, "../client/src/pages/admin/Templates.tsx");
 const libraryPanePath = path.resolve(
   serverDir,
-  "../client/src/components/admin/TemplateLibraryPane.tsx",
+  "../client/src/components/admin/TemplateListPane.tsx",
 );
 const phaseEditorPath = path.resolve(serverDir, "../client/src/pages/admin/TemplateBuilder.tsx");
 const sessionEditorPath = path.resolve(
@@ -26,23 +26,16 @@ const exerciseEditorPath = path.resolve(
 
 test("template category tabs remain clickable and preserve explicit tab context", () => {
   const source = fs.readFileSync(templatesPagePath, "utf8");
-  const paneSource = fs.readFileSync(libraryPanePath, "utf8");
-
   assert.ok(source.includes('label: "Phases"'));
   assert.ok(source.includes('label: "Sessions"'));
   assert.ok(source.includes('label: "Sections"'));
   assert.ok(source.includes('label: "Exercises"'));
-  assert.ok(source.includes('rootLabel="Phases"'));
-  assert.ok(source.includes('rootLabel="Sessions"'));
-  assert.ok(source.includes('rootLabel="Sections"'));
+  assert.ok(source.includes("<TemplateListPane"));
+  assert.ok(source.includes("onOpenTemplate={(item) => setOpenSectionId(item.id)}"));
   assert.ok(source.includes("<ExerciseLibrary"));
   assert.ok(
     source.includes("setActiveTabWithPersistence(category.tab, { resetFolder: true })"),
     "Category click should set active template category and reset to root view",
-  );
-  assert.ok(
-    source.includes("activeCategoryId={activeTab}"),
-    "Active category should be passed into the shared library pane",
   );
   assert.ok(
     source.includes("buildTemplatesUrl(activeTab, folderId)"),
@@ -58,19 +51,18 @@ test("folders are navigated from the content area and the exercise chip bar, not
   );
 
   assert.ok(exerciseSource.includes("<FolderChipBar"));
-  assert.ok(source.includes("selectedFolderPath.map"));
+  assert.ok(source.includes("<FolderChipBar"));
   assert.equal(source.includes("Uncategorized"), false);
   assert.equal(source.includes("__uncategorized__"), false);
 });
 
-test("template content pane stays uncluttered and relies on visual hierarchy", () => {
+test("template list rows open on click and keep actions in a menu", () => {
   const source = fs.readFileSync(libraryPanePath, "utf8");
 
-  assert.equal(source.includes(">Folders</p>"), false);
-  assert.equal(source.includes(">Templates</p>"), false);
-  assert.equal(source.includes("child folder"), false);
-  assert.equal(source.includes("Move to</label>"), false);
-  assert.ok(source.includes("selectedFolderPath.map"));
+  assert.ok(source.includes("onClick={() => open(item)}"));
+  assert.ok(source.includes('aria-label="More actions"'));
+  assert.ok(source.includes("Move to folder"));
+  assert.equal(source.includes("window.prompt"), false);
 });
 
 test("template editors route back to the correct template category tab", () => {

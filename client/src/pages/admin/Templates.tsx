@@ -28,7 +28,9 @@ import {
   cloneSectionFromTemplate,
   cloneSessionFromTemplate,
 } from "@/lib/blueprintClone";
-import { TemplateLibraryPane } from "@/components/admin/TemplateLibraryPane";
+import { TemplateListPane } from "@/components/admin/TemplateListPane";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { SectionTemplateEditorBody } from "@/pages/admin/SectionTemplateEditor";
 import { useToast } from "@/hooks/use-toast";
 import { formatReps, formatSets } from "@/lib/prescription";
 import { ExerciseLibrary } from "@/components/admin/exercise/ExerciseLibrary";
@@ -180,41 +182,12 @@ function exercisePrescription(exercise: any) {
     .join(" · ");
 }
 
-function renderSectionTemplatePreview(item: any) {
-  const exercises = ((item.exercises || []) as any[]).slice(0, 2);
-  if (exercises.length === 0) {
-    return <div className="text-xs text-slate-400">No exercises yet</div>;
-  }
-  return (
-    <div className="space-y-0.5">
-      {exercises.map((exercise, index) => (
-        <div
-          key={exercise.id || `${exercise.name}-${index}`}
-          className="grid grid-cols-[28px_minmax(0,1fr)] rounded-md border border-slate-100 bg-slate-50 px-2 py-1"
-        >
-          <span className="text-xs font-semibold text-slate-500">A{index + 1}</span>
-          <div className="min-w-0">
-            <div className="truncate text-xs font-medium text-slate-900">
-              {exercise.name || "Untitled exercise"}
-            </div>
-            <div className="truncate text-xs text-slate-500">{exercisePrescription(exercise)}</div>
-          </div>
-        </div>
-      ))}
-      {(item.exercises || []).length > exercises.length ? (
-        <div className="text-xs text-slate-400">
-          +{(item.exercises || []).length - exercises.length} more
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export default function AdminTemplatesPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const initialState = useMemo(resolveInitialTemplateState, []);
   const [activeTab, setActiveTab] = useState<TemplateTab>(initialState.tab);
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [selectedFolderByTab, setSelectedFolderByTab] = useState<FolderStateByTab>(
     initialState.folders,
   );
@@ -521,7 +494,8 @@ export default function AdminTemplatesPage() {
         folderId,
         sortOrder: getNextSortOrder(sectionTemplates, folderId),
       });
-      setLocation(`/app/admin/templates/sections/${created.id}?tab=sections`);
+      setOpenSectionId(created.id);
+      return created.id as string;
     } catch (error) {
       toast({
         title: "Could not create section template",
@@ -728,21 +702,7 @@ export default function AdminTemplatesPage() {
       </nav>
 
       {activeTab === "phases" ? (
-        <TemplateLibraryPane
-          rootLabel="Phases"
-          categoryItems={categories
-            .filter((category) => category.tab === activeTab)
-            .map((category) => ({
-              id: category.tab,
-              label: category.label,
-              count: category.count,
-              icon: category.icon,
-            }))}
-          activeCategoryId={activeTab}
-          onSelectCategory={(categoryId) => {
-            if (isTemplateTab(categoryId))
-              setActiveTabWithPersistence(categoryId, { resetFolder: true });
-          }}
+        <TemplateListPane
           allLabel="All Phases"
           searchPlaceholder="Search phase templates..."
           createButtonLabel="New Phase Template"
@@ -757,7 +717,6 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("phase", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("phase", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("phase", folderId)}
-          onMoveFolder={(folderId, parentId) => void handleMoveFolder("phase", folderId, parentId)}
           onMoveTemplate={(templateId, folderId) =>
             void handleMoveTemplate("phase", templateId, folderId)
           }
@@ -766,25 +725,12 @@ export default function AdminTemplatesPage() {
             `${(item as any).sessions?.length || 0} session(s), ${(item as any).durationWeeks || 4} week(s)`
           }
           getTemplateOpenHref={(item) => `/app/admin/templates/phases/${item.id}?tab=phases`}
+          icon={<Layers className="h-4 w-4" />}
         />
       ) : null}
 
       {activeTab === "sessions" ? (
-        <TemplateLibraryPane
-          rootLabel="Sessions"
-          categoryItems={categories
-            .filter((category) => category.tab === activeTab)
-            .map((category) => ({
-              id: category.tab,
-              label: category.label,
-              count: category.count,
-              icon: category.icon,
-            }))}
-          activeCategoryId={activeTab}
-          onSelectCategory={(categoryId) => {
-            if (isTemplateTab(categoryId))
-              setActiveTabWithPersistence(categoryId, { resetFolder: true });
-          }}
+        <TemplateListPane
           allLabel="All Sessions"
           searchPlaceholder="Search session templates..."
           createButtonLabel="New Session Template"
@@ -799,34 +745,18 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("session", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("session", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("session", folderId)}
-          onMoveFolder={(folderId, parentId) =>
-            void handleMoveFolder("session", folderId, parentId)
-          }
           onMoveTemplate={(templateId, folderId) =>
             void handleMoveTemplate("session", templateId, folderId)
           }
           onReorderTemplates={(items) => void handleReorderTemplates("session", items)}
           getTemplateSummary={(item) => `${((item as any).sections || []).length} section(s)`}
           getTemplateOpenHref={(item) => `/app/admin/templates/sessions/${item.id}?tab=sessions`}
+          icon={<Library className="h-4 w-4" />}
         />
       ) : null}
 
       {activeTab === "sections" ? (
-        <TemplateLibraryPane
-          rootLabel="Sections"
-          categoryItems={categories
-            .filter((category) => category.tab === activeTab)
-            .map((category) => ({
-              id: category.tab,
-              label: category.label,
-              count: category.count,
-              icon: category.icon,
-            }))}
-          activeCategoryId={activeTab}
-          onSelectCategory={(categoryId) => {
-            if (isTemplateTab(categoryId))
-              setActiveTabWithPersistence(categoryId, { resetFolder: true });
-          }}
+        <TemplateListPane
           allLabel="All Sections"
           searchPlaceholder="Search section templates..."
           createButtonLabel="New Section Template"
@@ -841,9 +771,6 @@ export default function AdminTemplatesPage() {
           onCreateFolder={(name, parentId) => void handleCreateFolder("section", name, parentId)}
           onRenameFolder={(folderId, name) => void handleRenameFolder("section", folderId, name)}
           onDeleteFolder={(folderId) => void handleDeleteFolder("section", folderId)}
-          onMoveFolder={(folderId, parentId) =>
-            void handleMoveFolder("section", folderId, parentId)
-          }
           onMoveTemplate={(templateId, folderId) =>
             void handleMoveTemplate("section", templateId, folderId)
           }
@@ -854,9 +781,9 @@ export default function AdminTemplatesPage() {
               .map((exercise: any) => `${exercise.name || ""} ${exercise.targetMuscle || ""}`)
               .join(" ")
           }
-          renderTemplatePreview={(item) => renderSectionTemplatePreview(item)}
           getTemplateOpenHref={(item) => `/app/admin/templates/sections/${item.id}?tab=sections`}
-          layout="rows"
+          icon={<Spline className="h-4 w-4" />}
+          onOpenTemplate={(item) => setOpenSectionId(item.id)}
         />
       ) : null}
 
@@ -879,6 +806,20 @@ export default function AdminTemplatesPage() {
           onReorderExercises={(items) => void handleReorderTemplates("exercise", items)}
         />
       ) : null}
+
+      <Sheet open={Boolean(openSectionId)} onOpenChange={(open) => !open && setOpenSectionId(null)}>
+        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-3xl">
+          <SheetTitle className="sr-only">Section template</SheetTitle>
+          {openSectionId ? (
+            <SectionTemplateEditorBody
+              key={openSectionId}
+              templateId={openSectionId}
+              embedded
+              onClose={() => setOpenSectionId(null)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

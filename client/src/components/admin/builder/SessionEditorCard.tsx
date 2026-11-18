@@ -188,7 +188,8 @@ export function SessionEditorCard<TSession extends SessionLike>({
 
   return (
     <div
-      className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm ring-1 ring-slate-100"
+      id={`session-card-${session.id}`}
+      className="scroll-mt-20 overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm ring-1 ring-slate-100"
       onDragOver={(event) => {
         if (hasBuilderDragPayload(event)) {
           event.preventDefault();
