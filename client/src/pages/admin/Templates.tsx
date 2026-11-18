@@ -177,7 +177,7 @@ function getNextSortOrder(
 function exercisePrescription(exercise: any) {
   return [
     formatSets(exercise?.sets),
-    formatReps(exercise?.reps),
+    formatReps(exercise?.reps, exercise?.repsMode),
     exercise?.tempo || null,
   ]
     .filter(Boolean)

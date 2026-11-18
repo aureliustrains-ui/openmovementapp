@@ -16,6 +16,15 @@ export function formatSets(value: unknown): string | null {
   return withUnit(value, "set", "sets");
 }
 
-export function formatReps(value: unknown): string | null {
+export function formatReps(value: unknown, mode?: string | null): string | null {
+  if (mode === "hold") return formatHold(value);
   return withUnit(value, "rep", "reps");
+}
+
+/** A hold time: "30" becomes "30 s hold"; anything already descriptive ("45s per side") stays as typed. */
+export function formatHold(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  return PLAIN_NUMBER_OR_RANGE.test(text) ? `${text} s hold` : text;
 }

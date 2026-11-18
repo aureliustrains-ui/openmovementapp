@@ -88,7 +88,7 @@ function tagSummary(item: ExerciseItem): string {
 }
 
 function prescriptionSummary(item: ExerciseItem): string {
-  return [formatSets(item.sets), formatReps(item.reps), item.tempo?.trim() || null]
+  return [formatSets(item.sets), formatReps(item.reps, (item as any).repsMode), item.tempo?.trim() || null]
     .filter(Boolean)
     .join(" · ");
 }

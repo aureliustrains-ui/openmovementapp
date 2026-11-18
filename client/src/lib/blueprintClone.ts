@@ -9,8 +9,7 @@ export type BlueprintExercise = {
   notes: string;
   goal: string;
   additionalInstructions: string;
-  startPosition: string;
-  endPosition: string;
+  repsMode: string;
   qualityPoints: string;
   progressionStart: string;
   progressionBuild: string;

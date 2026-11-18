@@ -20,12 +20,8 @@ export const ADDITIVE_SCHEMA_UPGRADES: ReadonlyArray<{ name: string; sql: string
     sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS needs_video boolean NOT NULL DEFAULT false`,
   },
   {
-    name: "exercise_templates.start_position",
-    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS start_position text`,
-  },
-  {
-    name: "exercise_templates.end_position",
-    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS end_position text`,
+    name: "exercise_templates.reps_mode",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS reps_mode text`,
   },
   {
     name: "exercise_templates.quality_points",

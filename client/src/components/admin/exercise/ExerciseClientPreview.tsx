@@ -17,8 +17,7 @@ export function ExerciseClientPreview({
     tempo?: string;
     goal?: string;
     additionalInstructions?: string;
-    startPosition?: string | null;
-    endPosition?: string | null;
+    repsMode?: string | null;
     qualityPoints?: string | null;
     progressionStart?: string | null;
     progressionBuild?: string | null;
@@ -26,7 +25,7 @@ export function ExerciseClientPreview({
     demoUrl?: string;
   };
 }) {
-  const summary = [formatSets(exercise.sets), formatReps(exercise.reps), exercise.tempo?.trim() || null]
+  const summary = [formatSets(exercise.sets), formatReps(exercise.reps, exercise.repsMode), exercise.tempo?.trim() || null]
     .filter(Boolean)
     .join(" · ");
   const demoUrl = exercise.demoUrl?.trim();

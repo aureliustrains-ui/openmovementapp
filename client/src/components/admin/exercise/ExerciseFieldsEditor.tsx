@@ -18,8 +18,7 @@ export type ExerciseEditableFields = {
   tempo: string;
   goal: string;
   additionalInstructions: string;
-  startPosition: string;
-  endPosition: string;
+  repsMode: string;
   qualityPoints: string;
   progressionStart: string;
   progressionBuild: string;
@@ -89,54 +88,63 @@ export function ExerciseFieldsEditor({
             ["load", "Load"],
             ["tempo", "Tempo"],
           ] as const
-        ).map(([field, label]) => (
-          <div key={field} className="space-y-1">
-            <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
-              {label}
-            </Label>
-            <Input
-              id={`${idPrefix}-${field}`}
-              value={value[field]}
-              onChange={(event) => onChange(field, event.target.value)}
-              className="h-8 bg-white"
-            />
-          </div>
-        ))}
+        ).map(([field, label]) => {
+          const isHold = field === "reps" && value.repsMode === "hold";
+          return (
+            <div key={field} className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
+                  {field === "reps" ? (isHold ? "Hold (seconds)" : "Reps") : label}
+                </Label>
+                {field === "reps" ? (
+                  <div className="flex overflow-hidden rounded border border-slate-200 text-[10px] font-semibold">
+                    {(
+                      [
+                        ["", "Reps"],
+                        ["hold", "Hold"],
+                      ] as const
+                    ).map(([mode, modeLabel]) => (
+                      <button
+                        key={modeLabel}
+                        type="button"
+                        onClick={() => onChange("repsMode", mode)}
+                        className={`px-1.5 py-0.5 ${
+                          (value.repsMode === "hold" ? "hold" : "") === mode
+                            ? "bg-[var(--color-brand-100)] text-[var(--color-brand-700)]"
+                            : "bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                        data-testid={`reps-mode-${modeLabel.toLowerCase()}`}
+                      >
+                        {modeLabel}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <Input
+                id={`${idPrefix}-${field}`}
+                value={value[field]}
+                onChange={(event) => onChange(field, event.target.value)}
+                placeholder={isHold ? "e.g. 30" : undefined}
+                className="h-8 bg-white"
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
         <p className={labelClass}>The standard · client sees this</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(
-            [
-              ["startPosition", "Start", "e.g. arms straight, body in one line"],
-              ["endPosition", "Top / end", "e.g. rings at the lower ribs, shoulder blades back"],
-            ] as const
-          ).map(([field, label, placeholder]) => (
-            <div key={field} className="space-y-1">
-              <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
-                {label}
-              </Label>
-              <Textarea
-                id={`${idPrefix}-${field}`}
-                value={value[field]}
-                onChange={(event) => onChange(field, event.target.value)}
-                placeholder={placeholder}
-                className="min-h-[56px] resize-none bg-white text-sm"
-              />
-            </div>
-          ))}
-        </div>
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-qualityPoints`} className={labelClass}>
-            What counts as a rep
+            What counts as a rep · start, top, form
           </Label>
           <Textarea
             id={`${idPrefix}-qualityPoints`}
             value={value.qualityPoints}
             onChange={(event) => onChange("qualityPoints", event.target.value)}
-            placeholder="e.g. no hip sag · no shrugging · full range"
-            className="min-h-[56px] resize-none bg-white text-sm"
+            placeholder="e.g. Start: arms straight. Top: touch the rings to your ribs. Keep the body in one line, no hip sag"
+            className="min-h-[72px] resize-none bg-white text-sm"
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -163,19 +171,18 @@ export function ExerciseFieldsEditor({
         </div>
       </div>
 
-      {value.goal.trim() ? (
-        <div className="space-y-1">
-          <Label htmlFor={`${idPrefix}-goal`} className={labelClass}>
-            Goal (older free text) · client sees this unless the standard above has progression
-          </Label>
-          <Textarea
-            id={`${idPrefix}-goal`}
-            value={value.goal}
-            onChange={(event) => onChange("goal", event.target.value)}
-            className="min-h-[56px] resize-none bg-white text-sm"
-          />
-        </div>
-      ) : null}
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-goal`} className={labelClass}>
+          Goal · what the client works toward over the next weeks · client sees this
+        </Label>
+        <Textarea
+          id={`${idPrefix}-goal`}
+          value={value.goal}
+          onChange={(event) => onChange("goal", event.target.value)}
+          placeholder="e.g. 45 seconds on one leg"
+          className="min-h-[56px] resize-none bg-white text-sm"
+        />
+      </div>
 
       <div className="space-y-1">
         <Label htmlFor={`${idPrefix}-instructions`} className={labelClass}>

@@ -2631,7 +2631,7 @@ export default function AdminClientProfile() {
                           <div className="mt-1 text-xs text-slate-500">
                             {[
                               formatSets(exercise.sets),
-                              formatReps(exercise.reps),
+                              formatReps(exercise.reps, (exercise as any).repsMode),
                               exercise.tempo ? `${exercise.tempo} tempo` : null,
                             ]
                               .filter(Boolean)

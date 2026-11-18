@@ -115,8 +115,7 @@ export const exerciseTemplates = pgTable("exercise_templates", {
   goal: text("goal"),
   additionalInstructions: text("additional_instructions"),
   // Exercise standard shown to clients (start / end position, what counts as a rep, progression).
-  startPosition: text("start_position"),
-  endPosition: text("end_position"),
+  repsMode: text("reps_mode"),
   qualityPoints: text("quality_points"),
   progressionStart: text("progression_start"),
   progressionBuild: text("progression_build"),

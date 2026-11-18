@@ -77,7 +77,7 @@ function sectionLetterForIndex(index: number): string {
 function formatPrescription(exercise: BlueprintExercise): string {
   return [
     formatSets(exercise.sets),
-    formatReps(exercise.reps),
+    formatReps(exercise.reps, exercise.repsMode),
     exercise.load && exercise.load !== "Auto" ? exercise.load : null,
     exercise.tempo || null,
   ]

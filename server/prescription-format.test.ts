@@ -25,3 +25,10 @@ test("blank values stay blank", () => {
   assert.equal(formatSets(undefined), null);
   assert.equal(formatSets(null), null);
 });
+
+test("hold mode shows seconds for plain numbers and keeps descriptive text", () => {
+  assert.equal(formatReps("30", "hold"), "30 s hold");
+  assert.equal(formatReps("45s per side", "hold"), "45s per side");
+  assert.equal(formatReps("", "hold"), null);
+  assert.equal(formatReps("8", ""), "8 reps");
+});
