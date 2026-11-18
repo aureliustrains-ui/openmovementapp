@@ -808,7 +808,7 @@ export default function AdminTemplatesPage() {
       ) : null}
 
       <Sheet open={Boolean(openSectionId)} onOpenChange={(open) => !open && setOpenSectionId(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-3xl">
+        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-6xl">
           <SheetTitle className="sr-only">Section template</SheetTitle>
           {openSectionId ? (
             <SectionTemplateEditorBody

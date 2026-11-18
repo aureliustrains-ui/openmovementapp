@@ -120,15 +120,6 @@ export function ExerciseLibrary({
     }
   });
 
-  const [wide, setWide] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches,
-  );
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 1280px)");
-    const onChange = () => setWide(query.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const selectExercise = (id: string | null) => {
@@ -354,15 +345,9 @@ export function ExerciseLibrary({
       }}
     />
   );
-  const emptyDetail = (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-      Pick an exercise to see it the way your client does and to edit it.
-    </div>
-  );
-
   return (
     <div
-      className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(300px,1fr)_minmax(380px,1fr)]"
+      className="space-y-4"
       data-testid="exercise-library"
     >
       {/* Middle: search, filters, list */}
@@ -480,18 +465,14 @@ export function ExerciseLibrary({
         )}
       </section>
 
-      {/* Right: the selected exercise, as the client sees it, plus its editor.
-          Inline on wide windows, in a slide-in panel on narrower ones. */}
-      {wide ? (
-        <section className="min-w-0">{selected ? renderDetail(selected) : emptyDetail}</section>
-      ) : (
-        <Sheet open={sheetOpen && Boolean(selected)} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-xl">
-            <SheetTitle className="sr-only">Exercise</SheetTitle>
-            {selected ? <div className="pt-6">{renderDetail(selected)}</div> : null}
-          </SheetContent>
-        </Sheet>
-      )}
+      {/* The selected exercise opens in a wide side panel: editor on the left,
+          client preview beside it, one scrollbar for the whole panel. */}
+      <Sheet open={sheetOpen && Boolean(selected)} onOpenChange={setSheetOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto bg-slate-50 sm:max-w-5xl">
+          <SheetTitle className="sr-only">Exercise</SheetTitle>
+          {selected ? <div className="pt-6">{renderDetail(selected)}</div> : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -586,7 +567,7 @@ function ExerciseDetailPane({
           : "Saved";
 
   return (
-    <div className="space-y-4 xl:sticky xl:top-14 xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
+    <div className="space-y-4">
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <Input
@@ -637,17 +618,22 @@ function ExerciseDetailPane({
         </div>
       </div>
 
-      <ExerciseClientPreview exercise={draft} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+        <div className="space-y-4 lg:order-1">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <ExerciseFieldsEditor
+              idPrefix={`library-${item.id}`}
+              value={draft}
+              onChange={(field, value) => update(field, value as any)}
+            />
+          </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <ExerciseFieldsEditor
-          idPrefix={`library-${item.id}`}
-          value={draft}
-          onChange={(field, value) => update(field, value as any)}
-        />
+          <ExerciseLibraryTags item={item} />
+        </div>
+        <div className="lg:order-2 lg:sticky lg:top-0">
+          <ExerciseClientPreview exercise={draft} />
+        </div>
       </div>
-
-      <ExerciseLibraryTags item={item} />
     </div>
   );
 }
