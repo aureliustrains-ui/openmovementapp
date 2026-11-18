@@ -49,6 +49,8 @@ export function ExerciseStandardDetails({
         : "grid-cols-3";
 
   const clean = (value?: string | null) => (value && value.trim() ? value.trim() : "");
+  const repStandardLabel = exercise.repsMode === "hold" ? "A hold counts" : "A rep counts";
+  const repStandard = clean(exercise.qualityPoints);
   const textBlocks = [
     { label: "Goal", value: clean(exercise.goal) },
     {
@@ -91,6 +93,13 @@ export function ExerciseStandardDetails({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {repStandard && (
+        <div className={`${offset}text-center`} data-testid="exercise-rep-standard">
+          <span className="text-xs font-semibold text-slate-500">{repStandardLabel}: </span>
+          <span className="text-xs text-slate-600 whitespace-pre-wrap">{repStandard}</span>
         </div>
       )}
 
