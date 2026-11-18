@@ -10,9 +10,10 @@ type CreateUserInput = {
   name: string;
   email: string;
   password: string;
-  role: "Admin" | "Client";
+  role: "Admin" | "Client" | "Coach";
   status: string;
   avatar: string | null;
+  coachId?: string | null;
 };
 
 type CreateUserDeps = {
@@ -38,5 +39,6 @@ export async function createUserAccount(
     role: input.role,
     status: input.status,
     avatar: input.avatar,
+    coachId: input.coachId ?? null,
   });
 }

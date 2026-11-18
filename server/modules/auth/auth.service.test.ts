@@ -25,6 +25,7 @@ function buildUser(overrides: Partial<User> = {}): User {
     specifics: null,
     specificsUpdatedAt: null,
     specificsUpdatedBy: null,
+    coachId: null,
     ...overrides,
   };
 }

@@ -13,6 +13,7 @@ import type {
   ProgressReport,
   ProgressReportItem,
   InsertPhase,
+  InsertUser,
   TemplateFolderType,
 } from "@shared/schema";
 import { createUserAccount } from "./modules/users/users.service";
@@ -81,7 +82,14 @@ import {
   type ProgressReportWithItems,
 } from "./modules/notifications/notifications.service";
 import {
-  hasAdminAccess,
+  accessibleClientFilter,
+  canAccessClient,
+  canEditTemplate,
+  isCoach,
+  isOwner,
+  isStaff,
+} from "./modules/authz/access";
+import {
   isPrimaryAdminEmail,
   PRIMARY_ADMIN_EMAIL,
 } from "./modules/authz/admin-access";
@@ -101,7 +109,8 @@ const createUserSchema = z.object({
   name: z.string().min(2).max(120),
   email: z.string().email().max(320),
   password: z.string().min(8).max(128),
-  role: z.enum(["Admin", "Client"]).optional(),
+  role: z.enum(["Admin", "Client", "Coach"]).optional(),
+  coachId: z.string().max(64).nullable().optional(),
   status: z.enum(["Active", "Inactive"]).optional(),
   avatar: z.string().url().nullable().optional(),
 });
@@ -202,6 +211,35 @@ async function getTemplatesByFolderType(type: TemplateFolderType) {
   return storage.getExerciseTemplates();
 }
 
+/** Coaches may change only what they added; the owner may change everything. */
+async function authorizeTemplateEdit(
+  res: Response,
+  authUser: User,
+  type: TemplateFolderType,
+  id: string,
+): Promise<boolean> {
+  const templates = await getTemplatesByFolderType(type);
+  const template = templates.find((entry) => entry.id === id) as
+    | { createdBy?: string | null }
+    | undefined;
+  if (!template) {
+    res.status(404).json({ message: "Template not found" });
+    return false;
+  }
+  if (!canEditTemplate(authUser, template)) {
+    res.status(403).json({ message: "You can only change what you added" });
+    return false;
+  }
+  return true;
+}
+
+/** Drops any author the client tried to send; the author is always the logged-in user. */
+function withoutAuthor<T extends Record<string, unknown>>(data: T): T {
+  const copy = { ...data } as Record<string, unknown>;
+  delete copy.createdBy;
+  return copy as T;
+}
+
 function toPublicMessage(
   message: {
     id: string;
@@ -272,8 +310,9 @@ async function attachAuthUser(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+/** Owner or coach: may use the admin area. Client scope is checked separately. */
 function isAdmin(user: User) {
-  return hasAdminAccess(user);
+  return isStaff(user);
 }
 
 function requireAdmin(req: Request, res: Response): User | null {
@@ -282,11 +321,52 @@ function requireAdmin(req: Request, res: Response): User | null {
     res.status(401).json({ message: "Unauthorized" });
     return null;
   }
-  if (!isAdmin(user)) {
+  if (!isStaff(user)) {
     res.status(403).json({ message: "Forbidden" });
     return null;
   }
   return user;
+}
+
+/** Owner only (coach management, contacts export). */
+function requireOwner(req: Request, res: Response): User | null {
+  const user = req.authUser;
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+  if (!isOwner(user)) {
+    res.status(403).json({ message: "Forbidden" });
+    return null;
+  }
+  return user;
+}
+
+/** May this staff member see/change this client? The owner may; a coach only their own. */
+async function staffCanAccessClientId(user: User, clientId: string): Promise<boolean> {
+  if (isOwner(user)) return true;
+  const client = await storage.getUser(clientId);
+  return canAccessClient(user, client);
+}
+
+async function staffCanAccessPhaseId(user: User, phaseId: string): Promise<boolean> {
+  if (isOwner(user)) return true;
+  const phase = await storage.getPhase(phaseId);
+  if (!phase) return false;
+  return staffCanAccessClientId(user, phase.clientId);
+}
+
+/** Ids of the clients a staff member may see; null means everyone (owner). */
+async function accessibleClientIds(user: User): Promise<Set<string> | null> {
+  if (isOwner(user)) return null;
+  const users = await storage.getUsers();
+  const allowed = accessibleClientFilter(user);
+  return new Set(users.filter((u) => allowed(u)).map((u) => u.id));
+}
+
+/** Same answer as "not found", so a coach cannot probe for other coaches' clients. */
+function clientNotFound(res: Response) {
+  return res.status(404).json({ message: "Client not found" });
 }
 
 function requireUser(req: Request, res: Response): User | null {
@@ -654,19 +734,20 @@ async function maybeBootstrapAdminUser(): Promise<void> {
         return;
       }
 
+      // Other admin accounts become coaches (never clients), so a coach keeps working.
       const nonPrimaryAdmins = allUsers.filter(
         (user) => user.role === "Admin" && user.id !== primaryAdmin.id,
       );
       await Promise.all(
         nonPrimaryAdmins.map((user) =>
           storage.updateUser(user.id, {
-            role: "Client",
+            role: "Coach",
             status: user.status === "Removed" ? "Removed" : "Active",
           }),
         ),
       );
       if (nonPrimaryAdmins.length > 0) {
-        logInfo("bootstrap", `Downgraded ${nonPrimaryAdmins.length} non-primary admin account(s)`);
+        logInfo("bootstrap", `Converted ${nonPrimaryAdmins.length} non-primary admin account(s) to Coach`);
       }
     }
   } catch (error) {
@@ -796,7 +877,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Everyone who has ever had an account (kept even after removal), for follow-up business.
   app.get("/api/admin/contacts.csv", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    if (!requireOwner(req, res)) return;
     await syncContactsFromUsers(dbPool);
     const result = await dbPool.query(
       "SELECT email, name, role, status, first_seen_at FROM contacts ORDER BY first_seen_at, email",
@@ -817,9 +898,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/users", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const users = await storage.getUsers();
-    res.json(users.map(toPublicUser));
+    if (isOwner(authUser)) return res.json(users.map(toPublicUser));
+    const allowed = accessibleClientFilter(authUser);
+    res.json(
+      users.filter((u) => u.id === authUser.id || allowed(u)).map(toPublicUser),
+    );
   });
 
   app.get("/api/admin/clients/notification-summary", async (req, res) => {
@@ -832,7 +918,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.getPhases(),
       storage.getChatReadStatusByUser(authUser.id),
     ]);
-    const clients = users.filter((user) => user.role === "Client" && user.status === "Active");
+    const allowedClient = accessibleClientFilter(authUser);
+    const clients = users.filter((user) => allowedClient(user) && user.status === "Active");
 
     const lastReadAtByClientId = buildLatestLastReadMap(readStatuses);
     const phasesByClientId = new Map<string, Phase[]>();
@@ -862,7 +949,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const clientId = req.params.clientId;
     const client = await storage.getUser(clientId);
-    if (!client || client.role !== "Client") {
+    if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
       return res.status(404).json({ message: "Client not found" });
     }
 
@@ -892,6 +979,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const user = await storage.getUser(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
+    if (isAdmin(authUser) && authUser.id !== user.id && !isOwner(authUser)) {
+      if (!canAccessClient(authUser, user)) return res.status(404).json({ message: "User not found" });
+    }
     res.json(toPublicUser(user));
   });
 
@@ -1086,11 +1176,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/users", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createUserSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid user payload" });
+    }
+    // Coaches add clients for themselves only. Coach accounts come from the owner's
+    // Coaches page, and nobody can create another owner here.
+    const requestedRole = parsed.data.role ?? "Client";
+    if (requestedRole === "Admin" || (requestedRole === "Coach" && !isOwner(authUser))) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    let newCoachId: string | null = null;
+    if (requestedRole === "Client") {
+      if (isOwner(authUser)) {
+        newCoachId = parsed.data.coachId ?? null;
+        if (newCoachId) {
+          const coach = await storage.getUser(newCoachId);
+          if (!coach || coach.role !== "Coach") {
+            return res.status(400).json({ message: "Coach not found" });
+          }
+        }
+      } else {
+        newCoachId = authUser.id;
+      }
     }
 
     let user;
@@ -1100,9 +1211,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           name: parsed.data.name,
           email: parsed.data.email,
           password: parsed.data.password,
-          role: parsed.data.role ?? "Client",
+          role: requestedRole,
           status: parsed.data.status ?? "Active",
           avatar: parsed.data.avatar ?? null,
+          coachId: newCoachId,
         },
         {
           users: storage,
@@ -1139,7 +1251,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const target = await storage.getUser(req.params.id);
-    if (!target) return res.status(404).json({ message: "User not found" });
+    if (!target || (target.role === "Client" && !canAccessClient(authUser, target))) {
+      return res.status(404).json({ message: "User not found" });
+    }
     if (target.role !== "Client") {
       return res
         .status(400)
@@ -1168,7 +1282,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const target = await storage.getUser(req.params.id);
-    if (!target) return res.status(404).json({ message: "User not found" });
+    if (!target || (target.role === "Client" && !canAccessClient(authUser, target))) {
+      return res.status(404).json({ message: "User not found" });
+    }
     if (target.role !== "Client") {
       return res.status(400).json({ message: "Only client accounts can be removed" });
     }
@@ -1200,11 +1316,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && clientId && clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const result = clientId
+    if (isAdmin(authUser) && clientId && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
+    let result = clientId
       ? await storage.getPhasesByClient(clientId)
       : isAdmin(authUser)
         ? await storage.getPhases()
         : await storage.getPhasesByClient(authUser.id);
+    if (isAdmin(authUser) && !clientId) {
+      const allowedIds = await accessibleClientIds(authUser);
+      if (allowedIds) result = result.filter((phase) => allowedIds.has(phase.clientId));
+    }
     res.json(result);
   });
 
@@ -1216,11 +1339,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && phase.clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, phase.clientId))) {
+      return res.status(404).json({ message: "Phase not found" });
+    }
     res.json(phase);
   });
 
   app.post("/api/phases", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createPhaseSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1228,7 +1355,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const payload = { ...parsed.data } as Record<string, unknown>;
     const client = await storage.getUser(String(payload.clientId || ""));
-    if (!client || client.role !== "Client") {
+    if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
       return res.status(400).json({ message: "Client not found" });
     }
     if (client.status === "Removed") {
@@ -1257,6 +1384,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!authUser) return;
 
     let updatePayload: Record<string, unknown> = req.body || {};
+    if (isAdmin(authUser) && !(await staffCanAccessPhaseId(authUser, req.params.id))) {
+      return res.status(404).json({ message: "Phase not found" });
+    }
     if (!isAdmin(authUser)) {
       const phaseForClient = await storage.getPhase(req.params.id);
       if (!phaseForClient || phaseForClient.clientId !== authUser.id) {
@@ -1466,7 +1596,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/phases/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await staffCanAccessPhaseId(authUser, req.params.id))) {
+      return res.status(404).json({ message: "Phase not found" });
+    }
     const deleted = await storage.deletePhase(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Phase not found" });
     res.json({ success: true });
@@ -1476,7 +1610,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const authUser = requireUser(req, res);
     if (!authUser) return;
     const phaseId = req.query.phaseId as string | undefined;
+    if (isAdmin(authUser) && phaseId && !(await staffCanAccessPhaseId(authUser, phaseId))) {
+      return res.json([]);
+    }
     let result = phaseId ? await storage.getSessionsByPhase(phaseId) : await storage.getSessions();
+
+    if (isAdmin(authUser) && !phaseId) {
+      const allowedIds = await accessibleClientIds(authUser);
+      if (allowedIds) {
+        const allowedPhaseIds = new Set(
+          (await storage.getPhases())
+            .filter((p) => allowedIds.has(p.clientId))
+            .map((p) => p.id),
+        );
+        result = result.filter((session) => allowedPhaseIds.has(session.phaseId));
+      }
+    }
 
     if (!isAdmin(authUser)) {
       const allowedPhaseIds = new Set(
@@ -1501,15 +1650,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       return res.json(stripCoachOnlyFieldsForClient(session));
     }
+    if (!(await staffCanAccessPhaseId(authUser, session.phaseId))) {
+      return res.status(404).json({ message: "Session not found" });
+    }
     res.json(session);
   });
 
   app.post("/api/sessions", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createSessionSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid session payload" });
+    }
+    if (!(await staffCanAccessPhaseId(authUser, parsed.data.phaseId))) {
+      return res.status(404).json({ message: "Phase not found" });
     }
     try {
       const session = await storage.createSession(parsed.data);
@@ -1526,7 +1682,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/sessions/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    const existingSession = await storage.getSession(req.params.id);
+    if (!existingSession || !(await staffCanAccessPhaseId(authUser, existingSession.phaseId))) {
+      return res.status(404).json({ message: "Session not found" });
+    }
     const parsed = updateSessionSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1548,7 +1709,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/sessions/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    const existingSession = await storage.getSession(req.params.id);
+    if (!existingSession || !(await staffCanAccessPhaseId(authUser, existingSession.phaseId))) {
+      return res.status(404).json({ message: "Session not found" });
+    }
     const deleted = await storage.deleteSession(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Session not found" });
     res.json({ success: true });
@@ -1567,7 +1733,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/template-folders", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createTemplateFolderSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1585,12 +1752,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       type: parsed.data.type,
       parentId: parsed.data.parentId ?? null,
       sortOrder: parsed.data.sortOrder ?? 0,
+      createdBy: authUser.id,
     });
     res.status(201).json(folder);
   });
 
   app.patch("/api/template-folders/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = updateTemplateFolderSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1598,6 +1767,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const current = await storage.getTemplateFolder(req.params.id);
     if (!current) return res.status(404).json({ message: "Folder not found" });
+    if (!canEditTemplate(authUser, current)) {
+      return res.status(403).json({ message: "You can only change what you added" });
+    }
 
     if (parsed.data.parentId) {
       if (parsed.data.parentId === req.params.id) {
@@ -1638,15 +1810,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    const updated = await storage.updateTemplateFolder(req.params.id, parsed.data);
+    const updated = await storage.updateTemplateFolder(req.params.id, withoutAuthor(parsed.data));
     if (!updated) return res.status(404).json({ message: "Folder not found" });
     res.json(updated);
   });
 
   app.delete("/api/template-folders/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const folder = await storage.getTemplateFolder(req.params.id);
     if (!folder) return res.status(404).json({ message: "Folder not found" });
+    if (!canEditTemplate(authUser, folder)) {
+      return res.status(403).json({ message: "You can only change what you added" });
+    }
 
     const siblingFolders = await storage.getTemplateFolders(folder.type as TemplateFolderType);
     if (siblingFolders.some((entry) => entry.parentId === folder.id)) {
@@ -1661,7 +1837,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/template-folders/move-template", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = moveTemplateToFolderSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1677,8 +1854,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const templates = await getTemplatesByFolderType(parsed.data.type);
-    if (!templates.some((template) => template.id === parsed.data.templateId)) {
+    const movingTemplate = templates.find((template) => template.id === parsed.data.templateId) as
+      | { createdBy?: string | null }
+      | undefined;
+    if (!movingTemplate) {
       return res.status(404).json({ message: "Template not found" });
+    }
+    if (!canEditTemplate(authUser, movingTemplate)) {
+      return res.status(403).json({ message: "You can only change what you added" });
     }
 
     const moved = await storage.moveTemplateToFolder(
@@ -1691,7 +1874,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/template-folders/reorder-templates", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = reorderTemplatesSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1700,9 +1884,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const templates = await getTemplatesByFolderType(parsed.data.type);
     const templateIds = new Set(templates.map((template) => template.id));
+    const templateById = new Map(
+      templates.map((template) => [template.id, template as { createdBy?: string | null }]),
+    );
     for (const entry of parsed.data.items) {
       if (!templateIds.has(entry.id)) {
         return res.status(404).json({ message: `Template not found: ${entry.id}` });
+      }
+      if (!canEditTemplate(authUser, templateById.get(entry.id) || {})) {
+        return res.status(403).json({ message: "You can only reorder what you added" });
       }
       if (entry.folderId) {
         const folder = await storage.getTemplateFolder(entry.folderId);
@@ -1726,18 +1916,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/exercise-templates", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createExerciseTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid exercise template payload" });
     }
-    const template = await storage.createExerciseTemplate(parsed.data);
+    const template = await storage.createExerciseTemplate({ ...withoutAuthor(parsed.data), createdBy: authUser.id });
     res.status(201).json(template);
   });
 
   app.patch("/api/exercise-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "exercise", req.params.id))) return;
     const parsed = updateExerciseTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1745,13 +1938,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .status(400)
         .json({ message: details || "Invalid exercise template update payload" });
     }
-    const template = await storage.updateExerciseTemplate(req.params.id, parsed.data);
+    const template = await storage.updateExerciseTemplate(req.params.id, withoutAuthor(parsed.data));
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });
 
   app.delete("/api/exercise-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "exercise", req.params.id))) return;
     const deleted = await storage.deleteExerciseTemplate(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Template not found" });
     res.json({ success: true });
@@ -1764,18 +1959,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/section-templates", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createSectionTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid section template payload" });
     }
-    const template = await storage.createSectionTemplate(parsed.data);
+    const template = await storage.createSectionTemplate({ ...withoutAuthor(parsed.data), createdBy: authUser.id });
     res.status(201).json(template);
   });
 
   app.patch("/api/section-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "section", req.params.id))) return;
     const parsed = updateSectionTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1783,13 +1981,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .status(400)
         .json({ message: details || "Invalid section template update payload" });
     }
-    const template = await storage.updateSectionTemplate(req.params.id, parsed.data);
+    const template = await storage.updateSectionTemplate(req.params.id, withoutAuthor(parsed.data));
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });
 
   app.delete("/api/section-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "section", req.params.id))) return;
     const deleted = await storage.deleteSectionTemplate(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Template not found" });
     res.json({ success: true });
@@ -1802,14 +2002,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/session-templates", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createSessionTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid session template payload" });
     }
     try {
-      const template = await storage.createSessionTemplate(parsed.data);
+      const template = await storage.createSessionTemplate({ ...withoutAuthor(parsed.data), createdBy: authUser.id });
       res.status(201).json(template);
     } catch (error) {
       if (isDurationSchemaMismatchError(error)) {
@@ -1823,7 +2024,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/session-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "session", req.params.id))) return;
     const parsed = updateSessionTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -1832,7 +2035,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .json({ message: details || "Invalid session template update payload" });
     }
     try {
-      const template = await storage.updateSessionTemplate(req.params.id, parsed.data);
+      const template = await storage.updateSessionTemplate(req.params.id, withoutAuthor(parsed.data));
       if (!template) return res.status(404).json({ message: "Template not found" });
       res.json(template);
     } catch (error) {
@@ -1847,7 +2050,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/session-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "session", req.params.id))) return;
     const deleted = await storage.deleteSessionTemplate(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Template not found" });
     res.json({ success: true });
@@ -1867,30 +2072,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/phase-templates", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const parsed = createPhaseTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid phase template payload" });
     }
-    const template = await storage.createPhaseTemplate(parsed.data);
+    const template = await storage.createPhaseTemplate({ ...withoutAuthor(parsed.data), createdBy: authUser.id });
     res.status(201).json(template);
   });
 
   app.patch("/api/phase-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "phase", req.params.id))) return;
     const parsed = updatePhaseTemplateSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.issues.map((issue) => issue.message).join("; ");
       return res.status(400).json({ message: details || "Invalid phase template update payload" });
     }
-    const template = await storage.updatePhaseTemplate(req.params.id, parsed.data);
+    const template = await storage.updatePhaseTemplate(req.params.id, withoutAuthor(parsed.data));
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
   });
 
   app.delete("/api/phase-templates/:id", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
+    if (!(await authorizeTemplateEdit(res, authUser, "phase", req.params.id))) return;
     const deleted = await storage.deletePhaseTemplate(req.params.id);
     if (!deleted) return res.status(404).json({ message: "Template not found" });
     res.json({ success: true });
@@ -1903,11 +2113,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && clientId && clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const result = clientId
+    if (isAdmin(authUser) && clientId && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
+    let result = clientId
       ? await storage.getLogsByClient(clientId)
       : isAdmin(authUser)
         ? await storage.getWorkoutLogs()
         : await storage.getLogsByClient(authUser.id);
+    if (isAdmin(authUser) && !clientId) {
+      const allowedIds = await accessibleClientIds(authUser);
+      if (allowedIds) result = result.filter((log) => allowedIds.has(log.clientId));
+    }
     if (isAdmin(authUser)) {
       return res.json(mapWorkoutHistoryForCoach(result));
     }
@@ -1926,7 +2143,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       throw error;
     }
     const client = await storage.getUser(req.params.id);
-    if (!client) return res.status(404).json({ message: "Client not found" });
+    if (!client || !canAccessClient(authUser, client)) {
+      return res.status(404).json({ message: "Client not found" });
+    }
     res.json({
       specifics: client.specifics || "",
       specificsUpdatedAt: client.specificsUpdatedAt || null,
@@ -1948,6 +2167,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = updateClientSpecificsSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid specifics payload" });
+    }
+    if (!(await staffCanAccessClientId(authUser, req.params.id))) {
+      return clientNotFound(res);
     }
     try {
       const specifics = await saveClientSpecifics(
@@ -1982,6 +2204,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!phase || phase.clientId !== authUser.id) {
         return res.status(403).json({ message: "Forbidden" });
       }
+    } else if (!(await staffCanAccessClientId(authUser, parsed.data.clientId))) {
+      return clientNotFound(res);
     }
     const phaseSessions = await storage.getSessionsByPhase(parsed.data.phaseId);
     let exerciseName: string | null = null;
@@ -2222,10 +2446,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/clients/:clientId/progress-reports", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     try {
       const client = await storage.getUser(req.params.clientId);
-      if (!client || client.role !== "Client") {
+      if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
         return res.status(404).json({ message: "Client not found" });
       }
       const reports = await storage.getProgressReportsByClient(req.params.clientId);
@@ -2243,9 +2468,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/clients/:clientId/movement-checks/grouped", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     const client = await storage.getUser(req.params.clientId);
-    if (!client || client.role !== "Client") {
+    if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
       return res.status(404).json({ message: "Client not found" });
     }
 
@@ -2367,10 +2593,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/clients/:clientId/progress-reports/grouped", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
     try {
       const client = await storage.getUser(req.params.clientId);
-      if (!client || client.role !== "Client") {
+      if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
         return res.status(404).json({ message: "Client not found" });
       }
 
@@ -2473,7 +2700,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     try {
       const client = await storage.getUser(req.params.clientId);
-      if (!client || client.role !== "Client") {
+      if (!client || client.role !== "Client" || !canAccessClient(authUser, client)) {
         return res.status(404).json({ message: "Client not found" });
       }
 
@@ -2616,6 +2843,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!report) return res.status(404).json({ message: "Progress report not found" });
       if (!isAdmin(authUser) && report.clientId !== authUser.id) {
         return res.status(403).json({ message: "Forbidden" });
+      }
+      if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, report.clientId))) {
+        return res.status(404).json({ message: "Progress report not found" });
       }
       const hydrated = await hydrateProgressReport(report);
       res.json(hydrated);
@@ -2764,7 +2994,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/progress-reports/:id/items/:itemId/review", async (req, res) => {
-    if (!requireAdmin(req, res)) return;
+    const authUser = requireAdmin(req, res);
+    if (!authUser) return;
 
     const parsed = reviewProgressReportItemSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -2774,7 +3005,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     try {
       const report = await storage.getProgressReport(req.params.id);
-      if (!report) return res.status(404).json({ message: "Progress report not found" });
+      if (!report || !(await staffCanAccessClientId(authUser, report.clientId))) {
+        return res.status(404).json({ message: "Progress report not found" });
+      }
 
       const items = await storage.getProgressReportItems(report.id);
       const target = items.find((item) => item.id === req.params.itemId);
@@ -2826,6 +3059,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const authUser = requireUser(req, res);
     if (!authUser) return;
     const clientId = req.params.clientId;
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
     try {
       assertCanReadClientCheckins(authUser, clientId);
     } catch (error) {
@@ -2867,6 +3103,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const authUser = requireUser(req, res);
     if (!authUser) return;
     const clientId = req.params.clientId;
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
     try {
       assertCanReadClientCheckins(authUser, clientId);
     } catch (error) {
@@ -2927,6 +3166,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const authUser = requireUser(req, res);
     if (!authUser) return;
     const clientId = req.params.clientId;
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
     try {
       assertCanReadClientCheckins(authUser, clientId);
     } catch (error) {
@@ -2979,11 +3221,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && clientId && clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    const result = clientId
+    if (isAdmin(authUser) && clientId && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
+    let result = clientId
       ? await storage.getMessagesByClient(clientId)
       : isAdmin(authUser)
         ? await storage.getMessages()
         : await storage.getMessagesByClient(authUser.id);
+    if (isAdmin(authUser) && !clientId) {
+      const allowedIds = await accessibleClientIds(authUser);
+      if (allowedIds) result = result.filter((message) => allowedIds.has(message.clientId));
+    }
 
     const clientIds = Array.from(new Set(result.map((message) => message.clientId)));
     const senderIds = Array.from(
@@ -3011,7 +3260,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const adminByAlias = new Map<string, User>();
     if (hasLegacyCoachMessages) {
       const allUsers = await storage.getUsers();
-      const adminUsers = allUsers.filter((user) => isAdmin(user));
+      const adminUsers = allUsers.filter((user) => isOwner(user));
       if (adminUsers.length === 1) {
         [soleAdminUser] = adminUsers;
       }
@@ -3064,6 +3313,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && parsed.data.clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, parsed.data.clientId))) {
+      return clientNotFound(res);
+    }
     const message = await storage.createMessage({
       clientId: parsed.data.clientId,
       senderUserId: authUser.id,
@@ -3091,7 +3343,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const unread = clientMessages.filter((m) => m.time > lastReadAt).length;
       res.json({ total: unread, conversations: [{ clientId: userId, unread }] });
     } else {
-      const clientIds = Array.from(new Set(allMessages.map((m) => m.clientId)));
+      const allowedIds = await accessibleClientIds(authUser);
+      const clientIds = Array.from(new Set(allMessages.map((m) => m.clientId))).filter(
+        (cid) => !allowedIds || allowedIds.has(cid),
+      );
       let total = 0;
       const conversations: { clientId: string; unread: number }[] = [];
       for (const cid of clientIds) {
@@ -3120,8 +3375,189 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!isAdmin(authUser) && clientId !== authUser.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    if (isAdmin(authUser) && !(await staffCanAccessClientId(authUser, clientId))) {
+      return clientNotFound(res);
+    }
     const result = await storage.upsertChatReadStatus(userId, clientId, new Date().toISOString());
     res.json(result);
+  });
+
+  // ---- Coaches (owner only) -------------------------------------------------------------
+
+  const coachInputSchema = z.object({
+    name: z.string().min(2).max(120),
+    email: z.string().email().max(320),
+    password: z.string().min(8).max(128),
+  });
+  const coachUpdateSchema = z.object({
+    name: z.string().min(2).max(120).optional(),
+    status: z.enum(["Active", "Inactive"]).optional(),
+    password: z.string().min(8).max(128).optional(),
+  });
+
+  // Names of everyone who can author library items, so "Added by" works for any coach.
+  app.get("/api/staff", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const users = await storage.getUsers();
+    res.json(
+      users
+        .filter((user) => user.role === "Coach" || isOwner(user))
+        .map((user) => ({
+          id: user.id,
+          name: user.name,
+          role: isOwner(user) ? "Owner" : "Coach",
+          status: user.status,
+        })),
+    );
+  });
+
+  app.get("/api/admin/coaches", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const [users, phases, exercises] = await Promise.all([
+      storage.getUsers(),
+      storage.getPhases(),
+      storage.getExerciseTemplates(),
+    ]);
+    const activePhaseByClient = new Map<string, Phase>();
+    for (const phase of phases) {
+      if (phase.status === "Active") activePhaseByClient.set(phase.clientId, phase);
+    }
+    const coaches = users
+      .filter((user) => user.role === "Coach")
+      .map((coach) => {
+        const clients = users
+          .filter(
+            (user) => user.role === "Client" && user.coachId === coach.id && user.status !== "Removed",
+          )
+          .map((client) => ({
+            id: client.id,
+            name: client.name,
+            status: client.status,
+            activePhaseName: activePhaseByClient.get(client.id)?.name ?? null,
+          }));
+        return {
+          id: coach.id,
+          name: coach.name,
+          email: coach.email,
+          status: coach.status,
+          clients,
+          clientCount: clients.length,
+          exercisesAdded: exercises.filter(
+            (exercise) => (exercise as { createdBy?: string | null }).createdBy === coach.id,
+          ).length,
+        };
+      });
+    res.json(coaches);
+  });
+
+  app.post("/api/admin/coaches", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const parsed = coachInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid coach payload" });
+    }
+    try {
+      const coach = await createUserAccount(
+        {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          password: parsed.data.password,
+          role: "Coach",
+          status: "Active",
+          avatar: null,
+          coachId: null,
+        },
+        { users: storage, hashPassword },
+      );
+      await syncContactsFromUsers(dbPool).catch(() => undefined);
+      res.status(201).json(toPublicUser(coach));
+    } catch (error) {
+      if (error instanceof AppError && error.code === "EMAIL_IN_USE") {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+      throw error;
+    }
+  });
+
+  // Turn an existing client account (for example a coach who signed up as a client) into a coach.
+  app.post("/api/admin/coaches/convert", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const parsed = z.object({ userId: z.string().min(1).max(64) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid payload" });
+    const target = await storage.getUser(parsed.data.userId);
+    if (!target || target.role !== "Client") {
+      return res.status(404).json({ message: "Client not found" });
+    }
+    const targetPhases = await storage.getPhasesByClient(target.id);
+    if (targetPhases.length > 0) {
+      return res
+        .status(409)
+        .json({ message: "This account has training plans. Create a new coach account instead." });
+    }
+    const updated = await storage.updateUser(target.id, {
+      role: "Coach",
+      status: "Active",
+      coachId: null,
+    });
+    if (!updated) return res.status(404).json({ message: "Client not found" });
+    res.json(toPublicUser(updated));
+  });
+
+  app.patch("/api/admin/coaches/:id", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const parsed = coachUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.issues.map((issue) => issue.message).join("; ");
+      return res.status(400).json({ message: details || "Invalid coach payload" });
+    }
+    const coach = await storage.getUser(req.params.id);
+    if (!coach || coach.role !== "Coach") {
+      return res.status(404).json({ message: "Coach not found" });
+    }
+    if (coach.status === "Removed") {
+      return res.status(400).json({ message: "A removed coach cannot be changed" });
+    }
+    const changes: Partial<InsertUser> = {};
+    if (parsed.data.name) changes.name = parsed.data.name;
+    if (parsed.data.status) changes.status = parsed.data.status;
+    if (parsed.data.password) changes.passwordHash = await hashPassword(parsed.data.password);
+    const updated = await storage.updateUser(coach.id, changes);
+    if (!updated) return res.status(404).json({ message: "Coach not found" });
+    res.json(toPublicUser(updated));
+  });
+
+  // Removing a coach only blocks the login. Clients, plans, logs and emails stay as they are
+  // and remain visible to the owner.
+  app.delete("/api/admin/coaches/:id", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const coach = await storage.getUser(req.params.id);
+    if (!coach || coach.role !== "Coach") {
+      return res.status(404).json({ message: "Coach not found" });
+    }
+    const updated = await storage.updateUser(coach.id, { status: "Removed", passwordHash: null });
+    if (!updated) return res.status(404).json({ message: "Coach not found" });
+    res.json({ removed: true, user: toPublicUser(updated) });
+  });
+
+  // Move a client to another coach (or back to the owner with coachId null).
+  app.patch("/api/admin/clients/:id/coach", async (req, res) => {
+    if (!requireOwner(req, res)) return;
+    const parsed = z.object({ coachId: z.string().max(64).nullable() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid payload" });
+    const client = await storage.getUser(req.params.id);
+    if (!client || client.role !== "Client") {
+      return res.status(404).json({ message: "Client not found" });
+    }
+    if (parsed.data.coachId) {
+      const coach = await storage.getUser(parsed.data.coachId);
+      if (!coach || coach.role !== "Coach" || coach.status !== "Active") {
+        return res.status(400).json({ message: "Coach not found" });
+      }
+    }
+    const updated = await storage.updateUser(client.id, { coachId: parsed.data.coachId });
+    if (!updated) return res.status(404).json({ message: "Client not found" });
+    res.json(toPublicUser(updated));
   });
 
   return httpServer;

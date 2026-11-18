@@ -19,6 +19,7 @@ test("toPublicUser removes passwordHash", () => {
     specifics: null,
     specificsUpdatedAt: null,
     specificsUpdatedBy: null,
+    coachId: null,
   };
 
   const publicUser = toPublicUser(user);

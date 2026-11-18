@@ -31,6 +31,8 @@ export const users = pgTable("users", {
   specifics: text("specifics"),
   specificsUpdatedAt: text("specifics_updated_at"),
   specificsUpdatedBy: text("specifics_updated_by"),
+  // Which coach looks after this client. Null = the owner's own client.
+  coachId: varchar("coach_id", { length: 64 }),
 });
 
 /**
@@ -96,6 +98,8 @@ export const templateFolders = pgTable("template_folders", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+  // Who added this. Null = the owner.
+  createdBy: varchar("created_by", { length: 64 }),
 });
 
 export const exerciseTemplates = pgTable("exercise_templates", {
@@ -124,6 +128,8 @@ export const exerciseTemplates = pgTable("exercise_templates", {
   facets: jsonb("facets").notNull().default({}),
   keywords: jsonb("keywords").notNull().default([]),
   needsVideo: boolean("needs_video").notNull().default(false),
+  // Who added this. Null = the owner.
+  createdBy: varchar("created_by", { length: 64 }),
 });
 
 export const sectionTemplates = pgTable("section_templates", {
@@ -135,6 +141,8 @@ export const sectionTemplates = pgTable("section_templates", {
   name: text("name").notNull(),
   description: text("description"),
   exercises: jsonb("exercises").notNull().default([]),
+  // Who added this. Null = the owner.
+  createdBy: varchar("created_by", { length: 64 }),
 });
 
 export const sessionTemplates = pgTable("session_templates", {
@@ -147,6 +155,8 @@ export const sessionTemplates = pgTable("session_templates", {
   description: text("description"),
   durationMinutes: integer("duration_minutes"),
   sections: jsonb("sections").notNull().default([]),
+  // Who added this. Null = the owner.
+  createdBy: varchar("created_by", { length: 64 }),
 });
 
 export const phaseTemplates = pgTable("phase_templates", {
@@ -161,6 +171,8 @@ export const phaseTemplates = pgTable("phase_templates", {
   sessions: jsonb("sessions").notNull().default([]),
   schedule: jsonb("schedule").notNull().default([]),
   movementCheckEnabled: boolean("movement_check_enabled").notNull().default(false),
+  // Who added this. Null = the owner.
+  createdBy: varchar("created_by", { length: 64 }),
 });
 
 export const workoutLogs = pgTable("workout_logs", {

@@ -51,6 +51,30 @@ export const ADDITIVE_SCHEMA_UPGRADES: ReadonlyArray<{ name: string; sql: string
     name: "progress_report_items.quality_rating",
     sql: `ALTER TABLE progress_report_items ADD COLUMN IF NOT EXISTS quality_rating integer`,
   },
+  {
+    name: "users.coach_id",
+    sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS coach_id varchar(64)`,
+  },
+  {
+    name: "template_folders.created_by",
+    sql: `ALTER TABLE template_folders ADD COLUMN IF NOT EXISTS created_by varchar(64)`,
+  },
+  {
+    name: "exercise_templates.created_by",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS created_by varchar(64)`,
+  },
+  {
+    name: "section_templates.created_by",
+    sql: `ALTER TABLE section_templates ADD COLUMN IF NOT EXISTS created_by varchar(64)`,
+  },
+  {
+    name: "session_templates.created_by",
+    sql: `ALTER TABLE session_templates ADD COLUMN IF NOT EXISTS created_by varchar(64)`,
+  },
+  {
+    name: "phase_templates.created_by",
+    sql: `ALTER TABLE phase_templates ADD COLUMN IF NOT EXISTS created_by varchar(64)`,
+  },
 ];
 
 /** New tables, created only if missing. */

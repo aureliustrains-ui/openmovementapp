@@ -52,6 +52,7 @@ type TemplateFolderWriteInput = {
   type: TemplateFolderType;
   parentId?: string | null;
   sortOrder?: number;
+  createdBy?: string | null;
 };
 
 export interface IStorage {
@@ -211,6 +212,7 @@ export class DatabaseStorage implements IStorage {
       specifics: null,
       specificsUpdatedAt: null,
       specificsUpdatedBy: null,
+      coachId: null,
     };
   }
 
@@ -891,6 +893,7 @@ export class DatabaseStorage implements IStorage {
       description: row.description ?? null,
       durationMinutes: null,
       sections: this.parseJsonArray(row.sections),
+      createdBy: null,
     };
   }
 
