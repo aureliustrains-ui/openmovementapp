@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { type DragEvent, useMemo, useState } from "react";
 import { SectionEditorCard } from "./SectionEditorCard";
+import { EMPTY_EXERCISE_STANDARD } from "@/lib/exerciseStandard";
 
 type SessionLike = {
   id: string;
@@ -456,6 +457,7 @@ export function SessionEditorCard<TSession extends SessionLike>({
                               notes: "",
                               goal: "",
                               additionalInstructions: "",
+                              ...EMPTY_EXERCISE_STANDARD,
                               demoUrl: "",
                               enableStructuredLogging: false,
                               requiresMovementCheck: false,

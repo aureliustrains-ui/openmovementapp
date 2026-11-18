@@ -34,6 +34,7 @@ import { SectionTemplateEditorBody } from "@/pages/admin/SectionTemplateEditor";
 import { useToast } from "@/hooks/use-toast";
 import { formatReps, formatSets } from "@/lib/prescription";
 import { ExerciseLibrary } from "@/components/admin/exercise/ExerciseLibrary";
+import { EMPTY_EXERCISE_STANDARD_NULL, exerciseStandardToPayload } from "@/lib/exerciseStandard";
 
 function makeDefaultPhaseTemplatePayload() {
   return {
@@ -83,6 +84,7 @@ function makeDefaultExerciseTemplate() {
     notes: null,
     goal: null,
     additionalInstructions: null,
+    ...EMPTY_EXERCISE_STANDARD_NULL,
     requiresMovementCheck: false,
     enableStructuredLogging: false,
   };
@@ -572,6 +574,7 @@ export default function AdminTemplatesPage() {
         notes: item.notes || null,
         goal: item.goal || null,
         additionalInstructions: item.additionalInstructions || null,
+        ...exerciseStandardToPayload(item),
         requiresMovementCheck: Boolean(item.requiresMovementCheck),
         enableStructuredLogging: Boolean(item.enableStructuredLogging),
         facets: item.facets ?? {},

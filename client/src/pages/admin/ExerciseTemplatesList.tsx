@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Copy, Plus, Search, Trash2 } from "lucide-react";
+import { EMPTY_EXERCISE_STANDARD_NULL, exerciseStandardToPayload } from "@/lib/exerciseStandard";
 
 function makeDefaultExerciseTemplate() {
   return {
@@ -24,6 +25,7 @@ function makeDefaultExerciseTemplate() {
     notes: null,
     goal: null,
     additionalInstructions: null,
+    ...EMPTY_EXERCISE_STANDARD_NULL,
     requiresMovementCheck: false,
     enableStructuredLogging: false,
   };
@@ -64,6 +66,7 @@ export default function ExerciseTemplatesList() {
         notes: item.notes || null,
         goal: item.goal || null,
         additionalInstructions: item.additionalInstructions || null,
+        ...exerciseStandardToPayload(item),
         requiresMovementCheck: Boolean(item.requiresMovementCheck),
         enableStructuredLogging: Boolean(item.enableStructuredLogging),
       });

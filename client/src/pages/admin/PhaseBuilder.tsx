@@ -81,6 +81,7 @@ import { TemplatePickerPanel } from "@/components/admin/TemplatePickerPanel";
 import { SessionEditorCard } from "@/components/admin/builder/SessionEditorCard";
 import { SaveToTemplateDialog } from "@/components/admin/SaveToTemplateDialog";
 import type { AutosaveStatus } from "@/hooks/useAutosave";
+import { EMPTY_EXERCISE_STANDARD, exerciseStandardToPayload, pickExerciseStandard } from "@/lib/exerciseStandard";
 
 function generateId() {
   return crypto.randomUUID();
@@ -121,6 +122,12 @@ type Exercise = {
   notes: string;
   goal: string;
   additionalInstructions: string;
+  startPosition: string;
+  endPosition: string;
+  qualityPoints: string;
+  progressionStart: string;
+  progressionBuild: string;
+  progressionNext: string;
   demoUrl: string;
   enableStructuredLogging: boolean;
   requiresMovementCheck: boolean;
@@ -168,6 +175,7 @@ function makeExercise(name = "New Exercise"): Exercise {
     notes: "",
     goal: "",
     additionalInstructions: "",
+    ...EMPTY_EXERCISE_STANDARD,
     demoUrl: "",
     enableStructuredLogging: false,
     requiresMovementCheck: false,
@@ -553,6 +561,7 @@ export default function AdminPhaseBuilder() {
               notes: ex.notes || "",
               goal: ex.goal || "",
               additionalInstructions: ex.additionalInstructions || "",
+              ...pickExerciseStandard(ex),
               demoUrl: ex.demoUrl || "",
               enableStructuredLogging: ex.enableStructuredLogging || false,
               requiresMovementCheck: ex.requiresMovementCheck || false,
@@ -787,6 +796,7 @@ export default function AdminPhaseBuilder() {
           notes: exercise.notes.trim() || null,
           goal: exercise.goal.trim() || null,
           additionalInstructions: exercise.additionalInstructions.trim() || null,
+          ...exerciseStandardToPayload(exercise),
           requiresMovementCheck: exercise.requiresMovementCheck,
           enableStructuredLogging: exercise.enableStructuredLogging,
         });

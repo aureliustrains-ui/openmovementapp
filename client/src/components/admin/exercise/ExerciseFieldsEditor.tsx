@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { pickExerciseStandard } from "@/lib/exerciseStandard";
 
 /**
  * The one editor for an exercise's prescription and content. Used in the exercise library,
@@ -17,6 +18,12 @@ export type ExerciseEditableFields = {
   tempo: string;
   goal: string;
   additionalInstructions: string;
+  startPosition: string;
+  endPosition: string;
+  qualityPoints: string;
+  progressionStart: string;
+  progressionBuild: string;
+  progressionNext: string;
   notes: string;
   requiresMovementCheck: boolean;
   enableStructuredLogging: boolean;
@@ -34,6 +41,7 @@ export function toExerciseEditableFields(source: any): ExerciseEditableFields {
     tempo: text(source?.tempo),
     goal: text(source?.goal),
     additionalInstructions: text(source?.additionalInstructions),
+    ...pickExerciseStandard(source),
     notes: text(source?.notes),
     requiresMovementCheck: Boolean(source?.requiresMovementCheck),
     enableStructuredLogging: Boolean(source?.enableStructuredLogging),
@@ -96,28 +104,88 @@ export function ExerciseFieldsEditor({
         ))}
       </div>
 
-      <div className="space-y-1">
-        <Label htmlFor={`${idPrefix}-goal`} className={labelClass}>
-          Goal / progression · client sees this
-        </Label>
-        <Textarea
-          id={`${idPrefix}-goal`}
-          value={value.goal}
-          onChange={(event) => onChange("goal", event.target.value)}
-          placeholder="e.g. find the angle for 8 clean reps, build to 12, then lower"
-          className="min-h-[56px] resize-none bg-white text-sm"
-        />
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <p className={labelClass}>The standard · client sees this</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ["startPosition", "Start", "e.g. arms straight, body in one line"],
+              ["endPosition", "Top / end", "e.g. rings at the lower ribs, shoulder blades back"],
+            ] as const
+          ).map(([field, label, placeholder]) => (
+            <div key={field} className="space-y-1">
+              <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
+                {label}
+              </Label>
+              <Textarea
+                id={`${idPrefix}-${field}`}
+                value={value[field]}
+                onChange={(event) => onChange(field, event.target.value)}
+                placeholder={placeholder}
+                className="min-h-[56px] resize-none bg-white text-sm"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`${idPrefix}-qualityPoints`} className={labelClass}>
+            What counts as a rep
+          </Label>
+          <Textarea
+            id={`${idPrefix}-qualityPoints`}
+            value={value.qualityPoints}
+            onChange={(event) => onChange("qualityPoints", event.target.value)}
+            placeholder="e.g. no hip sag · no shrugging · full range"
+            className="min-h-[56px] resize-none bg-white text-sm"
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(
+            [
+              ["progressionStart", "Start here", "e.g. the angle where you get 8 clean reps"],
+              ["progressionBuild", "Build", "e.g. work up to 12 at the same angle"],
+              ["progressionNext", "Then", "e.g. lower the rings, start again at 8"],
+            ] as const
+          ).map(([field, label, placeholder]) => (
+            <div key={field} className="space-y-1">
+              <Label htmlFor={`${idPrefix}-${field}`} className={labelClass}>
+                {label}
+              </Label>
+              <Textarea
+                id={`${idPrefix}-${field}`}
+                value={value[field]}
+                onChange={(event) => onChange(field, event.target.value)}
+                placeholder={placeholder}
+                className="min-h-[56px] resize-none bg-white text-sm"
+              />
+            </div>
+          ))}
+        </div>
       </div>
+
+      {value.goal.trim() ? (
+        <div className="space-y-1">
+          <Label htmlFor={`${idPrefix}-goal`} className={labelClass}>
+            Goal (older free text) · client sees this unless the standard above has progression
+          </Label>
+          <Textarea
+            id={`${idPrefix}-goal`}
+            value={value.goal}
+            onChange={(event) => onChange("goal", event.target.value)}
+            className="min-h-[56px] resize-none bg-white text-sm"
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-1">
         <Label htmlFor={`${idPrefix}-instructions`} className={labelClass}>
-          Instructions · client sees this
+          Additional instructions · client sees this
         </Label>
         <Textarea
           id={`${idPrefix}-instructions`}
           value={value.additionalInstructions}
           onChange={(event) => onChange("additionalInstructions", event.target.value)}
-          placeholder="Cues, start and end position, what counts as a rep"
+          placeholder="Extra cues or reminders"
           className="min-h-[72px] resize-none bg-white text-sm"
         />
       </div>

@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/exercise/ExerciseFieldsEditor";
 import { ExerciseClientPreview } from "@/components/admin/exercise/ExerciseClientPreview";
 import { ExerciseLibraryTags } from "@/components/admin/ExerciseLibraryTags";
+import { exerciseStandardToPayload } from "@/lib/exerciseStandard";
 
 type ExerciseTemplateModel = ExerciseEditableFields & {
   id: string;
@@ -69,6 +70,8 @@ export default function ExerciseTemplateEditor() {
           notes: model.notes.trim() || null,
           goal: model.goal.trim() || null,
           additionalInstructions: model.additionalInstructions.trim() || null,
+        ...exerciseStandardToPayload(model),
+          ...exerciseStandardToPayload(model),
           requiresMovementCheck: model.requiresMovementCheck,
           enableStructuredLogging: model.enableStructuredLogging,
           ...(model.demoUrl.trim() && template?.needsVideo ? { needsVideo: false } : {}),

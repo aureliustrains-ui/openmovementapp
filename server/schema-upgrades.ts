@@ -19,6 +19,30 @@ export const ADDITIVE_SCHEMA_UPGRADES: ReadonlyArray<{ name: string; sql: string
     name: "exercise_templates.needs_video",
     sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS needs_video boolean NOT NULL DEFAULT false`,
   },
+  {
+    name: "exercise_templates.start_position",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS start_position text`,
+  },
+  {
+    name: "exercise_templates.end_position",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS end_position text`,
+  },
+  {
+    name: "exercise_templates.quality_points",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS quality_points text`,
+  },
+  {
+    name: "exercise_templates.progression_start",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS progression_start text`,
+  },
+  {
+    name: "exercise_templates.progression_build",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS progression_build text`,
+  },
+  {
+    name: "exercise_templates.progression_next",
+    sql: `ALTER TABLE exercise_templates ADD COLUMN IF NOT EXISTS progression_next text`,
+  },
 ];
 
 /** New tables, created only if missing. */

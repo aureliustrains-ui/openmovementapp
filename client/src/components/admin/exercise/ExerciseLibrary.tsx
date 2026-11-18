@@ -46,6 +46,7 @@ import {
   readExerciseFacets,
   type ExerciseFacetFilter,
 } from "@shared/exerciseFacets";
+import { exerciseStandardToPayload } from "@/lib/exerciseStandard";
 
 type ExerciseItem = {
   id: string;
@@ -523,6 +524,7 @@ function ExerciseDetailPane({
         tempo: latest.tempo.trim() || null,
         goal: latest.goal.trim() || null,
         additionalInstructions: latest.additionalInstructions.trim() || null,
+        ...exerciseStandardToPayload(latest),
         notes: latest.notes.trim() || null,
         requiresMovementCheck: latest.requiresMovementCheck,
         enableStructuredLogging: latest.enableStructuredLogging,

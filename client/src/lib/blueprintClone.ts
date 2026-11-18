@@ -1,3 +1,4 @@
+import { pickExerciseStandard } from "./exerciseStandard";
 export type BlueprintExercise = {
   id: string;
   name: string;
@@ -8,6 +9,12 @@ export type BlueprintExercise = {
   notes: string;
   goal: string;
   additionalInstructions: string;
+  startPosition: string;
+  endPosition: string;
+  qualityPoints: string;
+  progressionStart: string;
+  progressionBuild: string;
+  progressionNext: string;
   demoUrl: string;
   enableStructuredLogging: boolean;
   requiresMovementCheck: boolean;
@@ -125,6 +132,7 @@ export function toBlueprintExercise(
     notes: templateExercise.notes || "",
     goal: templateExercise.goal || "",
     additionalInstructions: templateExercise.additionalInstructions || "",
+    ...pickExerciseStandard(templateExercise),
     demoUrl,
     enableStructuredLogging: Boolean(templateExercise.enableStructuredLogging),
     requiresMovementCheck: Boolean(templateExercise.requiresMovementCheck),

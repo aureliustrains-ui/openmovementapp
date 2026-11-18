@@ -15,6 +15,7 @@ import { SectionEditorCard } from "@/components/admin/builder/SectionEditorCard"
 import { Textarea } from "@/components/ui/textarea";
 import { TemplateEditorHeader } from "@/components/admin/TemplateEditorHeader";
 import { useAutosave } from "@/hooks/useAutosave";
+import { EMPTY_EXERCISE_STANDARD } from "@/lib/exerciseStandard";
 
 type SectionTemplateModel = {
   id: string;
@@ -189,6 +190,7 @@ export function SectionTemplateEditorBody({
                   notes: "",
                   goal: "",
                   additionalInstructions: "",
+                  ...EMPTY_EXERCISE_STANDARD,
                   demoUrl: "",
                   enableStructuredLogging: false,
                   requiresMovementCheck: false,

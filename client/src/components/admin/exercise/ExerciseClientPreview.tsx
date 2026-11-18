@@ -1,6 +1,7 @@
 import { ExerciseStandardDetails } from "@/components/client/ExerciseStandardDetails";
 import { InlineVideoPlayer } from "@/components/client/InlineVideoPlayer";
 import { formatReps, formatSets } from "@/lib/prescription";
+import { pickExerciseStandard } from "@/lib/exerciseStandard";
 
 /**
  * Shows an exercise the way a client sees it in a session (collapsed row + opened card),
@@ -16,6 +17,12 @@ export function ExerciseClientPreview({
     tempo?: string;
     goal?: string;
     additionalInstructions?: string;
+    startPosition?: string | null;
+    endPosition?: string | null;
+    qualityPoints?: string | null;
+    progressionStart?: string | null;
+    progressionBuild?: string | null;
+    progressionNext?: string | null;
     demoUrl?: string;
   };
 }) {
@@ -58,6 +65,7 @@ export function ExerciseClientPreview({
             tempo: exercise.tempo,
             goal: exercise.goal,
             additionalInstructions: exercise.additionalInstructions,
+            ...pickExerciseStandard(exercise),
           }}
           showName={false}
           showDemoLink={false}
