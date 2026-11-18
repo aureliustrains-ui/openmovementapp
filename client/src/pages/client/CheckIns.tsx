@@ -166,9 +166,9 @@ export default function ClientCheckIns() {
           <div className="space-y-3">
             {movementActionCount > 0 ? (
               <ActionRequiredCard
-                title="Movement check"
-                description={`${movementActionCount} movement check item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
-                ctaLabel="Open movement checks"
+                title="Progress update"
+                description={`${movementActionCount} progress update item${movementActionCount === 1 ? "" : "s"} need${movementActionCount === 1 ? "s" : ""} your input.`}
+                ctaLabel="Open progress update"
                 ctaHref="/app/client/my-phase#movement-checks"
                 ctaDisabled={isReadOnly}
                 ctaVariant="secondaryDark"
@@ -209,7 +209,7 @@ export default function ClientCheckIns() {
             <CardContent className="p-4 space-y-3">
               {movementSummary.pending > 0 ? (
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-slate-900">Movement checks</p>
+                  <p className="text-sm text-slate-900">Progress updates</p>
                   <Badge variant="outline" className="border-slate-300 text-slate-700">
                     {movementSummary.pending} waiting for review
                   </Badge>
@@ -217,7 +217,7 @@ export default function ClientCheckIns() {
               ) : null}
               {movementSummary.approved > 0 ? (
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-slate-900">Movement checks</p>
+                  <p className="text-sm text-slate-900">Progress updates</p>
                   <Badge variant="outline" className="border-slate-300 text-slate-700">
                     {movementSummary.approved} approved
                   </Badge>

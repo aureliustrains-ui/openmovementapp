@@ -697,13 +697,13 @@ export default function AdminClientProfile() {
       setProgressBlocksTraining(false);
       setProgressStage("other");
       toast({
-        title: "Progress report requested",
+        title: "Progress update requested",
         description: "The client will now see this request in their dashboard.",
       });
       setCreateProgressReportOpen(false);
       setSelectedProgressExerciseIds([]);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Could not create progress report.";
+      const message = error instanceof Error ? error.message : "Could not request the progress update.";
       toast({
         title: "Request failed",
         description: message,
@@ -953,7 +953,7 @@ export default function AdminClientProfile() {
     { value: "structured-logs", label: "Notes & Logs", icon: BarChart, count: 0 },
     {
       value: "movement",
-      label: "Movement",
+      label: "Movement (old)",
       icon: Activity,
       count: adminNotificationSummary.movementAttentionCount,
     },
@@ -1721,9 +1721,9 @@ export default function AdminClientProfile() {
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <CardTitle>Progress Report Requests</CardTitle>
+                    <CardTitle>Progress updates</CardTitle>
                     <p className="text-sm text-slate-500 mt-1">
-                      Request exercise updates from the active phase without interrupting training.
+                      Ask for videos and numbers of exercises from the active phase. You can also make an update required before training.
                     </p>
                   </div>
                   <Button
@@ -1739,7 +1739,7 @@ export default function AdminClientProfile() {
               </CardHeader>
               <CardContent className="p-0 divide-y divide-slate-100">
                 {progressReportGroups.length === 0 ? (
-                  <div className="p-8 text-sm text-slate-500">No progress report requests yet.</div>
+                  <div className="p-8 text-sm text-slate-500">No progress updates requested yet.</div>
                 ) : (
                   progressReportGroups.map((group: any) => (
                     <div
@@ -2641,7 +2641,7 @@ export default function AdminClientProfile() {
       <Dialog open={createProgressReportOpen} onOpenChange={setCreateProgressReportOpen}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Create Progress Report Request</DialogTitle>
+            <DialogTitle>Request a progress update</DialogTitle>
             <DialogDescription>
               Select exercises from the currently active phase. The client will receive this as an
               additional task while continuing training.
@@ -2856,7 +2856,7 @@ export default function AdminClientProfile() {
       <Dialog open={isProgressApproveOpen} onOpenChange={setIsProgressApproveOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Approve Progress Report Item</DialogTitle>
+            <DialogTitle>Approve progress update</DialogTitle>
             <DialogDescription>
               Optionally leave a short feedback note for the client.
             </DialogDescription>

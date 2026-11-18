@@ -200,7 +200,7 @@ export function ExerciseFieldsEditor({
       <div className="flex flex-wrap gap-2">
         {showMovementCheck ? (
           <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
-            Movement check
+            Required progress update
             <Switch
               checked={value.requiresMovementCheck}
               onCheckedChange={(checked) => onChange("requiresMovementCheck", checked)}

@@ -1571,7 +1571,7 @@ export default function AdminPhaseBuilder() {
               <span>
                 <span className="font-medium text-slate-800">Details</span>
                 <span className="ml-2 text-xs text-slate-500">
-                  Goal {goal.trim() ? "set" : "empty"} · Movement check{" "}
+                  Goal {goal.trim() ? "set" : "empty"} · Progress update{" "}
                   {movementCheckEnabled ? "on" : "off"} ·{" "}
                   {[homeIntroVideoUrl, homeGuideVideoUrl].filter((v) => v.trim()).length} of 2 videos
                 </span>
@@ -1966,7 +1966,7 @@ export default function AdminPhaseBuilder() {
             <DialogTitle>{isPublished ? "Re-publish Phase" : "Publish Phase"}</DialogTitle>
             <DialogDescription>
               {collectMovementCheckExercises(localSessions).length > 0
-                ? "This phase will be published with movement check gating. The client will need to submit and have their form videos approved before they can start training."
+                ? "This phase will be published with a required progress update. The client has to send their videos and you approve them before they can start training."
                 : "This phase will go live immediately. The client will be able to see and start logging sessions right away."}
             </DialogDescription>
           </DialogHeader>
@@ -1990,7 +1990,7 @@ export default function AdminPhaseBuilder() {
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-              <span className="text-sm font-medium text-slate-700">Movement Checks</span>
+              <span className="text-sm font-medium text-slate-700">Required progress updates</span>
               {(() => {
                 const count = collectMovementCheckExercises(localSessions).length;
                 return (

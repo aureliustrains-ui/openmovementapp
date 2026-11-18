@@ -51,9 +51,9 @@ export default function ClientInfo() {
       ],
     },
     {
-      title: "Movement checks",
+      title: "Progress updates",
       body: [
-        "Movement checks are short video submissions used to review movement quality before you move forward in your plan.",
+        "A progress update is a short video of a few clean reps (3-4 are enough), sometimes with the load you used. It helps your coach review your movement and your strength over time.",
       ],
     },
     {

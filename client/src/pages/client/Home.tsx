@@ -203,13 +203,13 @@ export default function ClientHome() {
           ) : null}
           {movementActionCount > 0 ? (
             <ActionRequiredCard
-              title="Movement check"
+              title="Progress update"
               description={
                 movementActionCount === 1
-                  ? "One movement check needs your input."
-                  : `${movementActionCount} movement check items need your input.`
+                  ? "One progress update needs your input."
+                  : `${movementActionCount} progress update items need your input.`
               }
-              ctaLabel="Open movement checks"
+              ctaLabel="Open progress update"
               ctaHref="/app/client/my-phase#movement-checks"
               ctaVariant="secondaryDark"
               testId="card-home-movement-check"

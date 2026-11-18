@@ -357,7 +357,7 @@ export function SectionEditorCard({
                         }
                       />
                       <span className="hidden text-[10px] uppercase tracking-wider text-slate-400 font-semibold whitespace-nowrap sm:inline">
-                        Video check
+                        Progress update
                       </span>
                     </div>
                   )}

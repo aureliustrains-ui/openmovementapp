@@ -1136,7 +1136,7 @@ export default function ClientMyPhase() {
       <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Submit Movement Check Video</DialogTitle>
+            <DialogTitle>Send progress update video</DialogTitle>
             <DialogDescription>
               Upload your video directly. If upload does not work, you can paste a link as fallback.
             </DialogDescription>

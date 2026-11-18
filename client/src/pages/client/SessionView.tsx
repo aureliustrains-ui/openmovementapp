@@ -132,10 +132,10 @@ export default function ClientSessionView() {
     }
     redirectedForMovementCheckRef.current = true;
     toast({
-      title: blockingReport ? "Progress report required" : "Movement check required",
+      title: "Progress update required",
       description: blockingReport
-        ? "Send your videos first, then you can start this session."
-        : "Complete your movement check before starting this session.",
+        ? "Send your videos first, then you can start your session."
+        : "Send your progress update before starting this session.",
     });
     setLocation(blockingReport?.id ? progressReportHref(blockingReport.id) : "/app/client/my-phase");
   }, [blockingReport, isLoading, movementCheckBlocked, phase, session, setLocation, toast]);
