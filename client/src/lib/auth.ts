@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { queryClient } from '@/lib/queryClient';
 
 interface User {
   id: string;
@@ -36,6 +37,8 @@ export const useAuth = create<AuthState>()((set, get) => ({
   originalAdmin: null,
 
   login: (user: User) => {
+    // Never show the previous account's cached data to the next person who signs in.
+    queryClient.clear();
     set({
       user,
       sessionUser: user,
@@ -47,6 +50,7 @@ export const useAuth = create<AuthState>()((set, get) => ({
   },
 
   logout: () => {
+    queryClient.clear();
     set({
       user: null,
       sessionUser: null,
