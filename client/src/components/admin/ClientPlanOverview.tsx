@@ -90,11 +90,8 @@ export function ClientPlanOverview({
   const sessionName = (id: string) => allSessions.find((s: any) => s.id === id)?.name || "Session";
 
   const visibleDays = useMemo(
-    () =>
-      DAYS.filter(
-        (d, idx) => idx < 5 || schedule.some((e: any) => e.day === d && e.sessionId),
-      ),
-    [schedule],
+    () => DAYS,
+    [],
   );
 
   const weeks = useMemo(() => {
@@ -148,10 +145,10 @@ export function ClientPlanOverview({
             comments,
           };
         });
-      const items: Array<(typeof rows)[number] | { rest: true; day: string }> = [];
+      const items: Array<((typeof rows)[number] & { showDay: boolean }) | { rest: true; day: string }> = [];
       visibleDays.forEach((day) => {
         const dayRows = rows.filter((r) => r.entry.day === day);
-        if (dayRows.length > 0) items.push(...dayRows);
+        if (dayRows.length > 0) dayRows.forEach((r, idx) => items.push({ ...r, showDay: idx === 0 }));
         else items.push({ rest: true, day });
       });
       return { week, rows, items };
@@ -328,7 +325,7 @@ export function ClientPlanOverview({
                               className="flex items-center gap-2 text-sm text-slate-300"
                             >
                               <span className="h-4 w-4 shrink-0" />
-                              <span className="text-[11px] uppercase">{row.day.slice(0, 3)}</span>
+                              <span className="inline-block w-7 text-[11px] uppercase">{row.day.slice(0, 3)}</span>
                               <span className="text-xs">rest</span>
                             </li>
                           );
@@ -350,8 +347,8 @@ export function ClientPlanOverview({
                               )}
                             </span>
                             <span className="truncate">
-                              <span className="mr-1 text-[11px] uppercase text-slate-400">
-                                {String(row.entry.day || "").slice(0, 3)}
+                              <span className="mr-1 inline-block w-7 text-[11px] uppercase text-slate-400">
+                                {row.showDay ? String(row.entry.day || "").slice(0, 3) : ""}
                               </span>
                               {row.name}
                             </span>
@@ -361,7 +358,7 @@ export function ClientPlanOverview({
                               </span>
                             ) : null}
                             {row.comments.length > 0 ? (
-                              <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
+                              <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
                                 <MessageCircle className="h-3 w-3" />
                                 {row.comments.length}
                               </span>
