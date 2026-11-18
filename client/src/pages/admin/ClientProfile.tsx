@@ -1096,7 +1096,6 @@ export default function AdminClientProfile() {
           <TabsContent value="programming" className="m-0 outline-none">
             <ClientPlanOverview
               clientId={clientId as string}
-              firstName={String(clientDisplayName).split(" ")[0] || "client"}
               activePhase={activePhases[0] ?? null}
               otherPhases={otherPhasesOrdered}
               allSessions={allSessions as any[]}

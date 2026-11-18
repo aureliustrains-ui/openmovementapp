@@ -15,7 +15,6 @@ function formatDate(value: unknown): string {
 
 type Props = {
   clientId: string;
-  firstName: string;
   activePhase: any | null;
   otherPhases: any[];
   allSessions: any[];
@@ -30,7 +29,6 @@ type Props = {
 
 export function ClientPlanOverview({
   clientId,
-  firstName,
   activePhase,
   otherPhases,
   allSessions,
@@ -62,6 +60,7 @@ export function ClientPlanOverview({
   const totalPlanned = weekStatuses.reduce((sum, w) => sum + w.scheduledCount, 0);
   const totalDone = weekStatuses.reduce((sum, w) => sum + w.completedCount, 0);
   const [showPast, setShowPast] = useState(false);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   const instanceKey = (entry: any, week: number) =>
     `w${week}_${entry.day || "Monday"}_${entry.slot || "AM"}_${entry.sessionId}`;
@@ -90,65 +89,47 @@ export function ClientPlanOverview({
         .filter((e: any) => e.week === week)
         .map((entry: any) => {
           const key = instanceKey(entry, week);
-          const noteCount = phaseLogs.filter(
-            (l: any) =>
-              String(l.instanceId || "").startsWith(key) && String(l.clientNotes || "").trim(),
-          ).length;
+          const rowLogs = phaseLogs.filter((l: any) => String(l.instanceId || "").startsWith(key));
+          const dates = new Set(rowLogs.map((l: any) => String(l.date || "").slice(0, 10)));
+          const comments: { id: string; label: string; text: string }[] = [
+            ...rowLogs
+              .filter((l: any) => String(l.clientNotes || "").trim())
+              .map((l: any) => ({
+                id: `log-${l.id}`,
+                label: l.exerciseName || "Exercise",
+                text: String(l.clientNotes).trim(),
+              })),
+            ...((checkinsRecent?.sessions as any[]) || [])
+              .filter(
+                (c: any) =>
+                  c.sessionId === entry.sessionId &&
+                  dates.has(String(c.submittedAt || "").slice(0, 10)),
+              )
+              .flatMap((c: any) => [
+                ...(String(c.whatFeltOff || "").trim()
+                  ? [{ id: `off-${c.id}`, label: "Felt off", text: String(c.whatFeltOff).trim() }]
+                  : []),
+                ...(String(c.optionalNote || "").trim()
+                  ? [{ id: `note-${c.id}`, label: "After session", text: String(c.optionalNote).trim() }]
+                  : []),
+              ]),
+          ];
           return {
             key,
             entry,
             name: sessionName(entry.sessionId),
             done: completed.includes(key),
             isNext: key === nextKey,
-            noteCount,
+            comments,
           };
         });
       return { week, rows };
     });
-  }, [schedule, completed, duration, phaseLogs, allSessions]);
+  }, [schedule, completed, duration, phaseLogs, allSessions, checkinsRecent]);
 
-  const clientNotes = useMemo(() => {
-    const fromLogs = phaseLogs
-      .filter((l: any) => String(l.clientNotes || "").trim())
-      .map((l: any) => {
-        const m = /^w(\d+)_([A-Za-z]+)_([A-Za-z]+)_(.+)$/.exec(String(l.instanceId || ""));
-        const place = m
-          ? `Week ${m[1]} · ${sessionName(
-              allSessions.find((s: any) => s.id === m[4] || m[4].startsWith(s.id))?.id || m[4],
-            )}`
-          : "";
-        return {
-          id: `log-${l.id}`,
-          when: String(l.date || ""),
-          place,
-          title: l.exerciseName || "Exercise",
-          text: String(l.clientNotes).trim(),
-        };
-      });
-    const fromCheckins = ((checkinsRecent?.sessions as any[]) || []).flatMap((c: any) => {
-      const items: { id: string; when: string; place: string; title: string; text: string }[] = [];
-      if (String(c.whatFeltOff || "").trim()) {
-        items.push({
-          id: `off-${c.id}`,
-          when: String(c.submittedAt || ""),
-          place: c.sessionName || "Session",
-          title: "Felt off",
-          text: String(c.whatFeltOff).trim(),
-        });
-      }
-      if (String(c.optionalNote || "").trim()) {
-        items.push({
-          id: `note-${c.id}`,
-          when: String(c.submittedAt || ""),
-          place: c.sessionName || "Session",
-          title: "Note after session",
-          text: String(c.optionalNote).trim(),
-        });
-      }
-      return items;
-    });
-    return [...fromLogs, ...fromCheckins].sort((a, b) => b.when.localeCompare(a.when)).slice(0, 6);
-  }, [phaseLogs, checkinsRecent, allSessions]);
+  const openRow = openKey
+    ? weeks.flatMap((w) => w.rows).find((r) => r.key === openKey) ?? null
+    : null;
 
   const builderHref = (phaseId: string) => `/app/admin/clients/${clientId}/builder/${phaseId}`;
   const upcoming = otherPhases.filter((p) => p.status !== "Completed");
@@ -290,45 +271,60 @@ export function ClientPlanOverview({
                     <p className="text-xs italic text-slate-300">No sessions</p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {rows.map((row) => (
-                        <li
-                          key={row.key}
-                          className={`flex items-center gap-2 text-sm ${
-                            row.done
-                              ? "text-slate-400"
-                              : row.isNext
-                                ? "font-semibold text-slate-900"
-                                : "text-slate-600"
-                          }`}
-                        >
-                          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                            {row.done ? (
-                              <Check className="h-4 w-4 text-green-600" />
-                            ) : row.isNext ? (
-                              <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
+                      {rows.map((row) => {
+                        const tone = row.done
+                          ? "text-slate-400"
+                          : row.isNext
+                            ? "font-semibold text-slate-900"
+                            : "text-slate-600";
+                        const inner = (
+                          <>
+                            <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                              {row.done ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : row.isNext ? (
+                                <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
+                              ) : (
+                                <span className="h-2.5 w-2.5 rounded-full border border-slate-300" />
+                              )}
+                            </span>
+                            <span className="truncate">
+                              <span className="mr-1 text-[11px] uppercase text-slate-400">
+                                {String(row.entry.day || "").slice(0, 3)}
+                              </span>
+                              {row.name}
+                            </span>
+                            {row.isNext ? (
+                              <span className="shrink-0 text-[10px] font-semibold uppercase text-slate-500">
+                                next
+                              </span>
+                            ) : null}
+                            {row.comments.length > 0 ? (
+                              <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
+                                <MessageCircle className="h-3 w-3" />
+                                {row.comments.length}
+                              </span>
+                            ) : null}
+                          </>
+                        );
+                        return (
+                          <li key={row.key} className={`text-sm ${tone}`}>
+                            {row.comments.length > 0 ? (
+                              <button
+                                type="button"
+                                className={`flex w-full items-center gap-2 rounded text-left hover:bg-slate-100 ${openKey === row.key ? "bg-slate-100" : ""}`}
+                                onClick={() => setOpenKey((k) => (k === row.key ? null : row.key))}
+                                aria-expanded={openKey === row.key}
+                                data-testid={`session-comments-${row.key}`}
+                              >
+                                {inner}
+                              </button>
                             ) : (
-                              <span className="h-2.5 w-2.5 rounded-full border border-slate-300" />
+                              <div className="flex items-center gap-2">{inner}</div>
                             )}
-                          </span>
-                          <span className="truncate">
-                            <span className="mr-1 text-[11px] uppercase text-slate-400">
-                              {String(row.entry.day || "").slice(0, 3)}
-                            </span>
-                            {row.name}
-                          </span>
-                          {row.isNext ? (
-                            <span className="shrink-0 text-[10px] font-semibold uppercase text-slate-500">
-                              next
-                            </span>
-                          ) : null}
-                          {row.noteCount > 0 ? (
-                            <span className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-xs text-amber-700">
-                              <MessageCircle className="h-3.5 w-3.5" />
-                              {row.noteCount}
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -336,20 +332,25 @@ export function ClientPlanOverview({
             })}
           </div>
 
-          {clientNotes.length > 0 ? (
-            <div className="border-t border-slate-100 px-5 py-3" data-testid="plan-client-notes">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Comments from {firstName}
+          {openRow ? (
+            <div className="border-t border-slate-100 px-5 py-3" data-testid="plan-session-comments">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-900">
+                  {String(openRow.entry.day || "").slice(0, 3)} · {openRow.name}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-slate-400 hover:text-slate-700"
+                  onClick={() => setOpenKey(null)}
+                >
+                  Close
+                </button>
               </div>
               <ul className="space-y-2">
-                {clientNotes.map((note) => (
-                  <li key={note.id} className="text-sm">
-                    <div className="text-slate-900">
-                      <span className="font-medium">{note.title}</span>
-                      {note.place ? <span className="text-slate-500"> · {note.place}</span> : null}
-                      <span className="text-slate-400"> · {formatDate(note.when)}</span>
-                    </div>
-                    <div className="text-slate-600">{note.text}</div>
+                {openRow.comments.map((c) => (
+                  <li key={c.id} className="text-sm">
+                    <div className="font-medium text-slate-900">{c.label}</div>
+                    <div className="text-slate-600">{c.text}</div>
                   </li>
                 ))}
               </ul>
