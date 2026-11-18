@@ -51,7 +51,10 @@ export function ExerciseStandardDetails({
   const clean = (value?: string | null) => (value && value.trim() ? value.trim() : "");
   const textBlocks = [
     { label: "Goal", value: clean(exercise.goal) },
-    { label: "A rep counts", value: clean(exercise.qualityPoints) },
+    {
+      label: exercise.repsMode === "hold" ? "A hold counts" : "A rep counts",
+      value: clean(exercise.qualityPoints),
+    },
     { label: "Additional Instructions", value: clean(exercise.additionalInstructions) },
   ].filter((block) => block.value);
 

@@ -130,20 +130,18 @@ export function ExerciseFieldsEditor({
         })}
       </div>
 
-      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-        <p className={labelClass}>The standard · client sees this</p>
-        <div className="space-y-1">
-          <Label htmlFor={`${idPrefix}-qualityPoints`} className={labelClass}>
-            What counts as a rep · start, top, form
-          </Label>
-          <Textarea
-            id={`${idPrefix}-qualityPoints`}
-            value={value.qualityPoints}
-            onChange={(event) => onChange("qualityPoints", event.target.value)}
-            placeholder="e.g. Start: arms straight. Top: touch the rings to your ribs. Keep the body in one line, no hip sag"
-            className="min-h-[72px] resize-none bg-white text-sm"
-          />
-        </div>
+      <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-qualityPoints`} className={labelClass}>
+          {value.repsMode === "hold" ? "What counts as a hold" : "What counts as a rep"} · client
+          sees this
+        </Label>
+        <Textarea
+          id={`${idPrefix}-qualityPoints`}
+          value={value.qualityPoints}
+          onChange={(event) => onChange("qualityPoints", event.target.value)}
+          placeholder="e.g. Start: arms straight. Top: touch the rings to your ribs. No hip sag"
+          className="min-h-[48px] resize-none bg-white text-sm"
+        />
       </div>
 
       <div className="space-y-1">
