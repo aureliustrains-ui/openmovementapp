@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Archive, ChevronDown, Check, MessageCircle, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import { formatReps, formatSets } from "@/lib/prescription";
 import { getRecommendedTrainingWeek, getTrainingWeekStatuses } from "@/lib/trainingWeek";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -126,6 +127,24 @@ export function ClientPlanOverview({
       return { week, rows };
     });
   }, [schedule, completed, duration, phaseLogs, allSessions, checkinsRecent]);
+
+  const phaseSessions = useMemo(() => {
+    const seen: string[] = [];
+    [...schedule]
+      .filter((e: any) => e.sessionId)
+      .sort(
+        (a: any, b: any) =>
+          (a.week || 0) - (b.week || 0) ||
+          DAYS.indexOf(a.day) - DAYS.indexOf(b.day) ||
+          String(a.slot || "AM").localeCompare(String(b.slot || "AM")),
+      )
+      .forEach((e: any) => {
+        if (!seen.includes(e.sessionId)) seen.push(e.sessionId);
+      });
+    return seen
+      .map((id) => allSessions.find((s: any) => s.id === id))
+      .filter(Boolean) as any[];
+  }, [schedule, allSessions]);
 
   const openRow = openKey
     ? weeks.flatMap((w) => w.rows).find((r) => r.key === openKey) ?? null
@@ -365,6 +384,67 @@ export function ClientPlanOverview({
           </p>
         </section>
       )}
+
+      {activePhase && phaseSessions.length > 0 ? (
+        <section data-testid="plan-session-overview">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Sessions in this phase
+          </h3>
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}
+          >
+            {phaseSessions.map((session: any) => {
+              const sections: any[] = Array.isArray(session.sections) ? session.sections : [];
+              return (
+                <div
+                  key={session.id}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  data-testid={`overview-session-${session.id}`}
+                >
+                  <div className="mb-2 text-sm font-semibold text-slate-900">{session.name}</div>
+                  <div className="space-y-3">
+                    {sections.map((section: any, i: number) => {
+                      const exercises: any[] = Array.isArray(section.exercises)
+                        ? section.exercises
+                        : [];
+                      if (exercises.length === 0) return null;
+                      const rounds = Number(section.rounds) > 1 ? Number(section.rounds) : null;
+                      return (
+                        <div key={section.id || i}>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {section.name || `Section ${i + 1}`}
+                            {rounds ? ` · ${rounds} rounds` : ""}
+                          </div>
+                          <ol className="space-y-0.5">
+                            {exercises.map((ex: any, j: number) => {
+                              const detail = [formatSets(ex.sets), formatReps(ex.reps)]
+                                .filter(Boolean)
+                                .join(" × ");
+                              return (
+                                <li
+                                  key={ex.id || j}
+                                  className="flex items-baseline gap-2 text-sm text-slate-700"
+                                >
+                                  <span className="w-4 shrink-0 text-xs text-slate-300">{j + 1}</span>
+                                  <span className="min-w-0 flex-1 truncate">{ex.name}</span>
+                                  {detail ? (
+                                    <span className="shrink-0 text-xs text-slate-400">{detail}</span>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ol>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="flex items-center justify-between px-4 py-3">
