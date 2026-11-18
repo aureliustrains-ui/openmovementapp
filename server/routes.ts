@@ -919,7 +919,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.getChatReadStatusByUser(authUser.id),
     ]);
     const allowedClient = accessibleClientFilter(authUser);
-    const clients = users.filter((user) => allowedClient(user) && user.status === "Active");
+    // The owner's attention badge covers the owner's own clients; coaches watch theirs.
+    const clients = users.filter(
+      (user) =>
+        allowedClient(user) &&
+        user.status === "Active" &&
+        (!isOwner(authUser) || !user.coachId),
+    );
 
     const lastReadAtByClientId = buildLatestLastReadMap(readStatuses);
     const phasesByClientId = new Map<string, Phase[]>();

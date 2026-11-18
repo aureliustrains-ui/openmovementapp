@@ -85,6 +85,8 @@ export default function AdminClientsList() {
   const clients = allUsers.filter((u: any) => {
     if (u.role !== "Client") return false;
     if (u.status === "Removed") return false;
+    // The owner's list holds only their own clients; a coach's clients live on the Coaches page.
+    if (sessionUser?.role === "Admin" && u.coachId) return false;
     const q = search.toLowerCase();
     return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
   });

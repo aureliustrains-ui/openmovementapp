@@ -883,7 +883,13 @@ export default function AdminClientProfile() {
   }, [clientId]);
 
   const switchableClients = (allUsers as any[])
-    .filter((u) => u.role === "Client" && u.status === "Active")
+    .filter(
+      (u) =>
+        u.role === "Client" &&
+        u.status === "Active" &&
+        // Stay inside one coach's group: your own clients, or the coach whose client this is.
+        (u.coachId ?? null) === (client?.coachId ?? null),
+    )
     .sort((a, b) => resolveUserFullName(a).localeCompare(resolveUserFullName(b)));
 
   const clientSummary = useMemo(() => {
