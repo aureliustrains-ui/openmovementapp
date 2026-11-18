@@ -110,7 +110,8 @@ export function ExerciseLibrary({
   onReorderExercises,
 }: Props) {
   const [search, setSearch] = useState("");
-  const [authorFilter, setAuthorFilter] = useState<"all" | "mine" | "others">("all");
+  // "all", "mine", or the id of one person.
+  const [authorFilter, setAuthorFilter] = useState<string>("all");
   const { sessionUser } = useAuth();
   const { data: staff = [] } = useQuery(staffQuery);
   const meIsOwner = isOwnerRole(sessionUser?.role);
@@ -119,6 +120,8 @@ export function ExerciseLibrary({
     if (!item.createdBy) return ownerName;
     return staff.find((member) => member.id === item.createdBy)?.name ?? "A coach";
   };
+  const ownerId = staff.find((member) => member.role === "Owner")?.id ?? "__owner__";
+  const authorIdOf = (item: ExerciseItem): string => item.createdBy || ownerId;
   const isMineItem = (item: ExerciseItem): boolean =>
     item.createdBy ? item.createdBy === sessionUser?.id : meIsOwner;
   // The owner may change everything; a coach only what they added.
@@ -222,10 +225,36 @@ export function ExerciseLibrary({
   const filtersActive = isFacetFilterActive(facetFilter);
   const searchingAll = normalizedSearch.length > 0 || filtersActive || authorFilter !== "all";
 
+  // One chip per other person who has added exercises: first name, or the full name when two
+  // people share a first name.
+  const authorChips = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of exercises) ids.add(item.createdBy || ownerId);
+    if (sessionUser?.id) ids.delete(sessionUser.id);
+    if (meIsOwner) ids.delete(ownerId);
+    const people = Array.from(ids).map((id) => ({
+      id,
+      full: staff.find((member) => member.id === id)?.name ?? "A coach",
+    }));
+    const firstName = (full: string) => full.trim().split(/\s+/)[0] || full;
+    return people
+      .map((person) => ({
+        id: person.id,
+        label:
+          people.filter((other) => firstName(other.full) === firstName(person.full)).length > 1
+            ? person.full
+            : firstName(person.full),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exercises, staff, sessionUser?.id, meIsOwner, ownerId]);
+
   const visibleExercises = useMemo(() => {
     let items = exercises;
     if (authorFilter === "mine") items = items.filter((item) => isMineItem(item));
-    if (authorFilter === "others") items = items.filter((item) => !isMineItem(item));
+    if (authorFilter !== "all" && authorFilter !== "mine") {
+      items = items.filter((item) => authorIdOf(item) === authorFilter);
+    }
     if (!searchingAll && selectedFolderId) {
       const ids = descendantIds(selectedFolderId);
       items = items.filter((item) => item.folderId && ids.has(item.folderId));
@@ -257,6 +286,7 @@ export function ExerciseLibrary({
     authorFilter,
     sessionUser?.id,
     meIsOwner,
+    ownerId,
   ]);
 
   // Manual order only makes sense inside one folder without search or filters.
@@ -405,25 +435,23 @@ export function ExerciseLibrary({
           onRename={onRenameFolder}
           onDelete={onDeleteFolder}
         />
-        <div className="flex items-center gap-1 text-xs" data-testid="exercise-author-filter">
-          {(
-            [
-              ["all", "All"],
-              ["mine", "Only mine"],
-              ["others", "Added by others"],
-            ] as const
-          ).map(([value, label]) => (
+        <div className="flex flex-wrap items-center gap-1 text-xs" data-testid="exercise-author-filter">
+          {[
+            { id: "all", label: "All" },
+            { id: "mine", label: "Only mine" },
+            ...authorChips,
+          ].map((chip) => (
             <button
-              key={value}
+              key={chip.id}
               type="button"
-              onClick={() => setAuthorFilter(value)}
+              onClick={() => setAuthorFilter(chip.id)}
               className={`rounded-full border px-3 py-1 ${
-                authorFilter === value
+                authorFilter === chip.id
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 text-slate-600 hover:border-slate-400"
               }`}
             >
-              {label}
+              {chip.label}
             </button>
           ))}
         </div>
