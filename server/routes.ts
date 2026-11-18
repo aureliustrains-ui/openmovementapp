@@ -68,6 +68,8 @@ import {
   isClientOwnedObjectKey,
   resolveClientVideoPlaybackUrl,
 } from "./media/client-video-storage";
+import { dbPool } from "./db";
+import { syncContactsFromUsers } from "./schema-upgrades";
 import { logError, logInfo } from "./http/logger";
 import {
   countAdminMovementAttention,
@@ -792,6 +794,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.use("/api", requireAuth, attachAuthUser);
 
+  // Everyone who has ever had an account (kept even after removal), for follow-up business.
+  app.get("/api/admin/contacts.csv", async (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    await syncContactsFromUsers(dbPool);
+    const result = await dbPool.query(
+      "SELECT email, name, role, status, first_seen_at FROM contacts ORDER BY first_seen_at, email",
+    );
+    const cell = (value: unknown) => {
+      const text = value instanceof Date ? value.toISOString() : String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [
+      "email,name,role,status,first_seen",
+      ...result.rows.map((row) =>
+        [row.email, row.name, row.role, row.status, row.first_seen_at].map(cell).join(","),
+      ),
+    ];
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="openmovement-contacts.csv"');
+    res.send(lines.join("\n") + "\n");
+  });
+
   app.get("/api/users", async (req, res) => {
     if (!requireAdmin(req, res)) return;
     const users = await storage.getUsers();
@@ -1100,6 +1124,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       throw error;
     }
 
+    await syncContactsFromUsers(dbPool).catch(() => undefined);
     res.status(201).json(toPublicUser(user));
   });
 

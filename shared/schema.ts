@@ -33,6 +33,19 @@ export const users = pgTable("users", {
   specificsUpdatedBy: text("specifics_updated_by"),
 });
 
+/**
+ * Everyone who has ever had an account: kept even if the account is later removed, so the
+ * emails can be used for follow-up business. Filled from `users` (see server/schema-upgrades.ts).
+ */
+export const contacts = pgTable("contacts", {
+  email: text("email").primaryKey(),
+  name: text("name"),
+  role: text("role"),
+  status: text("status"),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const sessionStore = pgTable("session", {
   sid: varchar("sid").primaryKey(),
   sess: json("sess").notNull(),

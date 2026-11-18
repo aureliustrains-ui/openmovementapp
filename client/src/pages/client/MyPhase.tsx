@@ -886,7 +886,7 @@ export default function ClientMyPhase() {
                       <p className="text-[13px] font-semibold uppercase tracking-wide text-slate-400">
                         {group.day.slice(0, 3)}
                       </p>
-                      <p className="text-xs text-slate-400">Rest</p>
+                      <p className="text-xs text-slate-400">No session</p>
                     </div>
                   ) : (
                   <div

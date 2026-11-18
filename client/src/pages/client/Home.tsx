@@ -268,55 +268,60 @@ export default function ClientHome() {
             ) : null}
 
             {weekEntries.length > 0 ? (
-              <>
               <ul className="divide-y divide-slate-100" data-testid="list-home-week-sessions">
-                {weekEntries.map((item) => {
-                  const isNext = item.instanceKey === nextItemKey;
-                  return (
-                    <li key={item.instanceKey}>
-                      <Link
-                        href={destinationFor(item).href}
-                        className={`flex items-center gap-3 py-2.5 ${
-                          isNext ? "text-slate-900" : "text-slate-600"
-                        }`}
+                {WEEKDAY_NAMES.flatMap((dayName, dayIdx) => {
+                  const dayItems = weekEntries.filter((entry) => entry.dayIndex === dayIdx);
+                  if (dayItems.length === 0) {
+                    return [
+                      <li
+                        key={`rest-${dayName}`}
+                        className="flex items-center gap-3 py-2.5 text-slate-300"
+                        data-testid={`home-day-empty-${dayName}`}
                       >
-                        {item.isCompleted ? (
-                          <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-brand-600)]" />
-                        ) : (
-                          <Circle
-                            className={`h-5 w-5 shrink-0 ${
-                              isNext ? "text-[var(--color-brand-600)]" : "text-slate-300"
-                            }`}
-                          />
-                        )}
-                        <span className="w-12 shrink-0 text-xs uppercase tracking-wider text-slate-400">
-                          {WEEKDAY_NAMES[item.dayIndex]?.slice(0, 3) ?? `Day ${item.dayIndex + 1}`}
+                        <span className="h-5 w-5 shrink-0" />
+                        <span className="w-12 shrink-0 text-xs uppercase tracking-wider">
+                          {dayName.slice(0, 3)}
                         </span>
-                        <span
-                          className={`min-w-0 flex-1 truncate ${
-                            item.isCompleted ? "text-slate-400 line-through" : ""
+                        <span className="min-w-0 flex-1 truncate text-sm">No session</span>
+                      </li>,
+                    ];
+                  }
+                  return dayItems.map((item, itemIdx) => {
+                    const isNext = item.instanceKey === nextItemKey;
+                    return (
+                      <li key={item.instanceKey}>
+                        <Link
+                          href={destinationFor(item).href}
+                          className={`flex items-center gap-3 py-2.5 ${
+                            isNext ? "text-slate-900" : "text-slate-600"
                           }`}
                         >
-                          {item.session.name}
-                        </span>
-                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                      </Link>
-                    </li>
-                  );
+                          {item.isCompleted ? (
+                            <CheckCircle2 className="h-5 w-5 shrink-0 text-[var(--color-brand-600)]" />
+                          ) : (
+                            <Circle
+                              className={`h-5 w-5 shrink-0 ${
+                                isNext ? "text-[var(--color-brand-600)]" : "text-slate-300"
+                              }`}
+                            />
+                          )}
+                          <span className="w-12 shrink-0 text-xs uppercase tracking-wider text-slate-400">
+                            {itemIdx === 0 ? dayName.slice(0, 3) : ""}
+                          </span>
+                          <span
+                            className={`min-w-0 flex-1 truncate ${
+                              item.isCompleted ? "text-slate-400 line-through" : ""
+                            }`}
+                          >
+                            {item.session.name}
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                        </Link>
+                      </li>
+                    );
+                  });
                 })}
               </ul>
-              {(() => {
-                const trainingDays = new Set(weekEntries.map((entry) => entry.dayIndex));
-                const restDays = WEEKDAY_NAMES.filter((_, index) => !trainingDays.has(index)).map(
-                  (name) => name.slice(0, 3),
-                );
-                return restDays.length > 0 ? (
-                  <p className="pt-2 text-xs text-slate-400" data-testid="text-rest-days">
-                    Rest: {restDays.join(" · ")}
-                  </p>
-                ) : null;
-              })()}
-              </>
             ) : null}
 
             {weekSchedulePreview.nextScheduleItem && nextSessionDestination && nextItemKey ? (

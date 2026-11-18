@@ -29,6 +29,13 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+function generatePassword(length = 12) {
+  const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
+}
+
 export default function AdminClientsList() {
   const [search, setSearch] = useState("");
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -242,12 +249,22 @@ export default function AdminClientsList() {
     <div className="space-y-8 animate-in fade-in">
       <div className="flex justify-end">
         <h1 className="sr-only" data-testid="text-clients-title">Clients</h1>
+        <Button
+          variant="outline"
+          className="mr-2 rounded-full px-5"
+          data-testid="button-export-emails"
+          asChild
+        >
+          <a href="/api/admin/contacts.csv" download>
+            Export emails
+          </a>
+        </Button>
         <Button 
           className="bg-slate-900 hover:bg-slate-800 text-white rounded-full px-6" 
           data-testid="button-add-client"
           onClick={() => setIsAddUserOpen(true)}
         >
-          <UserPlus className="mr-2 h-4 w-4" /> Add User
+          <UserPlus className="mr-2 h-4 w-4" /> Add client
         </Button>
       </div>
 
@@ -258,86 +275,78 @@ export default function AdminClientsList() {
           if (!open) resetForm();
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add User</DialogTitle>
-            <DialogDescription>Create a new client or coach account.</DialogDescription>
+            <DialogTitle>{creatingRole === "Admin" ? "Add coach" : "Add client"}</DialogTitle>
+            <DialogDescription>
+              They sign in with this email and password. You can send them the password yourself.
+            </DialogDescription>
           </DialogHeader>
 
-          <Tabs
-            value={creatingRole}
-            onValueChange={(value) => setCreatingRole(value as "Client" | "Admin")}
-          >
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="Client">Add Client</TabsTrigger>
-              <TabsTrigger value="Admin">Add Coach</TabsTrigger>
-            </TabsList>
+          <form className="space-y-4" onSubmit={handleCreateUser}>
+            <div className="space-y-2">
+              <Label htmlFor="new-user-name">Full name</Label>
+              <Input
+                id="new-user-name"
+                required
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-user-email">Email</Label>
+              <Input
+                id="new-user-email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-user-password">Password</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="new-user-password"
+                  type="text"
+                  minLength={8}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  autoComplete="off"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => setPassword(generatePassword())}
+                >
+                  Generate
+                </Button>
+              </div>
+            </div>
 
-            <TabsContent value={creatingRole}>
-              <form className="space-y-4 mt-4" onSubmit={handleCreateUser}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-name">Full Name</Label>
-                    <Input
-                      id="new-user-name"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder={creatingRole === "Admin" ? "Coach Name" : "Client Name"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-email">Email</Label>
-                    <Input
-                      id="new-user-email"
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@example.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-password">Temporary Password</Label>
-                    <Input
-                      id="new-user-password"
-                      type="password"
-                      minLength={8}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Minimum 8 characters"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-user-avatar">Avatar URL (optional)</Label>
-                    <Input
-                      id="new-user-avatar"
-                      value={avatar}
-                      onChange={(e) => setAvatar(e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={createUser.isPending}>
-                    {createUser.isPending
-                      ? "Creating..."
-                      : creatingRole === "Admin"
-                        ? "Create Coach"
-                        : "Create Client"}
-                  </Button>
-                </div>
-              </form>
-            </TabsContent>
-          </Tabs>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <button
+                type="button"
+                className="text-xs text-slate-500 underline-offset-2 hover:underline"
+                onClick={() => setCreatingRole(creatingRole === "Admin" ? "Client" : "Admin")}
+              >
+                {creatingRole === "Admin" ? "Add a client instead" : "Add a coach instead"}
+              </button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsAddUserOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={createUser.isPending}>
+                  {createUser.isPending ? "Creating..." : "Create"}
+                </Button>
+              </div>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 

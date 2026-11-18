@@ -21,13 +21,39 @@ export const ADDITIVE_SCHEMA_UPGRADES: ReadonlyArray<{ name: string; sql: string
   },
 ];
 
+/** New tables, created only if missing. */
+export const ADDITIVE_TABLE_UPGRADES: ReadonlyArray<{ name: string; sql: string }> = [
+  {
+    name: "contacts",
+    sql: `CREATE TABLE IF NOT EXISTS contacts (
+      email text PRIMARY KEY,
+      name text,
+      role text,
+      status text,
+      first_seen_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`,
+  },
+];
+
+/** Copies every account into `contacts`. Existing contacts are updated, never removed. */
+export const CONTACTS_SYNC_SQL = `INSERT INTO contacts (email, name, role, status)
+  SELECT lower(trim(email)), name, role, status FROM users
+  WHERE email IS NOT NULL AND trim(email) <> ''
+  ON CONFLICT (email) DO UPDATE
+    SET name = EXCLUDED.name, role = EXCLUDED.role, status = EXCLUDED.status, updated_at = now()`;
+
+export async function syncContactsFromUsers(pool: Pick<Pool, "query">): Promise<void> {
+  await pool.query(CONTACTS_SYNC_SQL);
+}
+
 export async function applyAdditiveSchemaUpgrades(
   pool: Pick<Pool, "query">,
   log: (message: string, meta?: Record<string, unknown>) => void = () => {},
 ): Promise<{ applied: string[]; failed: string[] }> {
   const applied: string[] = [];
   const failed: string[] = [];
-  for (const upgrade of ADDITIVE_SCHEMA_UPGRADES) {
+  for (const upgrade of [...ADDITIVE_SCHEMA_UPGRADES, ...ADDITIVE_TABLE_UPGRADES]) {
     try {
       await pool.query(upgrade.sql);
       applied.push(upgrade.name);
@@ -35,6 +61,16 @@ export async function applyAdditiveSchemaUpgrades(
       failed.push(upgrade.name);
       log("schema upgrade failed", {
         upgrade: upgrade.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  if (applied.includes("contacts")) {
+    try {
+      await syncContactsFromUsers(pool);
+    } catch (error) {
+      failed.push("contacts.sync");
+      log("contacts sync failed", {
         error: error instanceof Error ? error.message : String(error),
       });
     }

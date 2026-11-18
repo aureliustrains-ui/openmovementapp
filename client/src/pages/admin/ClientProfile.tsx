@@ -952,8 +952,7 @@ export default function AdminClientProfile() {
       icon: CheckCircle2,
       count: adminNotificationSummary.progressAttentionCount,
     },
-    { value: "specifics", label: "Specifics", icon: Pencil, count: 0 },
-    { value: "access", label: "Access", icon: ShieldCheck, count: 0 },
+    { value: "settings", label: "Settings", icon: ShieldCheck, count: 0 },
   ];
 
   if (!client)
@@ -1410,7 +1409,7 @@ export default function AdminClientProfile() {
                 ? "tab-programming"
                 : item.value === "progress-report"
                   ? "tab-progress-report"
-                  : item.value === "access"
+                  : item.value === "settings"
                     ? "tab-client-access"
                     : `tab-${item.value}`;
             return (
@@ -2006,7 +2005,7 @@ export default function AdminClientProfile() {
             </Dialog>
           </TabsContent>
 
-          <TabsContent value="specifics" className="m-0 outline-none">
+          <TabsContent value="settings" className="m-0 mb-5 outline-none">
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
                 <CardTitle>Specifics</CardTitle>
@@ -2522,7 +2521,7 @@ export default function AdminClientProfile() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="access" className="m-0 outline-none">
+          <TabsContent value="settings" className="m-0 outline-none">
             <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
               <CardHeader className="border-b border-slate-100 bg-slate-50/50">
                 <CardTitle>Client Access Management</CardTitle>
